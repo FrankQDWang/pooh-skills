@@ -1,6 +1,6 @@
-# AI Skills
+# pooh-skills
 
-这个仓库用于集中管理可安装到 Codex 和 Claude Code 的 skills。
+`pooh-skills` 用于集中管理可安装到 Codex 和 Claude Code 的 skills。
 
 ## 目录结构
 
