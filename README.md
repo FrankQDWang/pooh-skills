@@ -19,6 +19,7 @@ scripts/
 ## 当前 skill
 
 - `dependency-audit`: 面向 Python / TypeScript / mixed monorepo 的依赖方向、架构边界、循环依赖与 dead-code 信号审计，输出尖锐但可读的人类报告和 agent remediation brief。
+- `signature-contract-hardgate`: 面向 Python / TypeScript 仓库的“签名即契约”硬门控审计，检查 compile-time gates、runtime schemas、错误通道、边界规则、逃逸口治理与 merge protections 到底是真门还是摆设。
 
 ## 安装
 
@@ -26,6 +27,7 @@ scripts/
 
 ```bash
 ./scripts/install.sh dependency-audit
+./scripts/install.sh signature-contract-hardgate
 ```
 
 列出当前仓库可安装的 skills：

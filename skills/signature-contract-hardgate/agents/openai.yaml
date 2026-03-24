@@ -1,0 +1,6 @@
+interface:
+  display_name: "Signature Contract Hardgate"
+  short_description: "Audit strict AI-coding contract gates for Python and TypeScript repos."
+  default_prompt: "Audit this repository for signature-as-contract hard gates. Produce a blunt human report and a concise agent remediation brief."
+policy:
+  allow_implicit_invocation: true
