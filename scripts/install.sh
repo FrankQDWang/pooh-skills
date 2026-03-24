@@ -12,10 +12,10 @@ Usage:
   ./scripts/install.sh --list
 
 Examples:
-  ./scripts/install.sh dep-audit
+  ./scripts/install.sh dependency-audit
   ./scripts/install.sh --all
-  ./scripts/install.sh --target codex dep-audit
-  ./scripts/install.sh --target claude dep-audit
+  ./scripts/install.sh --target codex dependency-audit
+  ./scripts/install.sh --target claude dependency-audit
 EOF
 }
 

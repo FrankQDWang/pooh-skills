@@ -1,5 +1,5 @@
 ---
-name: dep-audit
+name: dependency-audit
 description: "Audit Python / TypeScript / mixed monorepos for dependency direction, boundary leaks, cycles, and dead-code signals with Tach, Dependency Cruiser, and Knip. Use for 仓库依赖巡检、架构边界审计、repo audit、monorepo diagnosis、cleanup planning. Produce a plain-language human report plus a concise remediation brief for Codex / Claude Code. Default to report-only unless fixes are explicitly requested."
 ---
 

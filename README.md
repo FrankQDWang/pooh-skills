@@ -18,14 +18,14 @@ scripts/
 
 ## 当前 skill
 
-- `dep-audit`: 面向 Python / TypeScript / mixed monorepo 的依赖方向、架构边界、循环依赖与 dead-code 信号审计，输出人类报告和 agent remediation brief。
+- `dependency-audit`: 面向 Python / TypeScript / mixed monorepo 的依赖方向、架构边界、循环依赖与 dead-code 信号审计，输出人类报告和 agent remediation brief。
 
 ## 安装
 
 默认同时安装到 `~/.codex/skills` 和 `~/.claude/skills`：
 
 ```bash
-./scripts/install.sh dep-audit
+./scripts/install.sh dependency-audit
 ```
 
 列出当前仓库可安装的 skills：
@@ -43,8 +43,8 @@ scripts/
 只安装到单一目标：
 
 ```bash
-./scripts/install.sh --target codex dep-audit
-./scripts/install.sh --target claude dep-audit
+./scripts/install.sh --target codex dependency-audit
+./scripts/install.sh --target claude dependency-audit
 ```
 
 ## 扩展约定
