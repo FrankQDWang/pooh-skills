@@ -1,5 +1,5 @@
 interface:
-  display_name: "Dependency Audit"
+  display_name: "dependency-audit"
   short_description: "Python / TS 依赖边界、循环与 dead-code 审计"
 policy:
   allow_implicit_invocation: true
