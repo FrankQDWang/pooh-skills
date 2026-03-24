@@ -173,17 +173,20 @@ Validation:
 
 ### Human report
 
-Aim for calm, plain, non-judgmental language.
+Aim for direct, sharp, conclusion-first language in a Linus-style voice.
 
 Good:
 
-- “这个问题说明模块边界正在变模糊，后续改动会更容易互相牵连。”
-- “这不是马上会崩的错误，但会持续增加维护成本。”
+- “这个依赖图已经开始自找麻烦了。边界没有守住，后面的改动只会越来越容易互相拖下水。”
+- “这不是优雅的历史包袱，这是结构已经乱到工具都很难判断哪里算正常路径了。先把扫描基线立住，再谈收紧规则。”
+- “这个文件堆在这里像个没人认领的电线团。现在不清掉，后面每次排查 dead code 都要继续陪它浪费时间。”
 
 Avoid:
 
-- “代码写得很差”
-- “必须立刻重构全部结构”
+- insults with no technical evidence
+- vague ranting that does not explain the risk
+- harsh wording with no concrete next step
+- making the reader parse jargon just to understand the punchline
 
 ### Agent brief
 

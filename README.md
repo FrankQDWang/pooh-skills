@@ -18,7 +18,7 @@ scripts/
 
 ## 当前 skill
 
-- `dependency-audit`: 面向 Python / TypeScript / mixed monorepo 的依赖方向、架构边界、循环依赖与 dead-code 信号审计，输出人类报告和 agent remediation brief。
+- `dependency-audit`: 面向 Python / TypeScript / mixed monorepo 的依赖方向、架构边界、循环依赖与 dead-code 信号审计，输出尖锐但可读的人类报告和 agent remediation brief。
 
 ## 安装
 

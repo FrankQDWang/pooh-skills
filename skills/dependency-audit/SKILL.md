@@ -1,6 +1,6 @@
 ---
 name: dependency-audit
-description: "Audit Python / TypeScript / mixed monorepos for dependency direction, boundary leaks, cycles, and dead-code signals with Tach, Dependency Cruiser, and Knip. Use for 仓库依赖巡检、架构边界审计、repo audit、monorepo diagnosis、cleanup planning. Produce a plain-language human report plus a concise remediation brief for Codex / Claude Code. Default to report-only unless fixes are explicitly requested."
+description: "Audit Python / TypeScript / mixed monorepos for dependency direction, boundary leaks, cycles, and dead-code signals with Tach, Dependency Cruiser, and Knip. Use for 仓库依赖巡检、架构边界审计、repo audit、monorepo diagnosis、cleanup planning. Produce a sharp, plain-language human report plus a concise remediation brief for Codex / Claude Code. Default to report-only unless fixes are explicitly requested."
 ---
 
 # Dependency Audit Skill
@@ -26,6 +26,12 @@ Do **not** use this skill for:
 
 Your job is to **detect, explain, prioritize, and recommend**.
 
+## Reading map
+
+- When producing the human report, start from [`assets/human-report-template.md`](assets/human-report-template.md).
+- When producing the agent remediation brief, start from [`assets/agent-brief-template.md`](assets/agent-brief-template.md).
+- When you need guidance on tool interpretation, repair patterns, false-positive handling, or reporting tone, read [`references/tooling-policy.md`](references/tooling-policy.md).
+
 Use some or all of these tools depending on the repo:
 
 - **Tach** for Python module boundaries, public interfaces, declared dependency consistency, and cycles
@@ -34,7 +40,7 @@ Use some or all of these tools depending on the repo:
 
 The output has **two readers**:
 
-1. **Human reader**: likely smart but not deeply technical. Explain each problem as **是什么 / 为什么重要 / 下一步做什么**.
+1. **Human reader**: can be non-technical, but still wants a blunt, decision-ready diagnosis. Explain each problem as **是什么 / 为什么重要 / 下一步做什么**.
 2. **Coding agent**: Codex, Claude Code, or similar. Give **decision-level repair guidance**, not long tutorials. Assume the agent can handle execution details.
 
 ## Operating stance
@@ -210,6 +216,10 @@ The human report must:
 - prioritize actions into **现在 / 下一步 / 之后**
 - explain why “baseline first” or “scan first, fix later” may be the right decision
 - call out any skipped checks and the reason they were skipped
+- stay readable for a non-technical human even when the tone is sharp
+- use a direct, Linus-style tone when the design deserves criticism
+- tie every harsh statement to concrete technical evidence, risk, or structural damage
+- avoid empty insults, vague venting, or emotional language without a next step
 
 For a non-programmer, translate common terms in plain language:
 
@@ -300,7 +310,7 @@ A strong result from this skill has all of the following:
 - the chosen toolset is justified
 - scan blockers are explicit
 - duplicate findings are merged into root causes
-- the human report is easy to understand
+- the human report is easy to understand while staying sharp
 - the agent brief is concise and actionable
 - recommendations focus on decisions, not command trivia
 - risky automation is clearly gated
