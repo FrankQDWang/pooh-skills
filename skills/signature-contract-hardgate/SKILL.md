@@ -139,7 +139,7 @@ description: "Audit Python / TypeScript repos for strict 'signature as contract'
 
 对每个门控类别都打状态，不要只说“有/没有”。
 
-每个类别使用这五档：
+每个类别默认使用这五档：
 
 - `missing`
 - `theater`
@@ -147,10 +147,11 @@ description: "Audit Python / TypeScript repos for strict 'signature as contract'
 - `enforced`
 - `hardened`
 
-如果本地仓库看不到远端平台配置，但 workflow 存在，允许写：
+如果本地仓库看不到关键平台证据，允许写：
 
-- `merge-governance: unverified`
+- `unverified`
 
+这尤其常见于 `merge-governance`、`CODEOWNERS`、required checks、rulesets 和 required workflow 这类依赖 remote/platform enforcement 的类别。  
 不要补脑远端一定已经上锁。看不到，就别装看到了。
 
 总体结论只允许使用下面四档之一：

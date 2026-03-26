@@ -1,4 +1,4 @@
-# 评估矩阵：怎么判断是 missing、theater、partial、enforced、hardened
+# 评估矩阵：怎么判断是 missing、theater、partial、enforced、hardened，以及何时写 unverified
 
 | 类别 | missing | theater | partial | enforced | hardened |
 |---|---|---|---|---|---|
@@ -10,6 +10,18 @@
 | architecture-boundaries | 无规则 | 有配置文件但不执行 | 部分模块受控 | 主要边界受机器阻断 | 深耦合路径被系统性切断，例外隔离 |
 | contract-tests | 只有样例测试或没有 | 口头要求测试 | 关键点有测试但不成体系 | 关键边界有稳定测试 | schema/性质/覆盖率联动成门 |
 | merge-governance | 无强制合并门 | 有 workflow 但非 required | 部分检查 required | 关键门已 required + code owners | changed files 立即硬门，契约层强审，遗留债可控 |
+
+## `unverified`
+
+当本地仓库看不到平台侧证据时，`unverified` 可以用于任何依赖 remote enforcement 的类别，不只是 `merge-governance`。
+
+高频场景：
+
+- 看得到 `CODEOWNERS` 文件，看不到平台侧是否要求 code owner review
+- 看得到 CI workflow，看不到 required checks / rulesets / required workflow 是否真的启用
+- 看得到仓库内配置，看不到组织级或平台级阻断规则
+
+`unverified` 不是心软，而是禁止补脑。
 
 ## 使用方式
 

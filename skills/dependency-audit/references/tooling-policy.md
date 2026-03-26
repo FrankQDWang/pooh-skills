@@ -2,6 +2,14 @@
 
 This reference exists to support the skill, not to be pasted verbatim into the final user report.
 
+## 目录
+
+- [1. Recommended role of each tool](#1-recommended-role-of-each-tool)
+- [2. Default maturity model](#2-default-maturity-model)
+- [3. Common false-positive patterns](#3-common-false-positive-patterns)
+- [4. Repair recommendation patterns](#4-repair-recommendation-patterns)
+- [5. Reporting tone](#5-reporting-tone)
+
 ## 1. Recommended role of each tool
 
 ### Tach
@@ -22,7 +30,7 @@ Typical recommendation patterns:
 - separate shared utilities from feature modules to break cycles
 - add missing dependency declarations only when the import is legitimate
 
-Do not overreact when the repo’s Python roots are ambiguous. In that case, recommend source root clarification first.
+Treat `source_roots` as a high-priority blocker in monorepos, `backend/` layouts, and nested Python trees. Do not overreact when the repo’s Python roots are ambiguous. In that case, recommend source root clarification first and downgrade boundary conclusions until the roots are credible.
 
 ### Dependency Cruiser
 
@@ -41,6 +49,12 @@ Typical recommendation patterns:
 - add or refine forbidden rules for layers, packages, or domains
 - break cycles by extracting shared types/interfaces or reversing dependency direction
 - align dependency declarations with actual usage
+
+Preferred rollout when historical debt is large:
+
+- generate `.dependency-cruiser-known-violations.json` with `depcruise-baseline`
+- run normal local/CI validation with `--ignore-known`
+- use `--no-ignore-known` only when reviewing the full debt backlog on purpose
 
 Do not treat every graph oddity as equally important. Prioritize boundaries and runtime-relevant dependency problems first.
 
@@ -61,6 +75,8 @@ Typical recommendation patterns:
 - then remove unused dependencies that become clearly safe
 - then clean exports/types
 - harden entry/project/workspace config if the results look suspiciously noisy
+
+Be careful with `includeEntryExports`. It is useful in self-contained repos, but it also raises the risk of noisy unused-export findings on entry barrels, CLI entrypoints, and framework-managed entry files. If the repo has not modeled entry/workspace/project coverage clearly, keep those findings at reduced confidence.
 
 Do not suggest broad deletion when the repo has weak configuration coverage or heavy dynamic loading patterns.
 
@@ -94,6 +110,13 @@ Watch for distorted output when:
 - the monorepo has centralized dependencies but the scan assumes per-package declarations
 - path aliases are used but not represented clearly enough to the scanner
 
+For legacy repos, distinguish between:
+
+- “we need a baseline so new debt stops growing”
+- and “we need to inspect the full debt backlog right now”
+
+Those are different modes. `--ignore-known` is for the first mode; `--no-ignore-known` is for the second.
+
 ### Knip
 
 Watch for false positives when:
@@ -102,6 +125,9 @@ Watch for false positives when:
 - workspaces are not modeled clearly
 - the repo relies heavily on runtime discovery, code generation, or plugin registration
 - config files that matter are not included in the effective project surface
+- `includeEntryExports` is enabled but entry barrels / framework entrypoints are not being interpreted with enough context
+
+If `includeEntryExports` is enabled, do not treat unused-export findings in entry files as strong by default. Raise confidence only after verifying the entry surface is intentionally complete. If exports are used only internally within the same file, consider whether `ignoreExportsUsedInFile` is the better fit before recommending cleanup.
 
 When scanner confidence is low, say so explicitly and recommend config hardening before cleanup.
 

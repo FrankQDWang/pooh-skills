@@ -132,13 +132,13 @@ description: "Audit Python repos that use Pydantic AI with Temporal for determin
 - `workflow-determinism`
   - 看 Workflow 结构是否符合 Temporal 语义，是否把 I/O、随机性、时间、全局副作用和不稳定顺序逻辑错误地留在 Workflow 中
 - `sandbox-discipline`
-  - 看是否存在 `sandbox_unrestricted()`、`sandboxed=False`、`UnsandboxedWorkflowRunner`、顶层重副作用导入、passthrough 滥用
+  - 看是否存在 `sandbox_unrestricted()`、`sandboxed=False`、`UnsandboxedWorkflowRunner`、顶层重副作用导入，以及是否把 passthrough 当垃圾桶而不是受控用于安全、确定性模块
 - `durable-agent-path`
-  - 看 agent 是否沿官方 durable path 进入 Workflow，而不是把 raw `Agent` 或 raw model / tool I/O 塞进 Workflow
+  - 看 agent 是否沿官方 durable path 进入 Workflow，而不是把 raw `Agent`、raw model / tool I/O、或不受支持的任意模型实例塞进 Workflow / durable path
 - `agent-freeze-drift`
   - 看 durable agent 创建时机是否稳定，包装后是否还在继续改 model / toolsets / config
 - `tool-contracts`
-  - 看 `@agent.tool` / `@agent.tool_plain` 是否选对，`RunContext` 形状、`args_validator`、参数描述与输出约束是否匹配
+  - 看 `@agent.tool` / `@agent.tool_plain` 是否选对，`RunContext` 首参形状、`args_validator` / `ModelRetry` 语义、参数描述与输出约束是否匹配
 - `dependency-contracts`
   - 看 `deps_type` 与运行时 `deps=` 是否一致，是否把 bag-of-stuff 冒充依赖契约
 - `validation-retry-path`
@@ -158,6 +158,7 @@ description: "Audit Python repos that use Pydantic AI with Temporal for determin
 
 - `await asyncio.sleep(...)` 在 Workflow 中不一定违规，它可能是合法的 durable timer 用法
 - 不要因为看见 `asyncio` 就条件反射判错；抓的是破坏确定性的用法
+- 不要把安全、确定性、无副作用的 passthrough modules 一刀切判错；问题是借 passthrough 偷带不确定性或副作用
 - Activity 可以做 I/O，Workflow 不行；不要把两者规则混在一起
 - raw `Agent` 在普通应用代码里使用，不等于错误；错的是它被错误带进 Workflow 语义
 - 有 `pytest` 不代表有 replay 兼容
@@ -181,7 +182,7 @@ description: "Audit Python repos that use Pydantic AI with Temporal for determin
 
 1. **Applicability check**
    - 先确认 repo 是否真的同时涉及 Temporal Workflow / Worker / Client 与 pydantic-ai Agent / Tool / durable execution 接线
-   - 如果不适用，输出 `overall_verdict: not-applicable`，说明原因，然后停
+   - 如果不适用，输出 `overall_verdict: not-applicable`，说明原因，停止深入扫描，但仍产出三份 `not-applicable` 工件
 
 2. **仓库画像**
    - 判断 Python 版本与项目形态

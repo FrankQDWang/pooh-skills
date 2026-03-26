@@ -108,7 +108,7 @@ Priorities:
 Guidance:
 
 - Start conservatively; initial Python boundary governance matters more than perfect strictness.
-- Infer `source_roots` carefully for common layouts such as `src/`, `backend/`, or multiple package `src/` directories.
+- Treat `source_roots` as a high-priority blocker in monorepos or nested Python layouts; until it is credible, downgrade Tach boundary conclusions to scan-confidence findings.
 - Prefer a permissive initial `root_module` posture unless the user explicitly wants strict full coverage.
 - Treat `check-external` style conclusions as lower confidence if the Python environment is obviously incomplete.
 - Recommend **config fixes or import-path fixes** before broad rewrites.
@@ -128,7 +128,7 @@ Priorities:
 Guidance:
 
 - Prefer structured output and summarize rule violations instead of restating raw output.
-- In legacy repos, recommend a **baseline / ignore-known style rollout** so the team can block new violations without being buried by historical debt.
+- In legacy repos, recommend an explicit **`depcruise-baseline` + `--ignore-known` rollout** so the team can block new violations without being buried by historical debt.
 - Be careful in monorepos: if dependency declarations are centralized at the repo root, account for that in your interpretation.
 - Separate “architecture rule problem” from “configuration not yet mature enough”.
 
@@ -147,6 +147,7 @@ Guidance:
 
 - Treat **unused files** as earlier cleanup than unused dependencies or exports because they often explain follow-on noise.
 - Results can be noisy if entry/project/workspace coverage is weak. Say so when confidence is only moderate.
+- Treat `includeEntryExports` as an explicit opt-in: if it is enabled, verify entry barrels, CLI entrypoints, and framework entry files before treating unused-export output as high confidence.
 - If the user explicitly asks for autofix, keep it conservative by default: exports, types, dependencies.
 - **Never assume file deletion is safe by default.** File removal is opt-in and high caution.
 - Explain cascade effects: cleaning unused files can eliminate many secondary warnings.

@@ -30,12 +30,14 @@ Agent 不是随便塞进 Workflow 的普通对象。
 - 使用 `PydanticAIPlugin` 做必要的接线
 - 采用官方 durable execution 思路，让模型请求、工具调用、MCP 通信之类的 I/O 下沉到 Activities
 - Workflow、Worker、durable agent 定义保持稳定且可注册，不要在 `run()` 里现造
+- 需要运行时选模型时，优先使用可序列化、可重放的模型标识，或在 `TemporalAgent(models={...})` 中预注册模型后再引用
 - 如果用了 dynamic toolset，durable execution 需要稳定标识，不要做随缘动态拼装
 
 默认不认可：
 
 - 在 Workflow 中直接跑 raw `Agent`
 - 在 Workflow 中直接触发模型请求、工具调用或其他 I/O
+- 把任意模型实例直接塞进 `TemporalAgent` / durable path，指望 Temporal 替你处理序列化与 replay
 - “为了省事先 unsandboxed”
 - “先本地跑通，replay 以后再说”
 
@@ -72,7 +74,7 @@ Agent 不是随便塞进 Workflow 的普通对象。
 
 - 需要上下文的工具，没有把 `RunContext` 放在第一个参数
 - 不需要上下文的工具，却错误套用 context 形状
-- `args_validator` 在校验失败时没有进入正确的重试语义
+- `args_validator` 的可恢复校验失败没有进入 `ModelRetry` 语义，而是被宽泛异常吞掉或改写
 - `deps_type` 和实际 `deps=` 明显脱节
 - durable agent 包装后还在继续改 model / toolsets，形成配置漂移
 
@@ -80,7 +82,7 @@ Agent 不是随便塞进 Workflow 的普通对象。
 
 - 在 Workflow 里直接用 `datetime.now()` / `uuid.uuid4()` / `random.*()`，而不是 workflow-safe API 或 Activities
 - Workflow 文件顶层导入重副作用库
-- 把 passthrough 当垃圾桶，缺少边界说明
+- 把 passthrough 当垃圾桶，缺少边界说明，顺手把不确定性或副作用库一起带进来
 - 关键 Workflow 没有 time-skipping tests
 - 仓库没有 replay gate
 - pydantic-ai 测试没有 fake model / override / 禁实网请求的护栏
@@ -94,6 +96,8 @@ Agent 不是随便塞进 Workflow 的普通对象。
 - `await asyncio.sleep(...)` 在 Workflow 中**不是天然违规**  
   它可以是合法的 durable timer 用法
 - `workflow.sleep(...)` 当然也可以
+- 安全、确定性、无副作用的 passthrough modules 可以是合理甚至推荐的优化  
+  错的是拿 passthrough 去放行不确定性、I/O、或重副作用模块
 - Activity 可以做 I/O，Workflow 不行  
   别把两者混成一锅
 - raw `Agent` 在普通应用代码里使用，不等于错误  

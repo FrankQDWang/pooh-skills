@@ -2,6 +2,16 @@
 
 这不是“工具大全”。这是默认裁判标准。
 
+## 目录
+
+- [一条总原则](#一条总原则)
+- [TypeScript 默认标准](#typescript-默认标准)
+- [Python 默认标准](#python-默认标准)
+- [跨语言标准](#跨语言标准)
+- [逃逸口零容忍倾向](#逃逸口零容忍倾向)
+- [基线 / 隔离规则](#基线--隔离规则)
+- [结果判定](#结果判定)
+
 ## 一条总原则
 
 **配置存在 ≠ 约束存在。  
@@ -145,6 +155,32 @@
 - `.github/workflows/`
 - `CODEOWNERS`
 - `semgrep*`
+
+### CODEOWNERS 有效性
+
+下面这些不满足时，不要把 `CODEOWNERS` 当成“已经上锁”的证据：
+
+- `CODEOWNERS` 不在 PR 的 base branch 上
+- 文件体积超过 GitHub 限制，平台不会加载
+- 只看到了文件，没看到平台侧真的启用了 “Require review from Code Owners”
+
+还要记住两件事：
+
+- “Require review from code owners” 只要求**任一匹配 owner** 批准，不是所有 owner 都批
+- 如果连 `CODEOWNERS` 文件本身都没有被 owner 保护，门很容易被顺手拆掉
+
+### Semgrep / required workflow 可运行性
+
+不要把 `.github/workflows/semgrep.yml` 或 ruleset YAML 的存在自动当成真实 merge gate。
+
+至少检查这些点：
+
+- workflow / required workflow 在平台侧是否真的被要求通过
+- 复用 workflow 时，仓库工作流访问权限是否已放开
+- token / secret / app 权限是否足够让扫描真正跑起来
+- `merge_group`、merge queue、bot / automation PR 是否有明确处理，而不是默认失效
+
+本地只能看到 workflow 文件、看不到平台 enforcement 时，默认写 `unverified`。
 
 ## 逃逸口零容忍倾向
 
