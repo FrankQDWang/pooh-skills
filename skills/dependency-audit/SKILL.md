@@ -30,6 +30,7 @@ Your job is to **detect, explain, prioritize, and recommend**.
 
 - When producing the human report, start from [`assets/human-report-template.md`](assets/human-report-template.md).
 - When producing the agent remediation brief, start from [`assets/agent-brief-template.md`](assets/agent-brief-template.md).
+- When producing `.repo-harness/repo-audit-summary.json`, it must conform to [`assets/repo-audit-summary.schema.json`](assets/repo-audit-summary.schema.json).
 - When you need guidance on tool interpretation, repair patterns, false-positive handling, or reporting tone, read [`references/tooling-policy.md`](references/tooling-policy.md).
 
 Use some or all of these tools depending on the repo:
@@ -85,7 +86,7 @@ The output has **two readers**:
 6. **Produce dual-audience outputs**
    - Human-first report
    - Agent-first remediation brief
-   - Optional summary JSON if helpful
+   - Summary JSON for machine consumption
 
 7. **Only if explicitly requested: propose or apply low-risk fixes**
    - Low-risk and mechanical only.
@@ -271,7 +272,9 @@ When you can write files, create:
 
 - `.repo-harness/repo-audit-report.md`
 - `.repo-harness/repo-audit-agent-brief.md`
-- `.repo-harness/repo-audit-summary.json` (optional but preferred if structured data is available)
+- `.repo-harness/repo-audit-summary.json`
+
+`.repo-harness/repo-audit-summary.json` must conform to [`assets/repo-audit-summary.schema.json`](assets/repo-audit-summary.schema.json).
 
 If the environment does not allow file creation, present the same structure directly in the response.
 
