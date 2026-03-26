@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(git rev-parse --show-toplevel)"
+"$repo_root/.githooks/_main_only_guard.sh"
+
+while read -r local_ref _local_oid remote_ref _remote_oid; do
+  if [[ -z "${local_ref:-}" ]]; then
+    continue
+  fi
+
+  if [[ "$local_ref" != "refs/heads/main" || "$remote_ref" != "refs/heads/main" ]]; then
+    printf '%s\n' "Only refs/heads/main may be pushed from this repository." >&2
+    exit 1
+  fi
+done

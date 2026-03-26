@@ -60,3 +60,11 @@ scripts/
 3. 可选包含 `assets/`、`references/`、`scripts/`
 
 这样根目录可以保持稳定，后续只需要继续往 `skills/` 下增加新的 skill 目录。
+
+## Main-Only 约束
+
+这个仓库只允许使用 `main`。
+
+- 远端 GitHub ruleset 已禁止创建任何非 `main` 分支
+- 本仓库提供 `.githooks/`，用于在本地拒绝非 `main` 上的 commit / rebase / merge / push
+- 当前 clone 应设置：`git config core.hooksPath .githooks`
