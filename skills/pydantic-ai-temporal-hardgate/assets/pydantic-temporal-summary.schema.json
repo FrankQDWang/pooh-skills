@@ -1,0 +1,263 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Pydantic AI + Temporal Hardgate Summary",
+  "type": "object",
+  "required": [
+    "repo_profile",
+    "overall_verdict",
+    "gate_states",
+    "findings"
+  ],
+  "properties": {
+    "repo_profile": {
+      "type": "object",
+      "required": [
+        "languages",
+        "shape"
+      ],
+      "properties": {
+        "languages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "shape": {
+          "type": "string"
+        },
+        "workflow_surface": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "agent_surface": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "docs_surface": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "overall_verdict": {
+      "type": "string",
+      "enum": [
+        "not-applicable",
+        "workflow-time-bomb",
+        "paper-guardrails",
+        "partially-contained",
+        "durable-harness"
+      ]
+    },
+    "gate_states": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "gate",
+          "state",
+          "severity",
+          "confidence",
+          "summary"
+        ],
+        "properties": {
+          "gate": {
+            "type": "string",
+            "enum": [
+              "workflow-determinism",
+              "sandbox-discipline",
+              "durable-agent-path",
+              "agent-freeze-drift",
+              "tool-contracts",
+              "dependency-contracts",
+              "validation-retry-path",
+              "verification-harness",
+              "doc-grounding",
+              "merge-governance"
+            ]
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "not-applicable",
+              "broken",
+              "unsafe",
+              "fragile",
+              "sound",
+              "hardened",
+              "unverified"
+            ]
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "critical",
+              "high",
+              "medium",
+              "low"
+            ]
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ]
+          },
+          "summary": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "gate",
+          "severity",
+          "confidence",
+          "current_state",
+          "target_state",
+          "locus",
+          "title",
+          "evidence_summary",
+          "decision",
+          "change_shape",
+          "validation",
+          "merge_gate",
+          "autofix_allowed"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "gate": {
+            "type": "string",
+            "enum": [
+              "workflow-determinism",
+              "sandbox-discipline",
+              "durable-agent-path",
+              "agent-freeze-drift",
+              "tool-contracts",
+              "dependency-contracts",
+              "validation-retry-path",
+              "verification-harness",
+              "doc-grounding",
+              "merge-governance"
+            ]
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "critical",
+              "high",
+              "medium",
+              "low"
+            ]
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ]
+          },
+          "current_state": {
+            "type": "string",
+            "enum": [
+              "not-applicable",
+              "broken",
+              "unsafe",
+              "fragile",
+              "sound",
+              "hardened",
+              "unverified"
+            ]
+          },
+          "target_state": {
+            "type": "string",
+            "enum": [
+              "fragile",
+              "sound",
+              "hardened"
+            ]
+          },
+          "locus": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "evidence_summary": {
+            "type": "string"
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "adopt",
+              "harden",
+              "replace",
+              "quarantine",
+              "remove",
+              "defer"
+            ]
+          },
+          "change_shape": {
+            "type": "string"
+          },
+          "validation": {
+            "type": "string"
+          },
+          "merge_gate": {
+            "type": "string",
+            "enum": [
+              "block-now",
+              "block-changed-files",
+              "warn-only",
+              "unverified"
+            ]
+          },
+          "autofix_allowed": {
+            "type": "boolean"
+          },
+          "notes": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "wrong_rules": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "unverified": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}

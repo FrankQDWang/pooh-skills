@@ -13,6 +13,7 @@ Usage:
 
 Examples:
   ./scripts/install.sh dependency-audit
+  ./scripts/install.sh pydantic-ai-temporal-hardgate
   ./scripts/install.sh --all
   ./scripts/install.sh --target codex dependency-audit
   ./scripts/install.sh --target claude dependency-audit
