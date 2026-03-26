@@ -49,6 +49,8 @@ scripts/
 ```bash
 ./scripts/install.sh --target codex dependency-audit
 ./scripts/install.sh --target claude dependency-audit
+./scripts/install.sh --target codex signature-contract-hardgate
+./scripts/install.sh --target codex pydantic-ai-temporal-hardgate
 ```
 
 ## 扩展约定
@@ -68,3 +70,11 @@ scripts/
 - 远端 GitHub ruleset 已禁止创建任何非 `main` 分支
 - 本仓库提供 `.githooks/`，用于在本地拒绝非 `main` 上的 commit / rebase / merge / push
 - 当前 clone 应设置：`git config core.hooksPath .githooks`
+- `.githooks/` 是仓库内文件，但 `core.hooksPath` 是 clone 本地 Git 配置；新 clone 拉下来后需要重新执行一次
+
+推荐初始化：
+
+```bash
+git config core.hooksPath .githooks
+git config --get core.hooksPath
+```
