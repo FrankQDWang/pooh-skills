@@ -1,0 +1,6 @@
+interface:
+  display_name: "Controlled Cleanup Hardgate"
+  short_description: "可控清理、废弃接口删除与旧文档清理审计"
+  default_prompt: "Use $controlled-cleanup-hardgate to audit this repository for deprecated surfaces, compatibility shims, stale docs, expired removal targets, and cleanup readiness."
+policy:
+  allow_implicit_invocation: true

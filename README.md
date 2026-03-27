@@ -21,6 +21,7 @@ scripts/
 - `dependency-audit`: 面向 Python / TypeScript / mixed monorepo 的依赖方向、架构边界、循环依赖与 dead-code 信号审计，输出尖锐但可读的人类报告和 agent remediation brief。
 - `signature-contract-hardgate`: 面向 Python / TypeScript 仓库的“签名即契约”硬门控审计，检查 compile-time gates、runtime schemas、错误通道、边界规则、逃逸口治理与 merge protections 到底是真门还是摆设。
 - `pydantic-ai-temporal-hardgate`: 面向 `Python + Temporal + pydantic-ai` 仓库的 durable execution 硬门控审计，检查 Workflow determinism、sandbox、durable-agent path、tool / deps 契约、replay / time-skipping harness 和 merge gate 到底是真是假。
+- `controlled-cleanup-hardgate`: 面向大型仓库的可控清理审计，检查 deprecated surfaces、compatibility shims、stale docs、expired removal targets、feature-flag debt 与 cleanup readiness，输出人类报告、agent brief 和机器可消费 summary。
 
 ## 安装
 
@@ -30,6 +31,7 @@ scripts/
 ./scripts/install.sh dependency-audit
 ./scripts/install.sh signature-contract-hardgate
 ./scripts/install.sh pydantic-ai-temporal-hardgate
+./scripts/install.sh controlled-cleanup-hardgate
 ```
 
 列出当前仓库可安装的 skills：
@@ -51,6 +53,7 @@ scripts/
 ./scripts/install.sh --target claude dependency-audit
 ./scripts/install.sh --target codex signature-contract-hardgate
 ./scripts/install.sh --target codex pydantic-ai-temporal-hardgate
+./scripts/install.sh --target codex controlled-cleanup-hardgate
 ```
 
 ## 扩展约定

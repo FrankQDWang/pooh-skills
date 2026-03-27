@@ -1,0 +1,101 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ControlledCleanupSummary",
+  "type": "object",
+  "required": [
+    "repo_root",
+    "generated_at",
+    "repo_profile",
+    "counts",
+    "findings"
+  ],
+  "properties": {
+    "repo_root": { "type": "string" },
+    "generated_at": { "type": "string" },
+    "repo_profile": {
+      "type": "object",
+      "required": ["languages", "manifests", "tool_hints"],
+      "properties": {
+        "languages": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "manifests": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "docs_roots": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "tool_hints": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "counts": {
+      "type": "object",
+      "required": ["total", "by_category"],
+      "properties": {
+        "total": { "type": "integer", "minimum": 0 },
+        "by_category": { "type": "object" }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "category",
+          "severity",
+          "confidence",
+          "path",
+          "summary",
+          "evidence"
+        ],
+        "properties": {
+          "category": {
+            "type": "string",
+            "enum": [
+              "scan-blocker",
+              "evidence-gap",
+              "deprecated-surface",
+              "compatibility-shim",
+              "expired-removal-target",
+              "marker-gap",
+              "forbidden-old-reference",
+              "stale-doc-reference",
+              "feature-flag-debt",
+              "dynamic-entrypoint-risk",
+              "cleanup-opportunity"
+            ]
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["low", "medium", "high", "critical"]
+          },
+          "confidence": {
+            "type": "string",
+            "enum": ["low", "medium", "high"]
+          },
+          "path": { "type": "string" },
+          "line": { "type": ["integer", "null"], "minimum": 1 },
+          "language": { "type": ["string", "null"] },
+          "summary": { "type": "string" },
+          "cue": { "type": ["string", "null"] },
+          "replacement": { "type": ["string", "null"] },
+          "removal_target": { "type": ["string", "null"] },
+          "evidence": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    "notes": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

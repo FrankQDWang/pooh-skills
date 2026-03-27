@@ -1,0 +1,28 @@
+{
+  "patterns": [
+    {
+      "id": "old-http-route",
+      "pattern": "/api/v1/legacy/orders",
+      "mode": "literal",
+      "case_sensitive": true,
+      "paths": ["**/*"],
+      "exclude_paths": ["**/node_modules/**", "**/.git/**"]
+    },
+    {
+      "id": "deprecated-python-symbol",
+      "pattern": "legacy_create_order",
+      "mode": "literal",
+      "case_sensitive": true,
+      "paths": ["**/*.py", "**/*.md"],
+      "exclude_paths": ["**/.venv/**", "**/dist/**"]
+    },
+    {
+      "id": "old-doc-slug",
+      "pattern": "docs/legacy-order-flow.md",
+      "mode": "literal",
+      "case_sensitive": false,
+      "paths": ["**/*.md", "**/*.yml", "**/*.yaml", "**/*.js", "**/*.ts"],
+      "exclude_paths": ["**/node_modules/**"]
+    }
+  ]
+}

@@ -14,6 +14,7 @@ Usage:
 Examples:
   ./scripts/install.sh dependency-audit
   ./scripts/install.sh pydantic-ai-temporal-hardgate
+  ./scripts/install.sh controlled-cleanup-hardgate
   ./scripts/install.sh --all
   ./scripts/install.sh --target codex dependency-audit
   ./scripts/install.sh --target claude dependency-audit
@@ -68,6 +69,7 @@ install_skill() {
   mkdir -p "$target_root"
   rm -rf "$target_dir"
   cp -R "$src_dir" "$target_dir"
+  find "$target_dir" \( -type d -name '__pycache__' -o -type f -name '*.pyc' \) -exec rm -rf {} +
   printf 'Installed %s -> %s\n' "$skill_id" "$target_dir"
 }
 
