@@ -1,0 +1,6 @@
+interface:
+  display_name: "Distributed Side-Effect Hardgate"
+  short_description: "分布式副作用、dual-write、outbox 与幂等性审计"
+  default_prompt: "Use $distributed-side-effect-hardgate to audit this repository for dual-write hazards, outbox gaps, idempotency gaps, unsafe retries, and event-driven reliability risks."
+policy:
+  allow_implicit_invocation: true

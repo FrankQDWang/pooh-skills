@@ -15,6 +15,9 @@ Examples:
   ./scripts/install.sh dependency-audit
   ./scripts/install.sh pydantic-ai-temporal-hardgate
   ./scripts/install.sh controlled-cleanup-hardgate
+  ./scripts/install.sh distributed-side-effect-hardgate
+  ./scripts/install.sh pythonic-ddd-drift-audit
+  ./scripts/install.sh repo-health-orchestrator
   ./scripts/install.sh --all
   ./scripts/install.sh --target codex dependency-audit
   ./scripts/install.sh --target claude dependency-audit

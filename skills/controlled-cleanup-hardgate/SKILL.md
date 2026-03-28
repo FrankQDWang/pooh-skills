@@ -7,7 +7,7 @@ description: Audits repositories for deprecated APIs, compatibility shims, legac
 
 This skill is for evidence-based cleanup of large codebases.
 
-It is not a generic dependency audit, not a contract-hardening skill, and not a Temporal/pydantic-ai hard gate. It focuses on one thing: closing deprecated or legacy surfaces all the way to deletion, without hiding behind compatibility wrappers.
+It is not a generic dependency audit, not a contract-hardening skill, and not a Temporal / pydantic-ai hard gate. It focuses on one thing: closing deprecated or legacy surfaces all the way to deletion, without hiding behind compatibility wrappers.
 
 ## When to use this
 
@@ -46,7 +46,6 @@ Read only what is needed.
 - `assets/human-report-template.md` - exact report shape for humans
 - `assets/agent-brief-template.md` - short remediation brief for another coding agent
 - `assets/cleanup-summary.schema.json` - JSON output contract
-- `assets/forbidden-patterns.example.json` - example machine-readable blocklist for old refs
 - `references/playbook.md` - full cleanup playbook from scope to deletion to rollout
 - `references/failure-modes.md` - common cleanup mistakes and how to avoid them
 - `references/marker-policy.md` - recommended deprecation marker format
@@ -56,7 +55,8 @@ Read only what is needed.
 ## Operating stance
 
 - Default to report-only.
-- Prefer replacement complete -> block new refs -> delete old -> validate -> rollout.
+- Treat `.repo-harness` as output-only. Never put default inputs there.
+- Prefer replacement complete -> block new refs by migration discipline -> delete old -> validate -> rollout.
 - Do not preserve compatibility wrappers unless the user explicitly asks for that trade-off.
 - Treat dynamic entrypoints, reflection, runtime imports, routing strings, config keys, migrations, and public SDK surfaces as high-risk until proven otherwise.
 - Be blunt about whether the repo is actually ready for deletion.
@@ -89,15 +89,6 @@ python3 scripts/check_doc_links.py \
   --out .repo-harness/controlled-cleanup-linkcheck.json
 ```
 
-If the repo already has a machine-readable blocklist for old symbols, paths, routes, or config keys, also run:
-
-```bash
-python3 scripts/check_forbidden_refs.py \
-  --repo /path/to/repo \
-  --pattern-file .repo-harness/cleanup-targets.json \
-  --out .repo-harness/controlled-cleanup-forbidden.json
-```
-
 If the user wants a single wrapper command instead, run:
 
 ```bash
@@ -117,7 +108,7 @@ The wrapper is report-first: it should try to emit all applicable artifacts befo
 Use the taxonomy below and decide whether each item is:
 
 - Delete now - evidence is strong enough
-- Delete after migration - replacement exists but call sites/docs/flags still remain
+- Delete after migration - replacement exists but call sites / docs / flags still remain
 - Hold - dynamic entrypoints, rollout risk, or ownership ambiguity make deletion unsafe today
 - False positive / needs human confirmation - scanner signal is too weak
 
@@ -135,8 +126,8 @@ When useful, also write machine-readable outputs under `.repo-harness/`.
 Low-risk mechanical work includes:
 
 - deleting obviously expired docs or examples that point to already-removed paths
-- removing references that are matched by an explicit forbidden-pattern file
-- pruning files or symbols that are proven unused by deterministic checks and are outside dynamic/high-risk surfaces
+- pruning files or symbols that are proven unused by deterministic checks and are outside dynamic / high-risk surfaces
+- removing thin compatibility shims only when replacement, callers, and docs are already aligned
 
 Do not perform broad destructive edits from heuristic scanner output alone.
 
@@ -159,8 +150,7 @@ Use these categories exactly where possible:
 - `compatibility-shim` - wrapper, alias, adapter, proxy, or bridge kept only for compatibility
 - `expired-removal-target` - deprecation marker indicates removal date/version that has already passed
 - `marker-gap` - explicitly deprecated item has no replacement, no target, or no owner cue
-- `forbidden-old-reference` - old symbol/path/route/config still referenced where policy says it must not appear
-- `stale-doc-reference` - docs/examples/nav still point to old surfaces or removed files
+- `stale-doc-reference` - docs, examples, or nav still point to old surfaces or removed files
 - `feature-flag-debt` - migration-complete flag or fallback path is still left around
 - `dynamic-entrypoint-risk` - reflection, runtime import, dynamic dispatch, or similar hidden-reference behavior
 - `cleanup-opportunity` - likely safe next deletion once blockers are removed
@@ -170,7 +160,7 @@ Use these categories exactly where possible:
 Use this order unless the repo shows a stronger reason to reorder:
 
 1. expired removal targets
-2. stale docs and forbidden old references
+2. stale docs
 3. thin compatibility shims with clear replacement paths
 4. migration-complete feature flags and fallback branches
 5. broader deprecated surfaces that still need call-site migration work
@@ -215,7 +205,6 @@ Preferred files:
 
 - `.repo-harness/controlled-cleanup-summary.json`
 - `.repo-harness/controlled-cleanup-linkcheck.json`
-- `.repo-harness/controlled-cleanup-forbidden.json`
 - `.repo-harness/controlled-cleanup-report.md`
 - `.repo-harness/controlled-cleanup-agent-brief.md`
 
@@ -226,7 +215,6 @@ Preferred files:
 - Never ignore docs, examples, READMEs, nav files, and generated references.
 - Never recommend sweeping destructive edits without a validation path.
 - Escalate when the repo lacks tests, owners, or rollout controls for risky surfaces.
-- Prefer explicit machine-readable blocklists for forbidden old refs whenever possible.
 - State uncertainty clearly when heuristics, not proofs, are doing the work.
 
 ## Strong default language for cleanup work
@@ -242,14 +230,14 @@ Use wording like this in the agent brief when the user wants actual cleanup:
 ## Examples of good final judgments
 
 - "Replacement exists, but docs, examples, and two compatibility adapters still reference the old path. Not ready for deletion."
-- "The old alias is only kept by a thin wrapper, all call sites have migrated, and the forbidden-reference check is clean. Ready for controlled deletion."
+- "The old alias is only kept by a thin wrapper, all call sites have migrated, and the docs are aligned. Ready for controlled deletion."
 - "The scanner found deprecation markers, but runtime indirection makes hidden references plausible. Hold until dynamic-entrypoint risk is mapped."
 
 ## Testing the skill itself
 
 Before shipping or revising this skill, run at least these checks:
 
-- trigger cases: cleanup/deprecation/deletion prompts should select this skill
+- trigger cases: cleanup / deprecation / deletion prompts should select this skill
 - paraphrase cases: less direct wording should still select this skill
 - non-trigger cases: pure dependency audit or contract-hardening prompts should not select this skill
 - false-positive regression cases: prose-only mentions should not become high-confidence cleanup findings
@@ -261,13 +249,12 @@ Use `references/evals.md` as the starting set.
 If the deterministic scripts return too little signal:
 
 - read `references/marker-policy.md` and recommend stronger deprecation markers
-- ask for or generate a machine-readable forbidden-pattern file
 - escalate to language-aware tools listed in `references/tool-selection.md`
 - separate code cleanup from docs cleanup if the repo is too noisy
 
 If the scanner returns too many false positives:
 
 - narrow scope to one bounded context or package first
-- exclude generated/vendor/build directories more aggressively
+- exclude generated / vendor / build directories more aggressively
 - require higher confidence before labeling something delete-ready
 - push ambiguous items into `needs human confirmation` instead of overclaiming

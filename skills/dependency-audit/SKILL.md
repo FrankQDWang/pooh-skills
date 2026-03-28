@@ -32,6 +32,7 @@ Your job is to **detect, explain, prioritize, and recommend**.
 - When producing the agent remediation brief, start from [`assets/agent-brief-template.md`](assets/agent-brief-template.md).
 - When producing `.repo-harness/repo-audit-summary.json`, it must conform to [`assets/repo-audit-summary.schema.json`](assets/repo-audit-summary.schema.json).
 - When you need guidance on tool interpretation, repair patterns, false-positive handling, or reporting tone, read [`references/tooling-policy.md`](references/tooling-policy.md).
+- When another skill or CI needs a deterministic baseline, use `scripts/run_dependency_audit_scan.py`, `scripts/validate_repo_audit_summary.py`, and `scripts/run_all.sh`.
 
 Use some or all of these tools depending on the repo:
 
@@ -91,6 +92,17 @@ The output has **two readers**:
 7. **Only if explicitly requested: propose or apply low-risk fixes**
    - Low-risk and mechanical only.
    - Risky or destructive actions stay opt-in.
+
+## Fleet baseline mode
+
+When another skill or CI needs stable artifacts quickly, run:
+
+```bash
+bash scripts/run_all.sh /path/to/repo
+```
+
+This wrapper emits a conservative baseline report, agent brief, and summary JSON.
+It does **not** pretend a full Tach / Dependency Cruiser / Knip run happened when it did not.
 
 ## Tool selection rules
 

@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Repo Health Summary",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "skill",
+    "generated_at",
+    "repo_root",
+    "overall_health",
+    "coverage_status",
+    "summary_line",
+    "skill_runs"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string"
+    },
+    "skill": {
+      "const": "repo-health-orchestrator"
+    },
+    "generated_at": {
+      "type": "string"
+    },
+    "repo_root": {
+      "type": "string"
+    },
+    "overall_health": {
+      "type": "string"
+    },
+    "coverage_status": {
+      "type": "string"
+    },
+    "summary_line": {
+      "type": "string"
+    },
+    "skill_runs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "domain",
+          "skill_name",
+          "status",
+          "summary_path",
+          "severity_counts"
+        ],
+        "properties": {
+          "domain": {
+            "type": "string"
+          },
+          "skill_name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "summary_path": {
+            "type": "string"
+          },
+          "child_verdict": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "severity_counts": {
+            "type": "object",
+            "properties": {
+              "critical": {
+                "type": "integer"
+              },
+              "high": {
+                "type": "integer"
+              },
+              "medium": {
+                "type": "integer"
+              },
+              "low": {
+                "type": "integer"
+              }
+            }
+          },
+          "top_categories": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "top_actions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "missing_skills": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "invalid_summaries": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

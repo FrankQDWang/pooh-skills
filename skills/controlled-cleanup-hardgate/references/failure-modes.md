@@ -19,7 +19,7 @@ A change is called "safe" without clear lint, type, test, coverage, or rollback 
 Wide keyword matching turns ordinary documentation or integration notes into fake cleanup findings.
 
 ## 7. Incomplete wrapper execution
-A fail-fast wrapper exits on the first strict check and leaves link or forbidden-reference artifacts ungenerated.
+A fail-fast wrapper exits on the first strict check and leaves later evidence collection unfinished.
 
 ## Practical response
-Escalate ambiguity. Ask for stronger markers, explicit forbidden-pattern files, or language-aware tools when heuristic scanning is not enough.
+Escalate ambiguity. Ask for stronger markers, clearer ownership, or language-aware tools when heuristic scanning is not enough.

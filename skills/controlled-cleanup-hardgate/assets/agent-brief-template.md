@@ -19,11 +19,6 @@ Use strict metadata enforcement only when the cleanup gate is specifically about
 bash scripts/run_all.sh --strict-removal-targets /path/to/repo
 ```
 
-## Extra policy checks
-```bash
-python3 scripts/check_forbidden_refs.py --repo . --pattern-file .repo-harness/cleanup-targets.json --out .repo-harness/controlled-cleanup-forbidden.json
-```
-
 ## Guardrails
 - Old code/docs should be physically removed when replacement and migration are complete.
 - Update docs, examples, and navigation together with code.

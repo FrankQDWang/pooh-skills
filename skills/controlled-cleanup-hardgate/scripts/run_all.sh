@@ -6,12 +6,12 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 print_usage() {
   cat <<'EOF'
 Usage:
-  bash scripts/run_all.sh [--strict-removal-targets] [repo-root] [out-dir] [pattern-file]
+  bash scripts/run_all.sh [--strict-removal-targets] [repo-root] [out-dir]
 
 Examples:
   bash scripts/run_all.sh .
   bash scripts/run_all.sh --strict-removal-targets .
-  bash scripts/run_all.sh . .repo-harness .repo-harness/cleanup-targets.json
+  bash scripts/run_all.sh . .repo-harness
 EOF
 }
 
@@ -44,10 +44,8 @@ done
 
 REPO_ROOT="${POSITIONAL[0]:-.}"
 OUT_DIR="${POSITIONAL[1]:-$REPO_ROOT/.repo-harness}"
-PATTERN_FILE="${POSITIONAL[2]:-$REPO_ROOT/.repo-harness/cleanup-targets.json}"
 SUMMARY_PATH="$OUT_DIR/controlled-cleanup-summary.json"
 LINKCHECK_PATH="$OUT_DIR/controlled-cleanup-linkcheck.json"
-FORBIDDEN_PATH="$OUT_DIR/controlled-cleanup-forbidden.json"
 
 mkdir -p "$OUT_DIR"
 
@@ -90,13 +88,5 @@ run_step "documentation link checks" \
   python3 "$SCRIPT_DIR/check_doc_links.py" \
     --repo "$REPO_ROOT" \
     --out "$LINKCHECK_PATH"
-
-if [[ -f "$PATTERN_FILE" ]]; then
-  run_step "forbidden reference checks" \
-    python3 "$SCRIPT_DIR/check_forbidden_refs.py" \
-      --repo "$REPO_ROOT" \
-      --pattern-file "$PATTERN_FILE" \
-      --out "$FORBIDDEN_PATH"
-fi
 
 exit "$OVERALL_STATUS"

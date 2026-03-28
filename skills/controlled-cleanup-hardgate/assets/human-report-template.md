@@ -43,4 +43,5 @@
 ## 8. Machine-readable artifacts
 - summary:
 - linkcheck:
-- forbidden refs:
+- report:
+- agent brief:

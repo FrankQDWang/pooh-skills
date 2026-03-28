@@ -17,7 +17,6 @@ VALID_CATEGORIES = {
     "compatibility-shim",
     "expired-removal-target",
     "marker-gap",
-    "forbidden-old-reference",
     "stale-doc-reference",
     "feature-flag-debt",
     "dynamic-entrypoint-risk",

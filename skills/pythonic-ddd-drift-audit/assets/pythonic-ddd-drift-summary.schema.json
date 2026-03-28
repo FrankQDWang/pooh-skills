@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Pythonic DDD Drift Summary",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "skill",
+    "generated_at",
+    "repo_root",
+    "overall_verdict",
+    "summary_line",
+    "severity_counts",
+    "coverage",
+    "findings"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string"
+    },
+    "skill": {
+      "const": "pythonic-ddd-drift-audit"
+    },
+    "generated_at": {
+      "type": "string"
+    },
+    "repo_root": {
+      "type": "string"
+    },
+    "overall_verdict": {
+      "type": "string"
+    },
+    "summary_line": {
+      "type": "string"
+    },
+    "coverage": {
+      "type": "object",
+      "required": [
+        "files_scanned",
+        "python_files",
+        "domain_files"
+      ],
+      "properties": {
+        "files_scanned": {
+          "type": "integer"
+        },
+        "python_files": {
+          "type": "integer"
+        },
+        "domain_files": {
+          "type": "integer"
+        }
+      }
+    },
+    "severity_counts": {
+      "type": "object",
+      "required": [
+        "critical",
+        "high",
+        "medium",
+        "low"
+      ],
+      "properties": {
+        "critical": {
+          "type": "integer"
+        },
+        "high": {
+          "type": "integer"
+        },
+        "medium": {
+          "type": "integer"
+        },
+        "low": {
+          "type": "integer"
+        }
+      }
+    },
+    "scan_blockers": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "category",
+          "severity",
+          "confidence",
+          "title",
+          "path",
+          "line",
+          "evidence",
+          "recommendation",
+          "merge_gate"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "line": {
+            "type": "integer"
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "recommendation": {
+            "type": "string"
+          },
+          "merge_gate": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

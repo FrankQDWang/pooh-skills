@@ -50,6 +50,7 @@ description: "Audit Python repos that use Pydantic AI with Temporal for determin
 - 生成 `.repo-harness/pydantic-temporal-summary.json` 时，必须遵守 [`assets/pydantic-temporal-summary.schema.json`](assets/pydantic-temporal-summary.schema.json)。
 - 判断官方 durable path、hard fail、误报黑名单、证据优先级时，读取 [`references/pydantic-temporal-domain-standard.md`](references/pydantic-temporal-domain-standard.md)。
 - 判断 `broken` / `unsafe` / `fragile` / `sound` / `hardened` / `unverified` 的边界，以及总体 verdict 映射时，读取 [`references/evaluation-matrix.md`](references/evaluation-matrix.md)。
+- 当另一个 skill 或 CI 需要稳定 baseline 工件时，使用 `scripts/run_pydantic_temporal_scan.py`、`scripts/validate_pydantic_temporal_summary.py` 和 `scripts/run_all.sh`。
 
 只在需要时读取 reference，不要把 reference 原文整段复述进最终报告。  
 如果直觉和 reference 冲突，优先相信 reference。
@@ -204,6 +205,16 @@ description: "Audit Python repos that use Pydantic AI with Temporal for determin
 
 7. **输出双报告**
    - 写人类报告、agent brief、summary JSON
+
+## Fleet baseline mode
+
+当需要 headless baseline 或 orchestrator 聚合时，运行：
+
+```bash
+bash scripts/run_all.sh /path/to/repo
+```
+
+如果仓库没有同时暴露 `Temporal` 和 `pydantic-ai` durable surface，wrapper 会老老实实输出 `not-applicable`，而不是为了凑结论硬判。
 
 ## 人类报告契约
 

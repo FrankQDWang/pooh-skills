@@ -55,6 +55,7 @@ description: "Audit Python / TypeScript repos for strict 'signature as contract'
 - 生成 `.repo-harness/contract-hardgate-summary.json` 时，必须遵守 [`assets/contract-hardgate-summary.schema.json`](assets/contract-hardgate-summary.schema.json)。
 - 判断 `Python` / `TypeScript` / cross-language 的严格默认标准时，读取 [`references/strict-harness-standard.md`](references/strict-harness-standard.md)。
 - 判断 `missing` / `theater` / `partial` / `enforced` / `hardened` 的边界，以及总体 verdict 映射时，读取 [`references/evaluation-matrix.md`](references/evaluation-matrix.md)。
+- 当另一个 skill 或 CI 只需要稳定 baseline 工件时，使用 `scripts/run_contract_hardgate_scan.py`、`scripts/validate_contract_hardgate_summary.py` 和 `scripts/run_all.sh`。
 
 只在需要时读取这些资源，不要把 reference 内容整段复述进最终报告。
 
@@ -195,6 +196,16 @@ description: "Audit Python / TypeScript repos for strict 'signature as contract'
 如果不能写文件，就把同样结构直接返回。
 
 其中 summary JSON 必须符合 [`assets/contract-hardgate-summary.schema.json`](assets/contract-hardgate-summary.schema.json)。
+
+## Fleet baseline mode
+
+当需要 headless baseline 或 orchestrator 聚合时，运行：
+
+```bash
+bash scripts/run_all.sh /path/to/repo
+```
+
+这个 wrapper 只使用本地仓库证据产出保守 baseline，不会把远端 required checks、rulesets 或 code-owner enforcement 脑补成已上锁。
 
 ## 人类报告契约
 
