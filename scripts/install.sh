@@ -17,6 +17,7 @@ Examples:
   ./scripts/install.sh controlled-cleanup-hardgate
   ./scripts/install.sh distributed-side-effect-hardgate
   ./scripts/install.sh pythonic-ddd-drift-audit
+  ./scripts/install.sh llm-api-freshness-guard
   ./scripts/install.sh repo-health-orchestrator
   ./scripts/install.sh --all
   ./scripts/install.sh --target codex dependency-audit

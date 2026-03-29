@@ -24,7 +24,8 @@ scripts/
 - `controlled-cleanup-hardgate`: 面向大型仓库的可控清理审计，检查 deprecated surfaces、compatibility shims、stale docs、expired removal targets、feature-flag debt 与 cleanup readiness，输出人类报告、agent brief 和机器可消费 summary。
 - `distributed-side-effect-hardgate`: 面向消息、worker、webhook 与事件驱动仓库的分布式副作用审计，检查 dual write、outbox、幂等、unsafe retry、事件契约和补偿/可观测性缺口。
 - `pythonic-ddd-drift-audit`: 面向 Python-heavy 仓库的 Pythonic 形状债与 DDD 漂移审计，检查 domain boundary leak、cross-context bleed、ABC 过度、thin wrapper 与假 CQRS。
-- `repo-health-orchestrator`: 面向整仓体检的汇总 skill，每次先清空 `.repo-harness`，再并行启动 6 个 child audit subagents，维护一个终端实时 control plane，并在结束时产出 repo health rollup。要求运行环境支持 Codex subagent，以及当前会话模型与推理强度继承语义。
+- `llm-api-freshness-guard`: 面向主流 LLM provider / wrapper surface 的 API 新鲜度审计，借助 Context7 检查是否还在使用过时 SDK、旧 endpoint、漂移的 tool calling / structured output / streaming / auth / gateway 配置，并支持通过 provider registry 扩展到其他 surface。
+- `repo-health-orchestrator`: 面向整仓体检的汇总 skill，每次先清空 `.repo-harness`，再并行启动 7 个 child audit subagents，维护一个终端实时 control plane，并在结束时产出 repo health rollup。要求运行环境支持 Codex subagent，以及当前会话模型与推理强度继承语义。
 
 ## 安装
 
@@ -37,6 +38,7 @@ scripts/
 ./scripts/install.sh controlled-cleanup-hardgate
 ./scripts/install.sh distributed-side-effect-hardgate
 ./scripts/install.sh pythonic-ddd-drift-audit
+./scripts/install.sh llm-api-freshness-guard
 ./scripts/install.sh repo-health-orchestrator
 ```
 
@@ -61,12 +63,13 @@ scripts/
 ./scripts/install.sh --target codex controlled-cleanup-hardgate
 ./scripts/install.sh --target codex distributed-side-effect-hardgate
 ./scripts/install.sh --target codex pythonic-ddd-drift-audit
+./scripts/install.sh --target codex llm-api-freshness-guard
 ./scripts/install.sh --target codex repo-health-orchestrator
 ```
 
 ## Audit Fleet 约定
 
-- `repo-health-orchestrator` 是 Codex subagent-only：它会先清空并重建 repo-root `.repo-harness`，再启动 6 个 child audit subagents
+- `repo-health-orchestrator` 是 Codex subagent-only：它会先清空并重建 repo-root `.repo-harness`，再启动 7 个 child audit subagents
 - `.repo-harness` 是纯输出目录，只保存当前 run 的 summary / report / brief / linkcheck / control-plane state 等工件，不放默认输入
 - child skill 自己的 `scripts/run_all.sh` 可以继续作为本地 deterministic helper 独立使用，但不再属于 orchestrator 的公开契约
 - 旧 skill 的 wrapper 默认产出**保守 baseline**；它们用于稳定 summary 工件和单域独立运行，不替代用户显式发起的全量人工审计

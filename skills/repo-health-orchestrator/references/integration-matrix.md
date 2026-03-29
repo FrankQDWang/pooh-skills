@@ -7,6 +7,7 @@ The orchestrator expects the following current-run machine-readable summaries in
 | structure | `dependency-audit` | `.repo-harness/repo-audit-summary.json` |
 | contracts | `signature-contract-hardgate` | `.repo-harness/contract-hardgate-summary.json` |
 | durable-agents | `pydantic-ai-temporal-hardgate` | `.repo-harness/pydantic-temporal-summary.json` |
+| llm-api-freshness | `llm-api-freshness-guard` | `.repo-harness/llm-api-freshness-summary.json` |
 | cleanup | `controlled-cleanup-hardgate` | `.repo-harness/controlled-cleanup-summary.json` |
 | distributed-side-effects | `distributed-side-effect-hardgate` | `.repo-harness/distributed-side-effect-summary.json` |
 | pythonic-ddd-drift | `pythonic-ddd-drift-audit` | `.repo-harness/pythonic-ddd-drift-summary.json` |

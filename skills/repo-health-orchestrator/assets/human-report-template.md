@@ -13,6 +13,7 @@
 | structure | dependency-audit | {{status}} | {{verdict}} | {{notes}} |
 | contracts | signature-contract-hardgate | {{status}} | {{verdict}} | {{notes}} |
 | durable-agents | pydantic-ai-temporal-hardgate | {{status}} | {{verdict}} | {{notes}} |
+| llm-api-freshness | llm-api-freshness-guard | {{status}} | {{verdict}} | {{notes}} |
 | distributed-side-effects | distributed-side-effect-hardgate | {{status}} | {{verdict}} | {{notes}} |
 | pythonic-ddd-drift | pythonic-ddd-drift-audit | {{status}} | {{verdict}} | {{notes}} |
 | cleanup | controlled-cleanup-hardgate | {{status}} | {{verdict}} | {{notes}} |

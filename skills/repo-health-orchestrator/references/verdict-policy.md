@@ -4,6 +4,10 @@ Child skills use different verdict vocabularies.
 The orchestrator should not erase them.
 It should normalize only enough to produce an executive rollup from current-run evidence.
 
+Some child skills expose a trust mode instead of a health verdict.
+For example, `llm-api-freshness-guard` may surface `verified` or `local-scan-only` in `child_verdict`.
+Preserve that signal and let severity plus coverage decide the rollup.
+
 ## Coverage before verdict
 
 First decide whether each domain is `present`, `not-applicable`, `invalid`, or `missing`.
@@ -29,6 +33,7 @@ Treat a child domain as watch when:
 - no blocked condition exists
 - medium-severity findings exist, or
 - the child summary says the repo is fragile / partial / drifting / ceremonial / baseline-needed / paper-guardrails, or
+- the child summary is only `local-scan-only` and still needs live-doc verification, or
 - coverage is weak
 
 ## Healthy domain

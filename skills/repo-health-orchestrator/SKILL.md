@@ -7,7 +7,7 @@ description: Coordinates installed pooh-skills audits through subagents, gathers
 
 This skill is the coordinator, not the specialist.
 
-Its job is to launch the focused audit skills as parallel subagents, collect their current-run artifacts, and turn them into one executive diagnosis instead of six unrelated reports.
+Its job is to launch the focused audit skills as parallel subagents, collect their current-run artifacts, and turn them into one executive diagnosis instead of seven unrelated reports.
 
 ## When to use this
 
@@ -16,7 +16,7 @@ Use this skill when the user wants:
 - one combined repo health report
 - a governance rollup across several audit skills
 - an AI-coding state-of-the-repo snapshot
-- a prioritized action queue across structure, contracts, durable agents, distributed consistency, cleanup, and Pythonic drift
+- a prioritized action queue across structure, contracts, durable agents, LLM API freshness, distributed consistency, cleanup, and Pythonic drift
 - a repeatable whole-repo run that ends in one summary JSON and one human report
 
 ## Do not use this
@@ -37,11 +37,12 @@ Do not pretend an old `.repo-harness` directory counts as current coverage.
 
 ## Expected child domains
 
-This skill coordinates these six child audits:
+This skill coordinates these seven child audits:
 
 - `dependency-audit` → `.repo-harness/repo-audit-summary.json`
 - `signature-contract-hardgate` → `.repo-harness/contract-hardgate-summary.json`
 - `pydantic-ai-temporal-hardgate` → `.repo-harness/pydantic-temporal-summary.json`
+- `llm-api-freshness-guard` → `.repo-harness/llm-api-freshness-summary.json`
 - `controlled-cleanup-hardgate` → `.repo-harness/controlled-cleanup-summary.json`
 - `distributed-side-effect-hardgate` → `.repo-harness/distributed-side-effect-summary.json`
 - `pythonic-ddd-drift-audit` → `.repo-harness/pythonic-ddd-drift-summary.json`
@@ -68,7 +69,7 @@ Read only what is needed.
 - Start from an empty `.repo-harness` every run.
 - Treat `.repo-harness` as output-only.
 - Maintain `.repo-harness/repo-health-control-plane.json` as the live terminal control-plane state for the current run.
-- Launch all six child domains before waiting for results.
+- Launch all seven child domains before waiting for results.
 - Keep child prompts narrow: one domain, one output contract, no cross-domain judgment.
 - Preserve the child skill's judgment; do not sand off sharp findings during aggregation.
 - Keep coverage gaps visible.
@@ -151,7 +152,7 @@ python3 scripts/render_control_plane.py \
 
 ### 2) Spawn child audits
 
-Launch the six child subagents in parallel.
+Launch the seven child subagents in parallel.
 
 Immediately mark the overall stage as `spawning`, then mark each child worker as `running`, and redraw the control plane.
 
@@ -163,7 +164,7 @@ Required progress stages:
 
 - `reset-harness`
 - `spawn-subagents`
-- `running X/6`
+- `running X/7`
 - `collecting`
 - `aggregating`
 - `done`
@@ -196,7 +197,7 @@ Use the current run's real information only:
 
 ### 4) Collect and validate child artifacts
 
-After the subagents finish, check the six expected summary paths.
+After the subagents finish, check the seven expected summary paths.
 
 For each domain, classify the result as:
 

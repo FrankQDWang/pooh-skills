@@ -14,6 +14,7 @@ EXPECTED = [
     ("structure", "dependency-audit", "repo-audit-summary.json"),
     ("contracts", "signature-contract-hardgate", "contract-hardgate-summary.json"),
     ("durable-agents", "pydantic-ai-temporal-hardgate", "pydantic-temporal-summary.json"),
+    ("llm-api-freshness", "llm-api-freshness-guard", "llm-api-freshness-summary.json"),
     ("cleanup", "controlled-cleanup-hardgate", "controlled-cleanup-summary.json"),
     ("distributed-side-effects", "distributed-side-effect-hardgate", "distributed-side-effect-summary.json"),
     ("pythonic-ddd-drift", "pythonic-ddd-drift-audit", "pythonic-ddd-drift-summary.json"),
@@ -43,6 +44,7 @@ YELLOW_VERDICTS = {
     "paper-guardrails",
     "partially-contained",
     "scan-blocked",
+    "local-scan-only",
 }
 POSITIVE_VERDICTS = {
     "sound",
@@ -66,7 +68,7 @@ def load_json(path: Path) -> tuple[dict[str, Any] | None, str | None]:
 
 
 def extract_verdict(data: dict[str, Any]) -> str | None:
-    for key in ("overall_health", "overall_verdict", "verdict", "status"):
+    for key in ("overall_health", "overall_verdict", "verdict", "status", "mode"):
         value = data.get(key)
         if isinstance(value, str):
             return value
@@ -105,7 +107,12 @@ def extract_severity_counts(data: dict[str, Any]) -> dict[str, int]:
 def extract_top_categories(data: dict[str, Any], limit: int = 3) -> list[str]:
     counter = Counter()
     for finding in extract_findings(data):
-        category = finding.get("category") or finding.get("gate") or finding.get("domain")
+        category = (
+            finding.get("category")
+            or finding.get("gate")
+            or finding.get("domain")
+            or finding.get("kind")
+        )
         if isinstance(category, str):
             counter[category] += 1
     return [cat for cat, _ in counter.most_common(limit)]
@@ -218,6 +225,10 @@ def main() -> int:
             notes = err
         elif status == "not-applicable":
             notes = "child skill marked this domain not applicable"
+        elif domain == "llm-api-freshness" and child_verdict == "local-scan-only":
+            notes = "current provider docs were not verified in this run"
+        elif domain == "llm-api-freshness" and child_verdict == "verified":
+            notes = "current provider docs were verified for the detected surfaces"
 
         skill_runs.append({
             "domain": domain,
@@ -252,6 +263,8 @@ def main() -> int:
                 top_actions.append("Delete expired compatibility surfaces that are still distorting the codebase.")
             elif run["domain"] == "durable-agents":
                 top_actions.append("Repair durable-agent path correctness before trusting Temporal / pydantic-ai behavior.")
+            elif run["domain"] == "llm-api-freshness":
+                top_actions.append("Verify current provider docs and migrate stale LLM SDK or endpoint usage before the next AI-facing change.")
         elif sev["medium"] > 0:
             if run["domain"] == "pythonic-ddd-drift":
                 top_actions.append("Trim abstraction bloat where it adds shape without policy.")
@@ -259,6 +272,8 @@ def main() -> int:
                 top_actions.append("Use cleanup debt reduction as a leverage move, not cosmetic tidying.")
             elif run["domain"] == "structure":
                 top_actions.append("Stabilize dependency-audit config and workspace metadata before trying to harden boundaries.")
+            elif run["domain"] == "llm-api-freshness":
+                top_actions.append("Run a Context7-backed verification pass to separate real LLM API drift from local suspicion.")
 
     # remove duplicates while keeping order
     deduped_actions = []
