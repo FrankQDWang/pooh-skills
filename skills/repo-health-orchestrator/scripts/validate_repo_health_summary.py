@@ -27,6 +27,8 @@ REQUIRED_RUN = {
     "skill_name",
     "status",
     "summary_path",
+    "report_path",
+    "agent_brief_path",
     "severity_counts",
     "dependency_status",
 }
@@ -106,6 +108,10 @@ def main() -> int:
         if miss:
             print(f"skill_runs[{idx}] missing keys: {sorted(miss)}", file=sys.stderr)
             return 2
+        for key in ("summary_path", "report_path", "agent_brief_path"):
+            if not isinstance(run.get(key), str):
+                print(f"skill_runs[{idx}] field {key!r} must be a string", file=sys.stderr)
+                return 2
         run_dependency_status = run.get("dependency_status")
         if run_dependency_status not in VALID_DEPENDENCY_STATUS:
             print(f"skill_runs[{idx}] has unsupported dependency_status: {run_dependency_status!r}", file=sys.stderr)

@@ -10,15 +10,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-EXPECTED = [
-    ("structure", "dependency-audit", "repo-audit-summary.json"),
-    ("contracts", "signature-contract-hardgate", "contract-hardgate-summary.json"),
-    ("durable-agents", "pydantic-ai-temporal-hardgate", "pydantic-temporal-summary.json"),
-    ("llm-api-freshness", "llm-api-freshness-guard", "llm-api-freshness-summary.json"),
-    ("cleanup", "controlled-cleanup-hardgate", "controlled-cleanup-summary.json"),
-    ("distributed-side-effects", "distributed-side-effect-hardgate", "distributed-side-effect-summary.json"),
-    ("pythonic-ddd-drift", "pythonic-ddd-drift-audit", "pythonic-ddd-drift-summary.json"),
-]
+from repo_health_catalog import EXPECTED
+from repo_health_catalog import agent_brief_path as child_agent_brief_path
+from repo_health_catalog import report_path as child_report_path
 
 RED_VERDICTS = {
     "unsafe",
@@ -56,6 +50,57 @@ POSITIVE_VERDICTS = {
     "durable-harness",
     "well-governed",
 }
+
+
+def recommended_domain_action(run: dict[str, Any], coverage_status: str = "complete") -> str | None:
+    status = str(run.get("status") or "")
+    domain = str(run.get("domain") or "")
+    if status == "blocked":
+        failures = run.get("dependency_failures") or []
+        if failures:
+            failure = failures[0]
+            return (
+                f"Unblock {run['skill_name']} first: restore `{failure.get('name')}` "
+                f"so the audit can run before trusting {domain} coverage."
+            )
+        return f"Unblock {run['skill_name']} first: restore its runtime prerequisites before trusting {domain} coverage."
+    if status in {"missing", "invalid"}:
+        if coverage_status == "partial":
+            return "Close the remaining missing or invalid audit domains before calling this rollup decision-complete."
+        return None
+    if status != "present":
+        return None
+
+    sev = run.get("severity_counts") or {}
+    verdict = str(run.get("child_verdict") or "").lower()
+    is_high = int(sev.get("critical", 0)) > 0 or int(sev.get("high", 0)) > 0 or verdict in RED_VERDICTS
+    is_watch = int(sev.get("medium", 0)) > 0 or verdict in YELLOW_VERDICTS
+
+    if is_high:
+        if domain == "distributed-side-effects":
+            return "Fix distributed side-effect correctness first: remove dual writes, add durable handoff, and prove idempotency."
+        if domain == "contracts":
+            return "Turn contract theater into machine enforcement: harden compile-time, runtime, and merge gates."
+        if domain == "structure":
+            return "Stop structural debt from spreading: freeze boundary violations and cycles before other cleanup."
+        if domain == "pythonic-ddd-drift":
+            return "Repair boundary leaks and flatten ceremonial Python layers before adding more abstractions."
+        if domain == "cleanup":
+            return "Delete expired compatibility surfaces that are still distorting the codebase."
+        if domain == "durable-agents":
+            return "Repair durable-agent path correctness before trusting Temporal / pydantic-ai behavior."
+        if domain == "llm-api-freshness":
+            return "Verify current provider docs and migrate stale LLM SDK or endpoint usage before the next AI-facing change."
+    if is_watch:
+        if domain == "pythonic-ddd-drift":
+            return "Trim abstraction bloat where it adds shape without policy."
+        if domain == "cleanup":
+            return "Use cleanup debt reduction as a leverage move, not cosmetic tidying."
+        if domain == "structure":
+            return "Stabilize dependency-audit config and workspace metadata before trying to harden boundaries."
+        if domain == "llm-api-freshness":
+            return "Run a Context7-backed verification pass to separate real LLM API drift from local suspicion."
+    return None
 
 
 def load_json(path: Path) -> tuple[dict[str, Any] | None, str | None]:
@@ -231,6 +276,8 @@ def main() -> int:
 
     for domain, skill_name, filename in EXPECTED:
         summary_path = harness / filename
+        report_path = child_report_path(harness, domain)
+        agent_brief_path = child_agent_brief_path(harness, domain)
         data, err = load_json(summary_path)
         status = domain_status(data, err)
         child_verdict = extract_verdict(data) if data else None
@@ -262,6 +309,8 @@ def main() -> int:
             "skill_name": skill_name,
             "status": status,
             "summary_path": str(summary_path),
+            "report_path": str(report_path),
+            "agent_brief_path": str(agent_brief_path),
             "dependency_status": dependency_status,
             "dependency_failures": dependency_failures,
             "child_verdict": child_verdict,
@@ -276,46 +325,9 @@ def main() -> int:
     # top actions derived from blocker/watch domains
     top_actions = []
     for run in skill_runs:
-        if run["status"] == "blocked":
-            failures = run.get("dependency_failures") or []
-            if failures:
-                failure = failures[0]
-                top_actions.append(
-                    f"Unblock {run['skill_name']} first: restore `{failure.get('name')}` so the audit can run before trusting {run['domain']} coverage."
-                )
-            else:
-                top_actions.append(
-                    f"Unblock {run['skill_name']} first: restore its runtime prerequisites before trusting {run['domain']} coverage."
-                )
-            continue
-
-        if run["status"] != "present":
-            continue
-        sev = run["severity_counts"]
-        if sev["critical"] > 0 or sev["high"] > 0:
-            if run["domain"] == "distributed-side-effects":
-                top_actions.append("Fix distributed side-effect correctness first: remove dual writes, add durable handoff, and prove idempotency.")
-            elif run["domain"] == "contracts":
-                top_actions.append("Turn contract theater into machine enforcement: harden compile-time, runtime, and merge gates.")
-            elif run["domain"] == "structure":
-                top_actions.append("Stop structural debt from spreading: freeze boundary violations and cycles before other cleanup.")
-            elif run["domain"] == "pythonic-ddd-drift":
-                top_actions.append("Repair boundary leaks and flatten ceremonial Python layers before adding more abstractions.")
-            elif run["domain"] == "cleanup":
-                top_actions.append("Delete expired compatibility surfaces that are still distorting the codebase.")
-            elif run["domain"] == "durable-agents":
-                top_actions.append("Repair durable-agent path correctness before trusting Temporal / pydantic-ai behavior.")
-            elif run["domain"] == "llm-api-freshness":
-                top_actions.append("Verify current provider docs and migrate stale LLM SDK or endpoint usage before the next AI-facing change.")
-        elif sev["medium"] > 0:
-            if run["domain"] == "pythonic-ddd-drift":
-                top_actions.append("Trim abstraction bloat where it adds shape without policy.")
-            elif run["domain"] == "cleanup":
-                top_actions.append("Use cleanup debt reduction as a leverage move, not cosmetic tidying.")
-            elif run["domain"] == "structure":
-                top_actions.append("Stabilize dependency-audit config and workspace metadata before trying to harden boundaries.")
-            elif run["domain"] == "llm-api-freshness":
-                top_actions.append("Run a Context7-backed verification pass to separate real LLM API drift from local suspicion.")
+        action = recommended_domain_action(run, coverage_status=coverage_status)
+        if action:
+            top_actions.append(action)
 
     # remove duplicates while keeping order
     deduped_actions = []

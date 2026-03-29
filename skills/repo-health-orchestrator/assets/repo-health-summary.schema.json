@@ -46,6 +46,8 @@
           "skill_name",
           "status",
           "summary_path",
+          "report_path",
+          "agent_brief_path",
           "severity_counts",
           "dependency_status"
         ],
@@ -60,6 +62,12 @@
             "type": "string"
           },
           "summary_path": {
+            "type": "string"
+          },
+          "report_path": {
+            "type": "string"
+          },
+          "agent_brief_path": {
             "type": "string"
           },
           "dependency_status": {

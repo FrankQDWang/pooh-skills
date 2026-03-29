@@ -25,7 +25,7 @@ scripts/
 - `distributed-side-effect-hardgate`: 面向消息、worker、webhook 与事件驱动仓库的分布式副作用审计，检查 dual write、outbox、幂等、unsafe retry、事件契约和补偿/可观测性缺口。
 - `pythonic-ddd-drift-audit`: 面向 Python-heavy 仓库的 Pythonic 形状债与 DDD 漂移审计，检查 domain boundary leak、cross-context bleed、ABC 过度、thin wrapper 与假 CQRS。
 - `llm-api-freshness-guard`: 面向主流 LLM provider / wrapper surface 的 API 新鲜度审计，借助 Context7 检查是否还在使用过时 SDK、旧 endpoint、漂移的 tool calling / structured output / streaming / auth / gateway 配置，并支持通过 provider registry 扩展到其他 surface；Context7 不可用时直接 blocked，不再把缺依赖包装成正式成功结果。
-- `repo-health-orchestrator`: 面向整仓体检的汇总 skill，每次先清空 `.repo-harness`，再并行启动 7 个 child audit subagents，维护一个终端实时 control plane，并在结束时产出 repo health rollup。要求运行环境支持 Codex subagent，以及当前会话模型与推理强度继承语义。
+- `repo-health-orchestrator`: 面向整仓体检的汇总 skill，每次先清空 `.repo-harness`，再并行启动 7 个 child audit subagents，维护一个终端实时 control plane，并在结束时先产出机器 rollup，再合成 cross-domain evidence、最终总报告和 agent brief。要求运行环境支持 Codex subagent，以及当前会话模型与推理强度继承语义。
 
 ## 安装
 
@@ -71,6 +71,7 @@ scripts/
 
 - `repo-health-orchestrator` 是 Codex subagent-only：它会先清空并重建 repo-root `.repo-harness`，再启动 7 个 child audit subagents
 - `.repo-harness` 是纯输出目录，只保存当前 run 的 summary / report / brief / linkcheck / control-plane state 等工件，不放默认输入
+- `repo-health-orchestrator` 采用双层汇总：`repo-health-summary.json` 负责机器真相，`repo-health-evidence.json` 负责 cross-domain synthesis，最终 `repo-health-report.md` 与 `repo-health-agent-brief.md` 基于 evidence 生成
 - 所有 child skills 统一遵守 fail-fast bootstrap 合约：先 `preflight`，再尝试自动安装缺失依赖；安装失败时停止主审计，但仍写标准 blocked 工件
 - 每个 child skill 运行期间都会写 `.repo-harness/<skill-id>-runtime.json`，供 orchestrator 和终端 control plane 显示 `PREFLIGHT / BOOTSTRAPPING / RUNNING / BLOCKED / COMPLETE / NOT APPLICABLE`
 - child skill 自己的 `scripts/run_all.sh` 可以继续作为本地 deterministic helper 独立使用，但不再属于 orchestrator 的公开契约

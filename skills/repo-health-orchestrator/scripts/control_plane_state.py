@@ -12,31 +12,12 @@ from tempfile import NamedTemporaryFile
 from typing import Any
 
 from aggregate_repo_health import RED_VERDICTS
-from aggregate_repo_health import EXPECTED
+from repo_health_catalog import DOMAIN_BY_NAME
+from repo_health_catalog import EXPECTED
 
 STATE_KIND = "repo-health-control-plane"
 STATE_VERSION = "1.0"
 FINAL_WORKER_STATUSES = {"complete", "blocked", "invalid", "missing", "not-applicable"}
-
-WORKER_TITLES = {
-    "structure": "Audit-Dependencies",
-    "contracts": "Audit-Contracts",
-    "durable-agents": "Audit-Durable-Agents",
-    "llm-api-freshness": "Audit-LLM-Freshness",
-    "cleanup": "Audit-Cleanup",
-    "distributed-side-effects": "Audit-Distributed-Effects",
-    "pythonic-ddd-drift": "Audit-Pythonic-Drift",
-}
-
-WORKER_ACCENTS = {
-    "structure": "cyan",
-    "contracts": "mint",
-    "durable-agents": "violet",
-    "llm-api-freshness": "mint",
-    "cleanup": "gold",
-    "distributed-side-effects": "rose",
-    "pythonic-ddd-drift": "cyan",
-}
 
 STAGE_LABELS = {
     "reset-harness": "RESETTING HARNESS",
@@ -175,13 +156,14 @@ def default_state_path_values(state_path: Path, model_label: str | None = None) 
     workers = []
     for index, (domain, skill_name, filename) in enumerate(EXPECTED, start=1):
         summary_path = str((harness_dir / filename).resolve())
+        spec = DOMAIN_BY_NAME[domain]
         workers.append({
             "index": index,
             "domain": domain,
-            "title": WORKER_TITLES.get(domain, domain.replace("-", " ").title()),
+            "title": spec.title,
             "skill_name": skill_name,
             "model_label": model_label or "Inherited from session",
-            "accent": WORKER_ACCENTS.get(domain, "cyan"),
+            "accent": spec.accent,
             "runtime_status": "waiting",
             "status_label": STATUS_LABELS["waiting"],
             "dependency_status": "ready",

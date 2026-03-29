@@ -6,6 +6,7 @@ Keep this brief short and action-ordered.
 
 - overall_health: `{{overall_health}}`
 - coverage_status: `{{coverage_status}}`
+- summary_line: `{{summary_line}}`
 
 ## Domains
 
@@ -13,13 +14,14 @@ Keep this brief short and action-ordered.
 - domain: distributed-side-effects
   skill_name: distributed-side-effect-hardgate
   status: present
+  dependency_status: ready
   child_verdict: unsafe
   top_categories:
     - dual-write-hazard
     - idempotency-gap
   top_action: introduce durable handoff / outbox before broker publish
-  merge_gate_bias: block-now
-  notes: do not trust retries until idempotency is visible
+  why_now: blocker-level reliability risk is already visible
+  handoff_notes: do not trust retries until idempotency is visible
 ```
 
 ## Action queue

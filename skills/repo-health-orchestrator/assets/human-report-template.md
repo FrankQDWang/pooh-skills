@@ -6,64 +6,78 @@
 - coverage_status: `{{coverage_status}}`
 - one-line diagnosis: `{{summary_line}}`
 
-## 2. Coverage map
+## 2. Coverage and trust
 
-| Domain | Skill | Status | Child verdict | Notes |
+| Domain | Status | Dependency | Child verdict | Evidence gaps |
 |---|---|---|---|---|
-| structure | dependency-audit | {{status}} | {{verdict}} | {{notes}} |
-| contracts | signature-contract-hardgate | {{status}} | {{verdict}} | {{notes}} |
-| durable-agents | pydantic-ai-temporal-hardgate | {{status}} | {{verdict}} | {{notes}} |
-| llm-api-freshness | llm-api-freshness-guard | {{status}} | {{verdict}} | {{notes}} |
-| distributed-side-effects | distributed-side-effect-hardgate | {{status}} | {{verdict}} | {{notes}} |
-| pythonic-ddd-drift | pythonic-ddd-drift-audit | {{status}} | {{verdict}} | {{notes}} |
-| cleanup | controlled-cleanup-hardgate | {{status}} | {{verdict}} | {{notes}} |
+| structure | {{status}} | {{dependency_status}} | {{verdict}} | {{evidence_gaps}} |
+| contracts | {{status}} | {{dependency_status}} | {{verdict}} | {{evidence_gaps}} |
+| durable-agents | {{status}} | {{dependency_status}} | {{verdict}} | {{evidence_gaps}} |
+| llm-api-freshness | {{status}} | {{dependency_status}} | {{verdict}} | {{evidence_gaps}} |
+| distributed-side-effects | {{status}} | {{dependency_status}} | {{verdict}} | {{evidence_gaps}} |
+| pythonic-ddd-drift | {{status}} | {{dependency_status}} | {{verdict}} | {{evidence_gaps}} |
+| cleanup | {{status}} | {{dependency_status}} | {{verdict}} | {{evidence_gaps}} |
 
-## 3. Highest-risk domains
+## 3. Root cause clusters
 
-For each risky domain:
+### {{cluster_title}}
+
+- status: `{{status}}`
+- top categories: `{{top_categories}}`
+- member domains: `{{domains}}`
+
+**是什么**
+
+{{cluster_summary}}
+
+**为什么重要**
+
+{{why_cluster_matters}}
+
+**建议做什么**
+
+{{cluster_action}}
+
+## 4. Highest-risk domains
 
 ### {{domain}}
 
 - skill: `{{skill_name}}`
 - status: `{{status}}`
+- dependency_status: `{{dependency_status}}`
 - child verdict: `{{child_verdict}}`
 - top categories: `{{top_categories}}`
 
-**是什么**
+**关键证据**
 
-{{what_it_is}}
+{{report_excerpt}}
 
-**为什么重要**
+**为什么现在要做**
 
-{{why_it_matters}}
+{{why_now}}
 
-**建议做什么**
+**直接动作**
 
-{{what_to_do}}
+{{top_action}}
 
-## 4. Fastest high-leverage fixes
+## 5. Ordered action queue
 
-- fix 1
-- fix 2
-- fix 3
+### 现在就做
+- {{now_action}}
 
-## 5. Unknowns / missing coverage
+### 下一步
+- {{next_action}}
+
+### 之后再做
+- {{later_action}}
+
+## 6. Unknowns / evidence gaps
 
 - missing skill
 - invalid summary
-- not-run domain
-- remote enforcement not locally verifiable
-
-## 6. Ordered action queue
-
-### 现在就做
-- ...
-
-### 下一步
-- ...
-
-### 之后再做
-- ...
+- missing child human report
+- missing child agent brief
+- trust-gap domains such as `local-scan-only`
 
 ## 7. What this repo is teaching AI to do wrong overall
 

@@ -17,7 +17,7 @@ Use this skill when the user wants:
 - a governance rollup across several audit skills
 - an AI-coding state-of-the-repo snapshot
 - a prioritized action queue across structure, contracts, durable agents, LLM API freshness, distributed consistency, cleanup, and Pythonic drift
-- a repeatable whole-repo run that ends in one summary JSON and one human report
+- a repeatable whole-repo run that ends in one machine summary, one evidence file, one human report, and one agent brief
 
 ## Do not use this
 
@@ -59,10 +59,13 @@ Read only what is needed.
 - `assets/agent-brief-template.md`
 - `assets/repo-health-summary.schema.json`
 - `references/integration-matrix.md`
+- `references/synthesis-policy.md`
 - `references/verdict-policy.md`
 - `scripts/aggregate_repo_health.py`
 - `scripts/control_plane_state.py`
 - `scripts/render_control_plane.py`
+- `scripts/repo_health_catalog.py`
+- `scripts/synthesize_repo_health.py`
 - `scripts/validate_repo_health_summary.py`
 
 ## Operating stance
@@ -75,7 +78,7 @@ Read only what is needed.
 - Keep child prompts narrow: one domain, one output contract, no cross-domain judgment.
 - Preserve the child skill's judgment; do not sand off sharp findings during aggregation.
 - Keep coverage gaps visible.
-- Use deterministic helper scripts only for final aggregation and validation.
+- Use deterministic helper scripts for final aggregation, evidence synthesis, and validation.
 
 ## Subagent contract
 
@@ -225,7 +228,7 @@ python3 scripts/render_control_plane.py \
   --state /path/to/repo/.repo-harness/repo-health-control-plane.json
 ```
 
-### 5) Aggregate and validate the rollup
+### 5) Aggregate and validate the machine rollup
 
 Use the deterministic helper scripts:
 
@@ -241,7 +244,33 @@ python3 scripts/validate_repo_health_summary.py \
 ```
 
 Before the aggregate runs, move the overall stage to `aggregating` and redraw.
-After validation succeeds, project the final repo-health summary back into the control-plane state and render the final frame:
+This machine summary remains the single source of truth for `overall_health`, `coverage_status`, coverage classification, and blocked/missing/invalid distinctions.
+
+### 6) Synthesize richer evidence and final outputs
+
+After the machine summary validates, synthesize cross-domain evidence and overwrite the final human-facing outputs:
+
+```bash
+python3 scripts/synthesize_repo_health.py \
+  --repo /path/to/repo \
+  --summary /path/to/repo/.repo-harness/repo-health-summary.json \
+  --harness-dir /path/to/repo/.repo-harness \
+  --out-evidence /path/to/repo/.repo-harness/repo-health-evidence.json \
+  --out-report /path/to/repo/.repo-harness/repo-health-report.md \
+  --out-brief /path/to/repo/.repo-harness/repo-health-agent-brief.md
+```
+
+The richer synthesis layer must:
+
+- preserve the machine rollup rather than recompute it
+- read child human reports and child agent briefs when available
+- group domains into fixed clusters instead of inventing new ones
+- prioritize dependency-blocked domains before business findings
+- keep missing or invalid child artifacts visible as evidence gaps
+
+### 7) Finalize
+
+After synthesis succeeds, project the final repo-health summary back into the control-plane state and render the final frame:
 
 ```bash
 python3 scripts/control_plane_state.py finalize-from-summary \
@@ -251,10 +280,6 @@ python3 scripts/render_control_plane.py \
   --state /path/to/repo/.repo-harness/repo-health-control-plane.json \
   --final
 ```
-
-If useful, also write `.repo-harness/repo-health-agent-brief.md` from the template.
-
-### 6) Finalize
 
 The final control-plane frame must include:
 
@@ -288,11 +313,11 @@ Interpretation:
 Required sections:
 
 1. Executive summary
-2. Coverage map - what ran and what failed or did not apply
-3. Highest-risk domains
-4. Fastest high-leverage fixes
-5. Open unknowns and unverified areas
-6. Ordered action queue: now / next / later
+2. Coverage and trust
+3. Root cause clusters
+4. Highest-risk domains
+5. Ordered action queue: now / next / later
+6. Open unknowns and evidence gaps
 7. What this repo is teaching AI to do wrong overall
 
 ## Agent brief contract
@@ -304,10 +329,11 @@ Per domain include:
 - `domain`
 - `skill_name`
 - `status`
+- `dependency_status`
 - `child_verdict`
 - `top_categories`
 - `top_action`
-- `merge_gate_bias`
+- `why_now`
 - `notes`
 
 ## Safety rules
