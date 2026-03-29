@@ -66,6 +66,8 @@ PROGRESS_BY_STAGE = {
 
 STATUS_LABELS = {
     "waiting": "WAITING",
+    "preflight": "PREFLIGHT",
+    "bootstrapping": "BOOTSTRAPPING",
     "running": "RUNNING",
     "complete": "COMPLETE",
     "blocked": "BLOCKED",
@@ -132,6 +134,11 @@ def parse_args() -> argparse.Namespace:
     final_parser.add_argument("--model-label", default=None)
     final_parser.add_argument("--reasoning-effort", default=None)
 
+    runtime_parser = subparsers.add_parser("sync-worker-runtime", help="Project a child runtime sidecar into one worker card.")
+    add_common_state_args(runtime_parser)
+    runtime_parser.add_argument("--domain", required=True)
+    runtime_parser.add_argument("--runtime", required=True)
+
     return parser.parse_args()
 
 
@@ -177,12 +184,15 @@ def default_state_path_values(state_path: Path, model_label: str | None = None) 
             "accent": WORKER_ACCENTS.get(domain, "cyan"),
             "runtime_status": "waiting",
             "status_label": STATUS_LABELS["waiting"],
+            "dependency_status": "ready",
             "summary_path": summary_path,
             "output_label": to_output_label(summary_path),
             "detail": "Not started yet",
             "notes": "",
             "child_verdict": "",
             "top_categories": [],
+            "bootstrap_actions": [],
+            "dependency_failures": [],
             "severity_counts": {
                 "critical": 0,
                 "high": 0,
@@ -330,11 +340,20 @@ def update_worker(args: argparse.Namespace) -> dict[str, Any]:
 def status_from_summary_run(run: dict[str, Any]) -> tuple[str, str, str]:
     status = str(run.get("status") or "missing")
     verdict = str(run.get("child_verdict") or "").strip()
+    dependency_status = str(run.get("dependency_status") or "ready")
     severity = run.get("severity_counts") or {}
     critical = int(severity.get("critical", 0) or 0)
     high = int(severity.get("high", 0) or 0)
     verdict_key = verdict.lower()
 
+    if status == "blocked" or dependency_status == "blocked":
+        failures = run.get("dependency_failures") or []
+        if failures:
+            first = failures[0]
+            detail = str(first.get("failure_reason") or first.get("name") or "dependency bootstrap blocked")
+        else:
+            detail = verdict or "dependency bootstrap blocked"
+        return "blocked", STATUS_LABELS["blocked"], detail
     if status == "present":
         if critical > 0 or high > 0 or verdict_key in RED_VERDICTS:
             return "blocked", STATUS_LABELS["blocked"], verdict or "high-risk findings"
@@ -374,10 +393,16 @@ def finalize_from_summary(args: argparse.Namespace) -> dict[str, Any]:
         worker["status_label"] = status_label
         worker["detail"] = detail
         worker["notes"] = str(run.get("notes") or "")
+        worker["dependency_status"] = str(run.get("dependency_status") or worker.get("dependency_status") or "ready")
         worker["child_verdict"] = str(run.get("child_verdict") or "")
         worker["summary_path"] = str(run.get("summary_path") or worker.get("summary_path") or "")
         worker["output_label"] = to_output_label(worker["summary_path"])
         worker["top_categories"] = [str(item) for item in run.get("top_categories") or []]
+        worker["dependency_failures"] = [
+            dict(item)
+            for item in run.get("dependency_failures") or []
+            if isinstance(item, dict)
+        ]
         worker["severity_counts"] = {
             "critical": int((run.get("severity_counts") or {}).get("critical", 0) or 0),
             "high": int((run.get("severity_counts") or {}).get("high", 0) or 0),
@@ -407,6 +432,60 @@ def finalize_from_summary(args: argparse.Namespace) -> dict[str, Any]:
     return state
 
 
+def runtime_to_worker_status(runtime: dict[str, Any]) -> tuple[str, str, str]:
+    dependency_status = str(runtime.get("dependency_status") or "ready")
+    stage = str(runtime.get("stage") or "waiting")
+    detail = str(runtime.get("current_action") or "")
+    if dependency_status == "blocked" or stage == "blocked":
+        return "blocked", STATUS_LABELS["blocked"], detail or "Dependency bootstrap blocked the worker."
+    if stage == "preflight":
+        return "preflight", STATUS_LABELS["preflight"], detail or "Running runtime preflight."
+    if stage == "bootstrapping":
+        return "bootstrapping", STATUS_LABELS["bootstrapping"], detail or "Installing missing dependencies."
+    if stage == "running":
+        return "running", STATUS_LABELS["running"], detail or "Audit is running."
+    if stage == "not-applicable":
+        return "not-applicable", STATUS_LABELS["not-applicable"], detail or "Domain is not applicable."
+    if stage == "complete":
+        return "complete", STATUS_LABELS["complete"], detail or "Audit completed."
+    return "waiting", STATUS_LABELS["waiting"], detail or "Not started yet"
+
+
+def sync_worker_runtime(args: argparse.Namespace) -> dict[str, Any]:
+    state_path = Path(args.state).resolve()
+    state = ensure_state_shape(load_json(state_path))
+    runtime = load_json(Path(args.runtime).resolve())
+    target = None
+    for worker in state["workers"]:
+        if worker.get("domain") == args.domain:
+            target = worker
+            break
+    if target is None:
+        raise ValueError(f"unknown worker domain: {args.domain}")
+
+    runtime_status, status_label, detail = runtime_to_worker_status(runtime)
+    target["runtime_status"] = runtime_status
+    target["status_label"] = status_label
+    target["detail"] = detail
+    target["dependency_status"] = str(runtime.get("dependency_status") or target.get("dependency_status") or "ready")
+    target["summary_path"] = str(runtime.get("summary_path") or target.get("summary_path") or "")
+    target["output_label"] = to_output_label(target["summary_path"])
+    target["bootstrap_actions"] = [dict(item) for item in runtime.get("bootstrap_actions") or [] if isinstance(item, dict)]
+    target["dependency_failures"] = [dict(item) for item in runtime.get("dependency_failures") or [] if isinstance(item, dict)]
+
+    failures = target["dependency_failures"]
+    if runtime_status == "blocked" and failures:
+        failure = failures[0]
+        attempted = str(failure.get("attempted_command") or "")
+        reason = str(failure.get("failure_reason") or "")
+        target["notes"] = f"{failure.get('name')}: {attempted or '-'} | {reason}"
+    else:
+        target["notes"] = detail
+
+    state["generated_at"] = utc_now()
+    return state
+
+
 def main() -> int:
     args = parse_args()
     if args.command == "init":
@@ -417,6 +496,8 @@ def main() -> int:
         state = update_worker(args)
     elif args.command == "finalize-from-summary":
         state = finalize_from_summary(args)
+    elif args.command == "sync-worker-runtime":
+        state = sync_worker_runtime(args)
     else:
         raise ValueError(f"unsupported command: {args.command}")
 

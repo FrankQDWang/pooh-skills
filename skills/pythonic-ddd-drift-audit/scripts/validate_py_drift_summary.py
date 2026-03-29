@@ -18,6 +18,20 @@ REQUIRED_TOP = {
     "severity_counts",
     "coverage",
     "findings",
+    "dependency_status",
+    "bootstrap_actions",
+    "dependency_failures",
+}
+REQUIRED_BOOTSTRAP_ACTION = {"name", "kind", "status", "command", "details"}
+REQUIRED_DEPENDENCY_FAILURE = {
+    "name",
+    "kind",
+    "required_for",
+    "attempted_command",
+    "failure_reason",
+    "blocked_by_security",
+    "blocked_by_permissions",
+    "blocked_by_network",
 }
 
 REQUIRED_FINDING = {
@@ -32,6 +46,7 @@ REQUIRED_FINDING = {
     "recommendation",
     "merge_gate",
 }
+VALID_DEPENDENCY_STATUS = {"ready", "auto-installed", "blocked"}
 
 
 def main() -> int:
@@ -51,11 +66,49 @@ def main() -> int:
         print("Unexpected skill field", file=sys.stderr)
         return 2
 
+    dependency_status = data.get("dependency_status")
+    if dependency_status not in VALID_DEPENDENCY_STATUS:
+        print(f"Unsupported dependency_status: {dependency_status!r}", file=sys.stderr)
+        return 2
+
+    bootstrap_actions = data.get("bootstrap_actions")
+    if not isinstance(bootstrap_actions, list):
+        print("bootstrap_actions must be a list", file=sys.stderr)
+        return 2
+    for idx, action in enumerate(bootstrap_actions):
+        if not isinstance(action, dict):
+            print(f"bootstrap_actions[{idx}] must be an object", file=sys.stderr)
+            return 2
+        missing_action = REQUIRED_BOOTSTRAP_ACTION - set(action)
+        if missing_action:
+            print(f"bootstrap_actions[{idx}] missing keys: {sorted(missing_action)}", file=sys.stderr)
+            return 2
+
+    dependency_failures = data.get("dependency_failures")
+    if not isinstance(dependency_failures, list):
+        print("dependency_failures must be a list", file=sys.stderr)
+        return 2
+    for idx, failure in enumerate(dependency_failures):
+        if not isinstance(failure, dict):
+            print(f"dependency_failures[{idx}] must be an object", file=sys.stderr)
+            return 2
+        missing_failure = REQUIRED_DEPENDENCY_FAILURE - set(failure)
+        if missing_failure:
+            print(f"dependency_failures[{idx}] missing keys: {sorted(missing_failure)}", file=sys.stderr)
+            return 2
+
+    if dependency_status == "blocked" and not dependency_failures:
+        print("dependency_status=blocked requires at least one dependency_failure", file=sys.stderr)
+        return 2
+
     if not isinstance(data.get("findings"), list):
         print("findings must be a list", file=sys.stderr)
         return 2
 
     for idx, finding in enumerate(data["findings"]):
+        if not isinstance(finding, dict):
+            print(f"Finding #{idx} must be an object", file=sys.stderr)
+            return 2
         missing_f = REQUIRED_FINDING - set(finding)
         if missing_f:
             print(f"Finding #{idx} missing keys: {sorted(missing_f)}", file=sys.stderr)

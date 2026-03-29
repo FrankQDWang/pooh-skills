@@ -2,6 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+source "$SCRIPT_DIR/../../.pooh-runtime/bin/runtime_wrapper.sh"
 
 print_usage() {
   cat <<'EOF'
@@ -21,14 +22,42 @@ fi
 
 REPO_ROOT="${1:-.}"
 OUT_DIR="${2:-$REPO_ROOT/.repo-harness}"
+SUMMARY_PATH="$OUT_DIR/pydantic-temporal-summary.json"
+REPORT_PATH="$OUT_DIR/pydantic-temporal-human-report.md"
+AGENT_BRIEF_PATH="$OUT_DIR/pydantic-temporal-agent-brief.md"
+MANIFEST_PATH="$SCRIPT_DIR/../assets/runtime-dependencies.json"
 
 mkdir -p "$OUT_DIR"
+
+pooh_runtime_prepare \
+  "pydantic-ai-temporal-hardgate" \
+  "$SCRIPT_DIR" \
+  "$REPO_ROOT" \
+  "$OUT_DIR" \
+  "$SUMMARY_PATH" \
+  "$REPORT_PATH" \
+  "$AGENT_BRIEF_PATH" \
+  "$MANIFEST_PATH"
+
+bootstrap_exit=0
+pooh_runtime_bootstrap_or_block || bootstrap_exit=$?
+if [[ "$bootstrap_exit" -eq 10 ]]; then
+  exit 1
+elif [[ "$bootstrap_exit" -ne 0 ]]; then
+  exit "$bootstrap_exit"
+fi
+
+pooh_runtime_update "running" "" "Running pydantic-ai-temporal hardgate scan."
 
 python3 "$SCRIPT_DIR/run_pydantic_temporal_scan.py" \
   --repo "$REPO_ROOT" \
   --out-dir "$OUT_DIR"
 
+pooh_runtime_inject_summary
+
 python3 "$SCRIPT_DIR/validate_pydantic_temporal_summary.py" \
-  --summary "$OUT_DIR/pydantic-temporal-summary.json"
+  --summary "$SUMMARY_PATH"
+
+pooh_runtime_finalize
 
 echo "Pydantic AI + Temporal hardgate baseline complete."

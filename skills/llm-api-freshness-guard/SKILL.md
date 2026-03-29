@@ -44,10 +44,12 @@ This skill is built around **Context7 MCP** for current, version-aware documenta
 If Context7 is unavailable:
 
 - say so plainly
-- continue with a **local signal scan** if code is available
-- label the run **`local-scan-only`**
-- emit **`docs-unverified`**
-- do **not** pretend you verified the latest docs
+- stop the official audit flow
+- emit blocked summary / report / agent brief artifacts
+- mark the run `dependency_status=blocked`
+- do **not** pretend a local signal pass is an official freshness verdict
+
+`scripts/collect_llm_api_signals.py` may still be used as an internal triage helper, but `local-scan-only` is no longer the accepted success path when Context7 is missing.
 
 ## Reading map
 
@@ -59,7 +61,8 @@ If Context7 is unavailable:
 - For concrete Context7 query examples by provider and wrapper, read [`references/provider-query-cheatsheet.md`](references/provider-query-cheatsheet.md).
 - For Codex / MCP runtime assumptions, read [`references/context7-runtime-setup.md`](references/context7-runtime-setup.md).
 - For provider and wrapper detection rules, read [`assets/provider-registry.json`](assets/provider-registry.json).
-- For a deterministic local baseline, use `scripts/collect_llm_api_signals.py`, `scripts/validate_llm_api_freshness_summary.py`, and `scripts/run_all.sh`.
+- For deterministic runtime bootstrap and blocked-artifact behavior, use `scripts/run_all.sh`.
+- For local triage only, use `scripts/collect_llm_api_signals.py` and `scripts/validate_llm_api_freshness_summary.py`.
 
 ## Operating stance
 
@@ -155,7 +158,7 @@ If Context7 is unavailable:
    - provider ambiguity
    - missing manifests / lockfiles
    - no way to identify wrapper vs provider semantics
-   - Context7 unavailable or docs could not be resolved
+  - Context7 unavailable or docs could not be resolved
 
    ### Phase 1 - remove hard breakage or obvious drift
    - removed endpoints
@@ -229,7 +232,7 @@ Always produce a human-readable report using `assets/human-report-template.md` a
 
 The human report must:
 
-- clearly say whether this is a **verified** run or **local-scan-only**
+- clearly say whether this is a **verified**, **blocked**, or internal **local-scan-only** triage artifact
 - explain each major finding as:
   - **是什么**
   - **为什么重要**
@@ -317,7 +320,7 @@ When another skill or CI needs stable artifacts quickly, run:
 bash scripts/run_all.sh /path/to/repo
 ```
 
-This emits a **local-scan-only** baseline:
+This helper first enforces runtime bootstrap. If Context7 is unavailable, it emits blocked artifacts and exits non-zero. When Context7 is available, it can still emit a **local-scan-only** triage baseline:
 
 - `.repo-harness/llm-api-signals.json`
 - `.repo-harness/llm-api-freshness-report.md`

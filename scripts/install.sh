@@ -4,6 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
 SKILLS_DIR="$REPO_ROOT/skills"
+RUNTIME_DIR="$SKILLS_DIR/.pooh-runtime"
 
 print_usage() {
   cat <<'EOF'
@@ -46,6 +47,37 @@ gather_all_skills() {
   done < <(find "$SKILLS_DIR" -mindepth 1 -maxdepth 1 -type d | sort)
 }
 
+target_root_for() {
+  local target="$1"
+  case "$target" in
+    codex)
+      printf '%s\n' "${CODEX_HOME:-$HOME/.codex}/skills"
+      ;;
+    claude)
+      fail "Claude target is no longer supported"
+      ;;
+    *)
+      fail "Unsupported target: $target"
+      ;;
+  esac
+}
+
+install_shared_runtime() {
+  local target="$1"
+  local target_root
+  local target_dir
+
+  [[ -d "$RUNTIME_DIR" ]] || fail "Missing shared runtime directory: $RUNTIME_DIR"
+
+  target_root="$(target_root_for "$target")"
+  target_dir="$target_root/.pooh-runtime"
+  mkdir -p "$target_root"
+  rm -rf "$target_dir"
+  cp -R "$RUNTIME_DIR" "$target_dir"
+  find "$target_dir" \( -type d -name '__pycache__' -o -type f -name '*.pyc' \) -exec rm -rf {} +
+  printf 'Installed shared runtime -> %s\n' "$target_dir"
+}
+
 install_skill() {
   local skill_id="$1"
   local target="$2"
@@ -56,17 +88,7 @@ install_skill() {
   [[ -d "$src_dir" ]] || fail "Skill not found: $skill_id"
   [[ -f "$src_dir/SKILL.md" ]] || fail "Missing SKILL.md for skill: $skill_id"
 
-  case "$target" in
-    codex)
-      target_root="${CODEX_HOME:-$HOME/.codex}/skills"
-      ;;
-    claude)
-      fail "Claude target is no longer supported"
-      ;;
-    *)
-      fail "Unsupported target: $target"
-      ;;
-  esac
+  target_root="$(target_root_for "$target")"
 
   target_dir="$target_root/$skill_id"
   mkdir -p "$target_root"
@@ -131,8 +153,9 @@ if [[ "${#SKILLS_TO_INSTALL[@]}" -eq 0 ]]; then
   fail "No installable skills found under $SKILLS_DIR"
 fi
 
-for skill_id in "${SKILLS_TO_INSTALL[@]}"; do
-  for target in "${TARGETS[@]}"; do
+for target in "${TARGETS[@]}"; do
+  install_shared_runtime "$target"
+  for skill_id in "${SKILLS_TO_INSTALL[@]}"; do
     install_skill "$skill_id" "$target"
   done
 done

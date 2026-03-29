@@ -13,7 +13,10 @@
     "doc_verification",
     "findings",
     "priorities",
-    "scan_limitations"
+    "scan_limitations",
+    "dependency_status",
+    "bootstrap_actions",
+    "dependency_failures"
   ],
   "allOf": [
     {
@@ -46,6 +49,25 @@
           }
         }
       }
+    },
+    {
+      "if": {
+        "properties": {
+          "mode": {
+            "const": "blocked"
+          }
+        },
+        "required": [
+          "mode"
+        ]
+      },
+      "then": {
+        "properties": {
+          "dependency_status": {
+            "const": "blocked"
+          }
+        }
+      }
     }
   ],
   "properties": {
@@ -61,7 +83,8 @@
     "mode": {
       "enum": [
         "verified",
-        "local-scan-only"
+        "local-scan-only",
+        "blocked"
       ]
     },
     "repo_profile": {
@@ -86,6 +109,25 @@
       "type": "array",
       "items": {
         "type": "string"
+      }
+    },
+    "dependency_status": {
+      "enum": [
+        "ready",
+        "auto-installed",
+        "blocked"
+      ]
+    },
+    "bootstrap_actions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/bootstrapAction"
+      }
+    },
+    "dependency_failures": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/dependencyFailure"
       }
     }
   },
@@ -364,6 +406,74 @@
           "items": {
             "type": "string"
           }
+        }
+      }
+    },
+    "bootstrapAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "kind",
+        "status",
+        "command",
+        "details"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "command": {
+          "type": "string"
+        },
+        "details": {
+          "type": "string"
+        }
+      }
+    },
+    "dependencyFailure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "kind",
+        "required_for",
+        "attempted_command",
+        "failure_reason",
+        "blocked_by_security",
+        "blocked_by_permissions",
+        "blocked_by_network"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "required_for": {
+          "type": "string"
+        },
+        "attempted_command": {
+          "type": "string"
+        },
+        "failure_reason": {
+          "type": "string"
+        },
+        "blocked_by_security": {
+          "type": "boolean"
+        },
+        "blocked_by_permissions": {
+          "type": "boolean"
+        },
+        "blocked_by_network": {
+          "type": "boolean"
         }
       }
     }

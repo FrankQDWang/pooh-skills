@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 from typing import Any, Iterable, List
 
-ALLOWED_MODES = {"verified", "local-scan-only"}
+ALLOWED_MODES = {"verified", "local-scan-only", "blocked"}
 ALLOWED_FINDING_KINDS = {
     "scan-blocker",
     "provider-ambiguous",
@@ -47,6 +47,18 @@ STRICT_VERIFIED_FORBIDDEN_LIMITATION_SNIPPETS = (
     "local signal collector only",
     "local-scan-only",
 )
+ALLOWED_DEPENDENCY_STATUS = {"ready", "auto-installed", "blocked"}
+REQUIRED_BOOTSTRAP_ACTION = {"name", "kind", "status", "command", "details"}
+REQUIRED_DEPENDENCY_FAILURE = {
+    "name",
+    "kind",
+    "required_for",
+    "attempted_command",
+    "failure_reason",
+    "blocked_by_security",
+    "blocked_by_permissions",
+    "blocked_by_network",
+}
 
 
 def add_error(errors: List[str], message: str) -> None:
@@ -234,13 +246,53 @@ def validate_verified_contract(data: dict, errors: List[str]) -> None:
                 )
 
 
+def validate_dependency_contract(data: dict, errors: List[str]) -> None:
+    status = data.get("dependency_status")
+    if status not in ALLOWED_DEPENDENCY_STATUS:
+        add_error(errors, f"summary.dependency_status: invalid value {status!r}")
+
+    bootstrap_actions = data.get("bootstrap_actions")
+    if not expect_type(bootstrap_actions, list, "bootstrap_actions", errors):
+        return
+    for idx, action in enumerate(bootstrap_actions):
+        path = f"bootstrap_actions[{idx}]"
+        if not expect_type(action, dict, path, errors):
+            continue
+        expect_keys(action, REQUIRED_BOOTSTRAP_ACTION, path, errors)
+
+    dependency_failures = data.get("dependency_failures")
+    if not expect_type(dependency_failures, list, "dependency_failures", errors):
+        return
+    for idx, failure in enumerate(dependency_failures):
+        path = f"dependency_failures[{idx}]"
+        if not expect_type(failure, dict, path, errors):
+            continue
+        expect_keys(failure, REQUIRED_DEPENDENCY_FAILURE, path, errors)
+
+    if status == "blocked" and not dependency_failures:
+        add_error(errors, "summary.dependency_status=blocked requires at least one dependency_failure")
+
+
 def validate_summary(data: Any) -> List[str]:
     errors: List[str] = []
     if not expect_type(data, dict, "summary", errors):
         return errors
     expect_keys(
         data,
-        ["skill", "version", "generated_at", "mode", "repo_profile", "doc_verification", "findings", "priorities", "scan_limitations"],
+        [
+            "skill",
+            "version",
+            "generated_at",
+            "mode",
+            "repo_profile",
+            "doc_verification",
+            "findings",
+            "priorities",
+            "scan_limitations",
+            "dependency_status",
+            "bootstrap_actions",
+            "dependency_failures",
+        ],
         "summary",
         errors,
     )
@@ -258,6 +310,7 @@ def validate_summary(data: Any) -> List[str]:
         validate_priorities(data["priorities"], errors)
     if "scan_limitations" in data:
         validate_string_list(data["scan_limitations"], "scan_limitations", errors)
+    validate_dependency_contract(data, errors)
     validate_verified_contract(data, errors)
     return errors
 

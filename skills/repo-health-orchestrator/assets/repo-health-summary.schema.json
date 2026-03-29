@@ -10,7 +10,10 @@
     "overall_health",
     "coverage_status",
     "summary_line",
-    "skill_runs"
+    "skill_runs",
+    "dependency_status",
+    "bootstrap_actions",
+    "dependency_failures"
   ],
   "properties": {
     "schema_version": {
@@ -43,7 +46,8 @@
           "skill_name",
           "status",
           "summary_path",
-          "severity_counts"
+          "severity_counts",
+          "dependency_status"
         ],
         "properties": {
           "domain": {
@@ -58,11 +62,25 @@
           "summary_path": {
             "type": "string"
           },
+          "dependency_status": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "auto-installed",
+              "blocked"
+            ]
+          },
           "child_verdict": {
             "type": [
               "string",
               "null"
             ]
+          },
+          "dependency_failures": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/dependencyFailure"
+            }
           },
           "severity_counts": {
             "type": "object",
@@ -109,6 +127,94 @@
       "type": "array",
       "items": {
         "type": "string"
+      }
+    },
+    "dependency_status": {
+      "type": "string",
+      "enum": [
+        "ready",
+        "auto-installed",
+        "blocked"
+      ]
+    },
+    "bootstrap_actions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/bootstrapAction"
+      }
+    },
+    "dependency_failures": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/dependencyFailure"
+      }
+    }
+  },
+  "$defs": {
+    "bootstrapAction": {
+      "type": "object",
+      "required": [
+        "name",
+        "kind",
+        "status",
+        "command",
+        "details"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "command": {
+          "type": "string"
+        },
+        "details": {
+          "type": "string"
+        }
+      }
+    },
+    "dependencyFailure": {
+      "type": "object",
+      "required": [
+        "name",
+        "kind",
+        "required_for",
+        "attempted_command",
+        "failure_reason",
+        "blocked_by_security",
+        "blocked_by_permissions",
+        "blocked_by_network"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "required_for": {
+          "type": "string"
+        },
+        "attempted_command": {
+          "type": "string"
+        },
+        "failure_reason": {
+          "type": "string"
+        },
+        "blocked_by_security": {
+          "type": "boolean"
+        },
+        "blocked_by_permissions": {
+          "type": "boolean"
+        },
+        "blocked_by_network": {
+          "type": "boolean"
+        }
       }
     }
   }

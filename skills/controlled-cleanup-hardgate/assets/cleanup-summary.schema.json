@@ -7,39 +7,66 @@
     "generated_at",
     "repo_profile",
     "counts",
-    "findings"
+    "findings",
+    "dependency_status",
+    "bootstrap_actions",
+    "dependency_failures"
   ],
   "properties": {
-    "repo_root": { "type": "string" },
-    "generated_at": { "type": "string" },
+    "repo_root": {
+      "type": "string"
+    },
+    "generated_at": {
+      "type": "string"
+    },
     "repo_profile": {
       "type": "object",
-      "required": ["languages", "manifests", "tool_hints"],
+      "required": [
+        "languages",
+        "manifests",
+        "tool_hints"
+      ],
       "properties": {
         "languages": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         },
         "manifests": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         },
         "docs_roots": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         },
         "tool_hints": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         }
       }
     },
     "counts": {
       "type": "object",
-      "required": ["total", "by_category"],
+      "required": [
+        "total",
+        "by_category"
+      ],
       "properties": {
-        "total": { "type": "integer", "minimum": 0 },
-        "by_category": { "type": "object" }
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "by_category": {
+          "type": "object"
+        }
       }
     },
     "findings": {
@@ -72,29 +99,160 @@
           },
           "severity": {
             "type": "string",
-            "enum": ["low", "medium", "high", "critical"]
+            "enum": [
+              "low",
+              "medium",
+              "high",
+              "critical"
+            ]
           },
           "confidence": {
             "type": "string",
-            "enum": ["low", "medium", "high"]
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ]
           },
-          "path": { "type": "string" },
-          "line": { "type": ["integer", "null"], "minimum": 1 },
-          "language": { "type": ["string", "null"] },
-          "summary": { "type": "string" },
-          "cue": { "type": ["string", "null"] },
-          "replacement": { "type": ["string", "null"] },
-          "removal_target": { "type": ["string", "null"] },
+          "path": {
+            "type": "string"
+          },
+          "line": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "language": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "summary": {
+            "type": "string"
+          },
+          "cue": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "replacement": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "removal_target": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "evidence": {
             "type": "array",
-            "items": { "type": "string" }
+            "items": {
+              "type": "string"
+            }
           }
         }
       }
     },
     "notes": {
       "type": "array",
-      "items": { "type": "string" }
+      "items": {
+        "type": "string"
+      }
+    },
+    "dependency_status": {
+      "type": "string",
+      "enum": [
+        "ready",
+        "auto-installed",
+        "blocked"
+      ]
+    },
+    "bootstrap_actions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/bootstrapAction"
+      }
+    },
+    "dependency_failures": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/dependencyFailure"
+      }
+    }
+  },
+  "$defs": {
+    "bootstrapAction": {
+      "type": "object",
+      "required": [
+        "name",
+        "kind",
+        "status",
+        "command",
+        "details"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "command": {
+          "type": "string"
+        },
+        "details": {
+          "type": "string"
+        }
+      }
+    },
+    "dependencyFailure": {
+      "type": "object",
+      "required": [
+        "name",
+        "kind",
+        "required_for",
+        "attempted_command",
+        "failure_reason",
+        "blocked_by_security",
+        "blocked_by_permissions",
+        "blocked_by_network"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "required_for": {
+          "type": "string"
+        },
+        "attempted_command": {
+          "type": "string"
+        },
+        "failure_reason": {
+          "type": "string"
+        },
+        "blocked_by_security": {
+          "type": "boolean"
+        },
+        "blocked_by_permissions": {
+          "type": "boolean"
+        },
+        "blocked_by_network": {
+          "type": "boolean"
+        }
+      }
     }
   }
 }

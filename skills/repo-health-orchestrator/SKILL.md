@@ -34,6 +34,7 @@ This skill is Codex subagent-only.
 If the Codex runtime cannot spawn subagents, say so plainly and stop.
 Do not fall back to shell orchestration.
 Do not pretend an old `.repo-harness` directory counts as current coverage.
+Write blocked repo-health artifacts when orchestrator preflight itself is blocked.
 
 ## Expected child domains
 
@@ -69,6 +70,7 @@ Read only what is needed.
 - Start from an empty `.repo-harness` every run.
 - Treat `.repo-harness` as output-only.
 - Maintain `.repo-harness/repo-health-control-plane.json` as the live terminal control-plane state for the current run.
+- Treat `.repo-harness/<skill-id>-runtime.json` as the live sidecar for each child skill's `preflight / bootstrapping / running / blocked / complete` state.
 - Launch all seven child domains before waiting for results.
 - Keep child prompts narrow: one domain, one output contract, no cross-domain judgment.
 - Preserve the child skill's judgment; do not sand off sharp findings during aggregation.
@@ -94,6 +96,7 @@ Each child subagent prompt must include:
 - its human report path and agent brief path when applicable
 - the rule that it owns only its domain and must not make cross-domain conclusions
 - the rule that best-effort artifacts are still required on uncertainty, using states like `unverified`, `scan-blocked`, or `not-applicable`
+- the rule that dependency bootstrap failures are not ordinary uncertainty: they must emit blocked artifacts with machine-readable dependency failures
 
 Child subagents may call their own deterministic scripts or local wrappers if their skill defines them.
 The orchestrator itself must not shell out to child wrappers.
@@ -113,6 +116,7 @@ Use these helper commands:
 python3 scripts/control_plane_state.py init --state /path/to/repo/.repo-harness/repo-health-control-plane.json
 python3 scripts/control_plane_state.py update-overall --state /path/to/repo/.repo-harness/repo-health-control-plane.json --stage running --auto-progress
 python3 scripts/control_plane_state.py update-worker --state /path/to/repo/.repo-harness/repo-health-control-plane.json --domain structure --runtime-status running --detail "subagent active"
+python3 scripts/control_plane_state.py sync-worker-runtime --state /path/to/repo/.repo-harness/repo-health-control-plane.json --domain structure --runtime /path/to/repo/.repo-harness/dependency-audit-runtime.json
 python3 scripts/control_plane_state.py finalize-from-summary --state /path/to/repo/.repo-harness/repo-health-control-plane.json --summary /path/to/repo/.repo-harness/repo-health-summary.json
 python3 scripts/render_control_plane.py --state /path/to/repo/.repo-harness/repo-health-control-plane.json
 python3 scripts/render_control_plane.py --state /path/to/repo/.repo-harness/repo-health-control-plane.json --final
@@ -172,16 +176,18 @@ Required progress stages:
 For each child, surface only these runtime states:
 
 - `waiting`
+- `preflight`
+- `bootstrapping`
 - `running`
 - `complete`
 - `blocked`
-- `failed`
 - `invalid`
 - `missing`
 - `not-applicable`
 
 If one child fails, keep waiting for the others.
 Do not abort the overall run.
+Blocked child skills still count as current-run coverage because they produced official blocked artifacts.
 
 On every child completion, timeout poll, or state change:
 
@@ -202,6 +208,7 @@ After the subagents finish, check the seven expected summary paths.
 For each domain, classify the result as:
 
 - `present` - summary exists and parses
+- `blocked` - summary exists, parses, and its `dependency_status` is `blocked`
 - `not-applicable` - summary exists and its verdict is `not-applicable`
 - `invalid` - file exists but is missing or malformed for aggregation
 - `missing` - expected summary was not produced
@@ -254,6 +261,7 @@ The final control-plane frame must include:
 - overall health
 - coverage status
 - blocked / missing / invalid domains
+- dependency-blocked domains before business findings
 - the top action queue
 
 Always keep the difference between coverage failure and audit failure explicit.

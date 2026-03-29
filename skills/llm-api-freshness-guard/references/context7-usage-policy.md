@@ -88,9 +88,9 @@ If you cannot answer those points, the finding is not verified yet.
 
 If Context7 is unavailable, ambiguous, or the docs cannot be resolved with confidence:
 
-- continue with local code signals if available
-- label the run `local-scan-only`
-- emit `docs-unverified`
+- stop the official verification flow
+- emit blocked artifacts if the runtime dependency itself is unavailable
+- use `local-scan-only` only as an explicit internal triage helper, not as a substitute verified verdict
 - do not bluff a "latest API" answer from memory
 
 ## Security rules

@@ -2,8 +2,8 @@
 
 ## Verdict
 - Overall verdict:
-- Verification mode: `verified` | `local-scan-only`
-- Trust level: `verified` means current docs were actually checked; `local-scan-only` means this run is triage, not truth.
+- Verification mode: `verified` | `blocked` | `local-scan-only`
+- Trust level: `verified` means current docs were actually checked; `blocked` means runtime prerequisites prevented a valid audit; `local-scan-only` means this run is triage, not truth.
 - Providers in scope:
 - Wrappers / gateways in scope:
 - Highest-risk surface:

@@ -7,7 +7,7 @@
 - Providers:
 - Wrappers / gateways:
 - Verification mode:
-- Trust rule: `verified` is reserved for runs with real current-doc checks; `local-scan-only` must not be treated as a final migration verdict.
+- Trust rule: `verified` is reserved for runs with real current-doc checks; `blocked` means fix runtime prerequisites first; `local-scan-only` must not be treated as a final migration verdict.
 - Files / directories in scope:
 - Version hints:
 - Current docs checked:

@@ -75,6 +75,20 @@ def extract_verdict(data: dict[str, Any]) -> str | None:
     return None
 
 
+def extract_dependency_status(data: dict[str, Any]) -> str:
+    status = data.get("dependency_status")
+    if isinstance(status, str):
+        return status
+    return "ready"
+
+
+def extract_dependency_failures(data: dict[str, Any]) -> list[dict[str, Any]]:
+    failures = data.get("dependency_failures")
+    if isinstance(failures, list):
+        return [item for item in failures if isinstance(item, dict)]
+    return []
+
+
 def extract_findings(data: dict[str, Any]) -> list[dict[str, Any]]:
     findings = data.get("findings")
     if isinstance(findings, list):
@@ -125,6 +139,8 @@ def domain_status(data: dict[str, Any] | None, err: str | None) -> str:
         return "invalid"
     if not data:
         return "missing"
+    if extract_dependency_status(data) == "blocked":
+        return "blocked"
     verdict = extract_verdict(data)
     if verdict == "not-applicable":
         return "not-applicable"
@@ -132,12 +148,15 @@ def domain_status(data: dict[str, Any] | None, err: str | None) -> str:
 
 
 def normalize_health(skill_runs: list[dict[str, Any]]) -> tuple[str, str]:
-    present = [run for run in skill_runs if run["status"] in {"present", "not-applicable"}]
+    present = [run for run in skill_runs if run["status"] in {"present", "not-applicable", "blocked"}]
     missing = [run for run in skill_runs if run["status"] in {"missing", "invalid"}]
     blocked = False
     watch = False
 
     for run in skill_runs:
+        if run["status"] == "blocked" or run.get("dependency_status") == "blocked":
+            blocked = True
+            continue
         verdict = (run.get("child_verdict") or "").lower()
         sev = run.get("severity_counts") or {}
         if int(sev.get("critical", 0)) > 0 or int(sev.get("high", 0)) > 0:
@@ -175,11 +194,12 @@ def write_markdown(report: dict[str, Any], out_path: Path) -> None:
     lines.append("")
     lines.append("## Coverage map")
     lines.append("")
-    lines.append("| Domain | Skill | Status | Child verdict | Top categories | Notes |")
-    lines.append("|---|---|---|---|---|---|")
+    lines.append("| Domain | Skill | Status | Dependency | Child verdict | Top categories | Notes |")
+    lines.append("|---|---|---|---|---|---|---|")
     for run in report["skill_runs"]:
         lines.append(
             f"| {run['domain']} | {run['skill_name']} | {run['status']} | "
+            f"{run.get('dependency_status') or ''} | "
             f"{run.get('child_verdict') or ''} | "
             f"{', '.join(run.get('top_categories') or [])} | "
             f"{run.get('notes') or ''} |"
@@ -214,6 +234,8 @@ def main() -> int:
         data, err = load_json(summary_path)
         status = domain_status(data, err)
         child_verdict = extract_verdict(data) if data else None
+        dependency_status = extract_dependency_status(data or {})
+        dependency_failures = extract_dependency_failures(data or {})
         sev = extract_severity_counts(data or {})
         top_categories = extract_top_categories(data or {})
         notes = ""
@@ -223,6 +245,11 @@ def main() -> int:
         elif err:
             invalid_summaries.append(filename)
             notes = err
+        elif status == "blocked":
+            first_failure = dependency_failures[0] if dependency_failures else {}
+            failure_name = str(first_failure.get("name") or "dependency")
+            failure_reason = str(first_failure.get("failure_reason") or "dependency bootstrap blocked the child skill")
+            notes = f"{failure_name}: {failure_reason}"
         elif status == "not-applicable":
             notes = "child skill marked this domain not applicable"
         elif domain == "llm-api-freshness" and child_verdict == "local-scan-only":
@@ -235,6 +262,8 @@ def main() -> int:
             "skill_name": skill_name,
             "status": status,
             "summary_path": str(summary_path),
+            "dependency_status": dependency_status,
+            "dependency_failures": dependency_failures,
             "child_verdict": child_verdict,
             "severity_counts": sev,
             "top_categories": top_categories,
@@ -247,6 +276,19 @@ def main() -> int:
     # top actions derived from blocker/watch domains
     top_actions = []
     for run in skill_runs:
+        if run["status"] == "blocked":
+            failures = run.get("dependency_failures") or []
+            if failures:
+                failure = failures[0]
+                top_actions.append(
+                    f"Unblock {run['skill_name']} first: restore `{failure.get('name')}` so the audit can run before trusting {run['domain']} coverage."
+                )
+            else:
+                top_actions.append(
+                    f"Unblock {run['skill_name']} first: restore its runtime prerequisites before trusting {run['domain']} coverage."
+                )
+            continue
+
         if run["status"] != "present":
             continue
         sev = run["severity_counts"]
@@ -295,6 +337,9 @@ def main() -> int:
         "top_actions": deduped_actions[:5],
         "missing_skills": missing_skills,
         "invalid_summaries": invalid_summaries,
+        "dependency_status": "ready",
+        "bootstrap_actions": [],
+        "dependency_failures": [],
     }
 
     out_json = Path(args.out_json).resolve()

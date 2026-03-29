@@ -11,4 +11,4 @@ This skill assumes Context7 is available in the runtime.
 - Do not hardcode API keys into `SKILL.md`.
 - Do not commit Context7 credentials into the repo.
 - Use environment configuration or the client's MCP settings.
-- If Context7 is missing, the skill must fall back to `local-scan-only` and say so plainly.
+- If Context7 is missing or unreachable, the official audit flow must stop and emit blocked artifacts. Do not treat `local-scan-only` as a substitute success path.

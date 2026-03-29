@@ -7,12 +7,14 @@ It should normalize only enough to produce an executive rollup from current-run 
 Some child skills expose a trust mode instead of a health verdict.
 For example, `llm-api-freshness-guard` may surface `verified` or `local-scan-only` in `child_verdict`.
 Preserve that signal and let severity plus coverage decide the rollup.
+But dependency bootstrap failure outranks trust mode: if `dependency_status=blocked`, that domain is blocked even if its child verdict is otherwise mild.
 
 ## Coverage before verdict
 
-First decide whether each domain is `present`, `not-applicable`, `invalid`, or `missing`.
+First decide whether each domain is `present`, `blocked`, `not-applicable`, `invalid`, or `missing`.
 
 - `invalid` and `missing` are coverage failures, not child verdicts
+- `blocked` is current-run coverage with a formal dependency/runtime failure, not missing coverage
 - `not-applicable` is a legitimate child outcome
 - a domain can be present and still blocked
 
@@ -22,6 +24,7 @@ Do not soften this distinction in the final report.
 
 Treat a child domain as effectively blocked when any of the following are true:
 
+- `dependency_status=blocked`
 - child severity contains `critical > 0`
 - child severity contains `high > 0` and the child status is clearly present
 - child verdict is one of: `unsafe`, `broken`, `contract-theater`, `workflow-time-bomb`, `dual-write-gambling` or an equivalent future red state

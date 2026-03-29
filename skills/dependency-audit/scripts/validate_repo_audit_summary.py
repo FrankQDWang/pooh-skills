@@ -8,9 +8,28 @@ import json
 import sys
 from pathlib import Path
 
-REQUIRED_TOP = {"repo_profile", "tool_coverage", "overall_verdict", "findings"}
+REQUIRED_TOP = {
+    "repo_profile",
+    "tool_coverage",
+    "overall_verdict",
+    "findings",
+    "dependency_status",
+    "bootstrap_actions",
+    "dependency_failures",
+}
 REQUIRED_PROFILE = {"languages", "monorepo_shape", "package_managers"}
 REQUIRED_TOOL_COVERAGE = {"chosen_tools", "skipped_tools"}
+REQUIRED_BOOTSTRAP_ACTION = {"name", "kind", "status", "command", "details"}
+REQUIRED_DEPENDENCY_FAILURE = {
+    "name",
+    "kind",
+    "required_for",
+    "attempted_command",
+    "failure_reason",
+    "blocked_by_security",
+    "blocked_by_permissions",
+    "blocked_by_network",
+}
 REQUIRED_FINDING = {
     "id",
     "tool",
@@ -34,6 +53,7 @@ VALID_VERDICTS = {
     "incremental-governance",
     "well-governed",
 }
+VALID_DEPENDENCY_STATUS = {"ready", "auto-installed", "blocked"}
 
 
 def fail(message: str) -> int:
@@ -67,6 +87,33 @@ def main() -> int:
 
     if data["overall_verdict"] not in VALID_VERDICTS:
         return fail(f"Unsupported overall_verdict: {data['overall_verdict']}")
+
+    dependency_status = data["dependency_status"]
+    if dependency_status not in VALID_DEPENDENCY_STATUS:
+        return fail(f"Unsupported dependency_status: {dependency_status}")
+
+    bootstrap_actions = data["bootstrap_actions"]
+    if not isinstance(bootstrap_actions, list):
+        return fail("bootstrap_actions must be a list")
+    for idx, action in enumerate(bootstrap_actions):
+        if not isinstance(action, dict):
+            return fail(f"bootstrap_actions[{idx}] must be an object")
+        missing_action = REQUIRED_BOOTSTRAP_ACTION - set(action)
+        if missing_action:
+            return fail(f"bootstrap_actions[{idx}] missing keys: {sorted(missing_action)}")
+
+    dependency_failures = data["dependency_failures"]
+    if not isinstance(dependency_failures, list):
+        return fail("dependency_failures must be a list")
+    for idx, failure in enumerate(dependency_failures):
+        if not isinstance(failure, dict):
+            return fail(f"dependency_failures[{idx}] must be an object")
+        missing_failure = REQUIRED_DEPENDENCY_FAILURE - set(failure)
+        if missing_failure:
+            return fail(f"dependency_failures[{idx}] missing keys: {sorted(missing_failure)}")
+
+    if dependency_status == "blocked" and not dependency_failures:
+        return fail("dependency_status=blocked requires at least one dependency_failure")
 
     findings = data["findings"]
     if not isinstance(findings, list):

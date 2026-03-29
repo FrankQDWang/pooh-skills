@@ -157,6 +157,8 @@ def progress_bar(ratio: float, width: int, use_ansi: bool, unicode_mode: bool) -
 def status_role(runtime_status: str) -> str:
     return {
         "waiting": "muted",
+        "preflight": "running",
+        "bootstrapping": "watch",
         "running": "running",
         "complete": "complete",
         "blocked": "blocked",
@@ -177,6 +179,10 @@ def status_icon(runtime_status: str, unicode_mode: bool) -> str:
         frames = SPINNER_FRAMES if unicode_mode else ASCII_SPINNER_FRAMES
         index = int(datetime.now().timestamp() * 4) % len(frames)
         return frames[index]
+    if runtime_status == "preflight":
+        return "◌" if unicode_mode else ".."
+    if runtime_status == "bootstrapping":
+        return "⇡" if unicode_mode else "++"
     if unicode_mode:
         return {
             "waiting": "⏳",

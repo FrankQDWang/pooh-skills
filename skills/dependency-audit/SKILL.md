@@ -48,6 +48,7 @@ The output has **two readers**:
 ## Operating stance
 
 - Default to **scan + report**.
+- First satisfy the shared runtime contract: run `preflight`, bootstrap any missing required tooling, and stop with blocked artifacts if bootstrap fails.
 - Prefer **safe, incremental rollout** over “fix everything now”.
 - Prefer **grounded assumptions** over stalling. If something is uncertain, state the assumption and continue.
 - Use the **minimum toolset** that matches the repo.
@@ -102,6 +103,7 @@ bash scripts/run_all.sh /path/to/repo
 ```
 
 This wrapper emits a conservative baseline report, agent brief, and summary JSON.
+It first enforces the shared dependency bootstrap contract. If required tooling cannot be installed on the host, it emits blocked artifacts and exits non-zero instead of pretending the scan succeeded.
 It does **not** pretend a full Tach / Dependency Cruiser / Knip run happened when it did not.
 
 ## Tool selection rules
