@@ -1,6 +1,6 @@
 ---
 name: signature-contract-hardgate
-description: "Audit Python / TypeScript repos for strict 'signature as contract' / 签名即契约 hard gates in AI-led coding. Detect whether compile-time checks, runtime schemas, error contracts, escape-hatch bans, architecture boundaries, contract tests, and merge protections are real or just theater. Produce a blunt human report plus a concise Codex / Claude Code remediation brief. Not for dead-code cleanup or generic repo normalization."
+description: "Audit Python / TypeScript repos for strict 'signature as contract' / 签名即契约 hard gates in AI-led coding. Detect whether compile-time checks, runtime schemas, error contracts, escape-hatch bans, architecture boundaries, contract tests, and merge protections are real or just theater. Produce a blunt human report plus a concise Codex remediation brief. Not for dead-code cleanup or generic repo normalization."
 ---
 
 # Signature Contract Hardgate Skill
@@ -10,7 +10,7 @@ description: "Audit Python / TypeScript repos for strict 'signature as contract'
 当用户要做下面这些事时，使用这个 skill：
 
 - 审计一个 `Python`、`TypeScript`、或混合仓库，判断它是否真的做到了“签名即契约”
-- 给 **AI 主导开发** 增加更硬的 harness，减少 `Codex` / `Claude Code` 这类 agent 的胡来空间
+- 给 **AI 主导开发** 增加更硬的 harness，减少 `Codex` 这类 agent 的胡来空间
 - 检查 repo 里的类型、schema、错误返回、模块边界、测试、CI、`CODEOWNERS`，到底是不是**真的门控**，还是只是装样子
 - 输出一份**双读者报告**：
   - 给人类：直接说明是什么、为什么、接下来做什么
@@ -84,7 +84,7 @@ description: "Audit Python / TypeScript repos for strict 'signature as contract'
 
 ### 2) Agent brief
 
-读者是 `Codex`、`Claude Code`、或同级别 agent。
+读者是 `Codex` 或同级别 agent。
 
 要求：
 

@@ -29,9 +29,9 @@ Do not use this skill when the user only needs:
 
 ## Required environment
 
-This skill is subagent-only.
+This skill is Codex subagent-only.
 
-If the runtime cannot spawn subagents, say so plainly and stop.
+If the Codex runtime cannot spawn subagents, say so plainly and stop.
 Do not fall back to shell orchestration.
 Do not pretend an old `.repo-harness` directory counts as current coverage.
 
@@ -83,7 +83,7 @@ Each child audit must run in its own subagent with these defaults:
 - do not set `model`
 - do not set `reasoning_effort`
 
-That means every child inherits the current main-session model and reasoning effort automatically.
+That means every child inherits the current Codex main-session model and reasoning effort automatically.
 Do not override those values.
 
 Each child subagent prompt must include:

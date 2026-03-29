@@ -1,6 +1,6 @@
 # pooh-skills
 
-`pooh-skills` 用于集中管理可安装到 Codex 和 Claude Code 的 skills。
+`pooh-skills` 用于集中管理仅安装到 Codex 的 skills。
 
 ## 目录结构
 
@@ -24,11 +24,11 @@ scripts/
 - `controlled-cleanup-hardgate`: 面向大型仓库的可控清理审计，检查 deprecated surfaces、compatibility shims、stale docs、expired removal targets、feature-flag debt 与 cleanup readiness，输出人类报告、agent brief 和机器可消费 summary。
 - `distributed-side-effect-hardgate`: 面向消息、worker、webhook 与事件驱动仓库的分布式副作用审计，检查 dual write、outbox、幂等、unsafe retry、事件契约和补偿/可观测性缺口。
 - `pythonic-ddd-drift-audit`: 面向 Python-heavy 仓库的 Pythonic 形状债与 DDD 漂移审计，检查 domain boundary leak、cross-context bleed、ABC 过度、thin wrapper 与假 CQRS。
-- `repo-health-orchestrator`: 面向整仓体检的汇总 skill，每次先清空 `.repo-harness`，再并行启动 6 个 child audit subagents，维护一个终端实时 control plane，并在结束时产出 repo health rollup。要求运行环境支持 subagent。
+- `repo-health-orchestrator`: 面向整仓体检的汇总 skill，每次先清空 `.repo-harness`，再并行启动 6 个 child audit subagents，维护一个终端实时 control plane，并在结束时产出 repo health rollup。要求运行环境支持 Codex subagent，以及当前会话模型与推理强度继承语义。
 
 ## 安装
 
-默认同时安装到 `~/.codex/skills` 和 `~/.claude/skills`：
+默认安装到 `~/.codex/skills`：
 
 ```bash
 ./scripts/install.sh dependency-audit
@@ -56,7 +56,6 @@ scripts/
 
 ```bash
 ./scripts/install.sh --target codex dependency-audit
-./scripts/install.sh --target claude dependency-audit
 ./scripts/install.sh --target codex signature-contract-hardgate
 ./scripts/install.sh --target codex pydantic-ai-temporal-hardgate
 ./scripts/install.sh --target codex controlled-cleanup-hardgate
@@ -67,10 +66,15 @@ scripts/
 
 ## Audit Fleet 约定
 
-- `repo-health-orchestrator` 是 subagent-only：它会先清空并重建 repo-root `.repo-harness`，再启动 6 个 child audit subagents
+- `repo-health-orchestrator` 是 Codex subagent-only：它会先清空并重建 repo-root `.repo-harness`，再启动 6 个 child audit subagents
 - `.repo-harness` 是纯输出目录，只保存当前 run 的 summary / report / brief / linkcheck / control-plane state 等工件，不放默认输入
 - child skill 自己的 `scripts/run_all.sh` 可以继续作为本地 deterministic helper 独立使用，但不再属于 orchestrator 的公开契约
 - 旧 skill 的 wrapper 默认产出**保守 baseline**；它们用于稳定 summary 工件和单域独立运行，不替代用户显式发起的全量人工审计
+
+## 兼容性声明
+
+- 这个仓库当前只维护 Codex 兼容性
+- 已存在的 `~/.claude/skills` 副本不再受支持，也不会由本仓库自动清理
 
 ## 扩展约定
 

@@ -1,6 +1,6 @@
 ---
 name: dependency-audit
-description: "Audit Python / TypeScript / mixed monorepos for dependency direction, boundary leaks, cycles, and dead-code signals with Tach, Dependency Cruiser, and Knip. Use for 仓库依赖巡检、架构边界审计、repo audit、monorepo diagnosis、cleanup planning. Produce a sharp, plain-language human report plus a concise remediation brief for Codex / Claude Code. Default to report-only unless fixes are explicitly requested."
+description: "Audit Python / TypeScript / mixed monorepos for dependency direction, boundary leaks, cycles, and dead-code signals with Tach, Dependency Cruiser, and Knip. Use for 仓库依赖巡检、架构边界审计、repo audit、monorepo diagnosis、cleanup planning. Produce a sharp, plain-language human report plus a concise remediation brief for Codex. Default to report-only unless fixes are explicitly requested."
 ---
 
 # Dependency Audit Skill
@@ -43,7 +43,7 @@ Use some or all of these tools depending on the repo:
 The output has **two readers**:
 
 1. **Human reader**: can be non-technical, but still wants a blunt, decision-ready diagnosis. Explain each problem as **是什么 / 为什么重要 / 下一步做什么**.
-2. **Coding agent**: Codex, Claude Code, or similar. Give **decision-level repair guidance**, not long tutorials. Assume the agent can handle execution details.
+2. **Coding agent**: Codex or a similar coding agent. Give **decision-level repair guidance**, not long tutorials. Assume the agent can handle execution details.
 
 ## Operating stance
 

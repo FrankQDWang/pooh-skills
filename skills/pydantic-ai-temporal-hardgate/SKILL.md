@@ -1,6 +1,6 @@
 ---
 name: pydantic-ai-temporal-hardgate
-description: "Audit Python repos that use Pydantic AI with Temporal for deterministic durable execution. Detect workflow non-determinism, sandbox escapes, raw agent I/O inside workflows, durable-agent drift, tool/deps contract errors, replay/test gaps, and fake safety theater. Produce a brutally direct human report plus a concise Codex / Claude Code remediation brief. Not for generic linting, repo normalization, or dead-code cleanup."
+description: "Audit Python repos that use Pydantic AI with Temporal for deterministic durable execution. Detect workflow non-determinism, sandbox escapes, raw agent I/O inside workflows, durable-agent drift, tool/deps contract errors, replay/test gaps, and fake safety theater. Produce a brutally direct human report plus a concise Codex remediation brief. Not for generic linting, repo normalization, or dead-code cleanup."
 ---
 
 # Pydantic AI Temporal Hardgate Skill
@@ -10,7 +10,7 @@ description: "Audit Python repos that use Pydantic AI with Temporal for determin
 当用户要做下面这些事时，使用这个 skill：
 
 - 审计一个 `Python + Temporal + pydantic-ai` 仓库，判断它到底是在做 durable execution，还是只是在赌运气
-- 给 `Codex`、`Claude Code`、或同级别 code agent 加更硬的 harness，重点压制 Workflow 语义、tool/deps 契约、验证与 merge gate 这些高价值错法
+- 给 `Codex` 或同级别 code agent 加更硬的 harness，重点压制 Workflow 语义、tool/deps 契约、验证与 merge gate 这些高价值错法
 - 检查 repo 是否沿着官方 durable path 在走，而不是自己拼了一套看似聪明、实则脆弱的胶水
 - 生成一份双读者报告：
   - 给人类：尖锐、直接、能看懂的审计报告
@@ -79,7 +79,7 @@ description: "Audit Python repos that use Pydantic AI with Temporal for determin
 
 ### 2) Agent brief
 
-读者是 `Codex`、`Claude Code`、或同级别 agent。
+读者是 `Codex` 或同级别 agent。
 
 要求：
 

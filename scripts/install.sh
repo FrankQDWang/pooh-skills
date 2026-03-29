@@ -8,7 +8,7 @@ SKILLS_DIR="$REPO_ROOT/skills"
 print_usage() {
   cat <<'EOF'
 Usage:
-  ./scripts/install.sh [--all] [--target codex|claude] [skill-id ...]
+  ./scripts/install.sh [--all] [--target codex] [skill-id ...]
   ./scripts/install.sh --list
 
 Examples:
@@ -20,7 +20,6 @@ Examples:
   ./scripts/install.sh repo-health-orchestrator
   ./scripts/install.sh --all
   ./scripts/install.sh --target codex dependency-audit
-  ./scripts/install.sh --target claude dependency-audit
 EOF
 }
 
@@ -61,7 +60,7 @@ install_skill() {
       target_root="${CODEX_HOME:-$HOME/.codex}/skills"
       ;;
     claude)
-      target_root="${CLAUDE_HOME:-$HOME/.claude}/skills"
+      fail "Claude target is no longer supported"
       ;;
     *)
       fail "Unsupported target: $target"
@@ -113,7 +112,7 @@ if [[ "$LIST_ONLY" -eq 1 ]]; then
 fi
 
 if [[ "${#TARGETS[@]}" -eq 0 ]]; then
-  TARGETS=("codex" "claude")
+  TARGETS=("codex")
 fi
 
 if [[ "$INSTALL_ALL" -eq 1 ]]; then
