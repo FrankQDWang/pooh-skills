@@ -32,7 +32,7 @@ Use this fixed priority order:
 1. `dependency_status=blocked`
 2. domains with `critical` / `high` or clear red verdicts
 3. domains with `medium` or watch-level findings
-4. trust-gap domains, especially `local-scan-only`
+4. trust-gap domains, especially `triage`
 5. coverage-gap cleanup only when overall `coverage_status=partial`
 
 Do not let cosmetic cleanup outrank dependency unblock or blocker-level correctness work.
@@ -40,7 +40,7 @@ Do not let cosmetic cleanup outrank dependency unblock or blocker-level correctn
 ## Trust interpretation
 
 - `blocked` means the domain produced current-run artifacts but cannot be trusted because bootstrap/runtime failed or blocker evidence exists
-- `local-scan-only` is a trust gap, not a verified clean result
+- `triage` is a trust gap, not a verified clean result
 - `not-applicable` is a legitimate child outcome and does not need action
 - `missing` / `invalid` are evidence gaps first; treat them as action items only when the overall rollup is already partial
 

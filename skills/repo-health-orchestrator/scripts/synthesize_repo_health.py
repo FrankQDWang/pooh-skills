@@ -91,7 +91,7 @@ def run_risk_bucket(run: dict[str, Any]) -> tuple[int, str]:
         return 9, "not-applicable"
     if critical > 0 or high > 0 or verdict in RED_VERDICTS:
         return 1, "high-risk"
-    if verdict == "local-scan-only":
+    if verdict == "triage":
         return 3, "trust-gap"
     if medium > 0 or verdict in YELLOW_VERDICTS:
         return 2, "watch"

@@ -1,14 +1,21 @@
-# Context7 Runtime Setup Notes
+# Context7 Runtime Setup
 
-This skill assumes Context7 is available in the runtime.
+This skill now has two runtime layers:
 
-## Codex / OpenAI
+- local wrapper triage
+- agent-first verified audit
 
-`agents/openai.yaml` declares a Context7 MCP dependency so Codex can use the remote Context7 server directly when the environment supports MCP dependencies.
+## Wrapper
 
-## General rules
+`scripts/run_all.sh` no longer depends on Context7.
+It only produces local triage artifacts.
 
-- Do not hardcode API keys into `SKILL.md`.
-- Do not commit Context7 credentials into the repo.
-- Use environment configuration or the client's MCP settings.
-- If Context7 is missing or unreachable, the official audit flow must stop and emit blocked artifacts. Do not treat `local-scan-only` as a substitute success path.
+## Verified flow
+
+The verified flow still depends on Context7 because official freshness claims require live docs.
+
+If Context7 is unavailable during a requested verified audit:
+
+- do not fake a verified result
+- emit or preserve `blocked`
+- keep unresolved surfaces unresolved

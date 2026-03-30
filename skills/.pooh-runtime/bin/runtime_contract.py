@@ -156,6 +156,8 @@ def repo_profile(repo: Path) -> dict[str, Any]:
     manifests: set[str] = set()
     files_scanned = 0
     python_files = 0
+    ts_files = 0
+    js_files = 0
     docs_roots: set[str] = set()
 
     for dirpath, dirnames, filenames in os.walk(repo):
@@ -171,6 +173,10 @@ def repo_profile(repo: Path) -> dict[str, Any]:
                 languages.add(language)
                 if language == "python":
                     python_files += 1
+                elif language == "typescript":
+                    ts_files += 1
+                elif language == "javascript":
+                    js_files += 1
             if suffix in {".md", ".mdx", ".rst"}:
                 try:
                     docs_roots.add(str(path.parent.relative_to(repo)))
@@ -194,6 +200,8 @@ def repo_profile(repo: Path) -> dict[str, Any]:
         "package_managers": package_managers,
         "files_scanned": files_scanned,
         "python_files": python_files,
+        "ts_files": ts_files,
+        "js_files": js_files,
         "docs_roots": sorted(item for item in docs_roots if item not in {"."}),
     }
 
@@ -994,6 +1002,110 @@ def pythonic_blocked_summary(repo: Path, state: dict[str, Any], profile: dict[st
     }
 
 
+def error_governance_blocked_summary(repo: Path, state: dict[str, Any], profile: dict[str, Any]) -> dict[str, Any]:
+    failures = state.get("dependency_failures") or []
+    return {
+        "schema_version": "1.0.0",
+        "skill": "error-governance-hardgate",
+        "generated_at": utc_now(),
+        "repo_root": str(repo.resolve()),
+        "overall_verdict": "blocked",
+        "summary_line": "Shared runtime bootstrap blocked the error-governance audit before contract evidence could be collected.",
+        "language_profile": {
+            "languages": list(profile["languages"]),
+            "frameworks": [],
+            "protocols": [],
+        },
+        "coverage": {
+            "files_scanned": int(profile["files_scanned"]),
+            "relevant_files": 0,
+            "openapi_surfaces": 0,
+            "asyncapi_surfaces": 0,
+            "catalogs_found": 0,
+            "generated_type_surfaces": 0,
+        },
+        "severity_counts": {
+            "critical": 0,
+            "high": 1 if failures else 0,
+            "medium": 0,
+            "low": 0,
+        },
+        "gate_states": [
+            {
+                "name": gate,
+                "status": "unverified",
+                "severity_bias": "high",
+                "summary": "Shared bootstrap blocked this gate before trustworthy evidence could be collected.",
+            }
+            for gate in (
+                "universal-problem-shape",
+                "stable-business-codes",
+                "protocol-alignment",
+                "boundary-safety",
+                "ssot-and-codegen",
+            )
+        ],
+        "scan_blockers": [item["failure_reason"] for item in failures],
+        "findings": [{
+            "id": "egh-bootstrap-blocked-001",
+            "category": "scan-blocker",
+            "severity": "high",
+            "confidence": "high",
+            "scope": "repo",
+            "title": "Shared runtime bootstrap blocked error-governance evidence collection",
+            "path": ".",
+            "line": 1,
+            "evidence_summary": "; ".join(item["failure_reason"] for item in failures) or "dependency bootstrap blocked the run",
+            "decision": "restore-runtime",
+            "recommended_change_shape": "Restore the blocked prerequisite, rerun the audit, and only then trust public error-contract conclusions.",
+            "validation_checks": ["Make sure shared runtime bootstrap succeeds before rerunning the error-governance wrapper."],
+            "merge_gate": "block-now",
+            "notes": ", ".join(item["name"] for item in failures),
+        }],
+        "top_actions": ["Restore the blocked prerequisite before treating this skill as a source of truth."],
+    }
+
+
+def overdefensive_blocked_summary(repo: Path, state: dict[str, Any], profile: dict[str, Any]) -> dict[str, Any]:
+    failures = state.get("dependency_failures") or []
+    return {
+        "schema_version": "1.0.0",
+        "skill": "overdefensive-silent-failure-hardgate",
+        "generated_at": utc_now(),
+        "repo_root": str(repo.resolve()),
+        "overall_verdict": "scan-blocked",
+        "summary_line": "Shared runtime bootstrap blocked the silent-failure audit before executable evidence could be collected.",
+        "coverage": {
+            "files_scanned": int(profile["files_scanned"]),
+            "python_files": int(profile["python_files"]),
+            "ts_files": int(profile["ts_files"]),
+            "js_files": int(profile["js_files"]),
+        },
+        "severity_counts": {
+            "critical": 0,
+            "high": 1 if failures else 0,
+            "medium": 0,
+            "low": 0,
+        },
+        "category_counts": {"scan-blocker": 1} if failures else {},
+        "scan_blockers": [item["failure_reason"] for item in failures],
+        "findings": [{
+            "id": "osf-bootstrap-blocked-001",
+            "category": "scan-blocker",
+            "severity": "high",
+            "confidence": "high",
+            "language": "mixed",
+            "title": "Shared runtime bootstrap blocked silent-failure evidence collection",
+            "path": ".",
+            "line": 1,
+            "evidence": [item["failure_reason"] for item in failures] or ["dependency bootstrap blocked the run"],
+            "recommendation": "Restore the blocked prerequisite and rerun the audit before trusting fail-loud conclusions.",
+            "merge_gate": "block-now",
+            "notes": ", ".join(item["name"] for item in failures),
+        }],
+    }
+
+
 def cleanup_blocked_summary(repo: Path, state: dict[str, Any], profile: dict[str, Any]) -> dict[str, Any]:
     failures = state.get("dependency_failures") or []
     return {
@@ -1027,47 +1139,30 @@ def cleanup_blocked_summary(repo: Path, state: dict[str, Any], profile: dict[str
 
 
 def llm_blocked_summary(repo: Path, state: dict[str, Any], profile: dict[str, Any]) -> dict[str, Any]:
-    failures = state.get("dependency_failures") or []
     return {
         "skill": "llm-api-freshness-guard",
-        "version": "1.0.0",
+        "version": "2.0.0",
         "generated_at": utc_now(),
-        "mode": "blocked",
+        "audit_mode": "blocked",
+        "target_scope": "repo",
         "repo_profile": {
             "repo_root": str(repo.resolve()),
             "files_scanned": int(profile["files_scanned"]),
             "languages": list(profile["languages"]),
-            "providers_detected": [],
-            "provider_scores": {},
-            "wrappers_detected": [],
-            "version_hints": {},
-            "model_hints": {},
-            "base_url_hints": {},
+            "package_managers": list(profile["package_managers"]),
+            "surface_count": 0,
+            "wrapper_count": 0,
+            "provider_count": 0,
         },
+        "surface_resolution": [],
         "doc_verification": [],
-        "findings": [{
-            "id": "bootstrap-blocked-llm-001",
-            "provider": "unknown",
-            "kind": "scan-blocker",
-            "severity": "high",
-            "confidence": "high",
-            "status": "present",
-            "scope": [],
-            "title": "Runtime bootstrap blocked live LLM API freshness verification",
-            "stale_usage": "The skill could not verify current docs because a required runtime feature or shared prerequisite was unavailable.",
-            "current_expectation": "Restore the blocked dependency or runtime feature before treating this skill as a source of truth.",
-            "evidence": [{"path": ".", "line": 1, "snippet": item["failure_reason"]} for item in failures] or [{"path": ".", "line": 1, "snippet": "dependency bootstrap blocked the run"}],
-            "recommended_change_shape": "Restore the blocked prerequisite, then rerun the Context7-backed verification flow.",
-            "docs_verified": False,
-            "autofix_allowed": False,
-            "notes": ", ".join(item["name"] for item in failures),
-        }],
+        "findings": [],
         "priorities": {
             "now": ["Restore the blocked runtime feature or dependency before trusting any LLM API freshness verdict."],
-            "next": [],
-            "later": [],
+            "next": ["Rerun the official verified audit after the blocked prerequisite is restored."],
+            "later": ["Make provider / wrapper ownership more explicit so future freshness audits resolve faster."],
         },
-        "scan_limitations": [item["failure_reason"] for item in failures] or ["Dependency bootstrap blocked the run."],
+        "scan_limitations": ["Official freshness verification was blocked before a trustworthy doc-backed result could be produced."],
     }
 
 
@@ -1122,6 +1217,10 @@ def build_blocked_summary(skill_id: str, repo: Path, state: dict[str, Any]) -> d
             summary_line="Shared toolchain bootstrap blocked the distributed side-effect audit before it could inspect event paths.",
             overall_verdict="watch",
         )
+    if skill_id == "error-governance-hardgate":
+        return error_governance_blocked_summary(repo, state, profile)
+    if skill_id == "overdefensive-silent-failure-hardgate":
+        return overdefensive_blocked_summary(repo, state, profile)
     if skill_id == "pythonic-ddd-drift-audit":
         return pythonic_blocked_summary(repo, state, profile)
     if skill_id == "controlled-cleanup-hardgate":
@@ -1175,7 +1274,7 @@ def blocked_artifacts(args: argparse.Namespace) -> int:
 
 
 def extract_child_verdict(summary: dict[str, Any]) -> str:
-    for key in ("overall_verdict", "overall_health", "mode", "status"):
+    for key in ("overall_verdict", "overall_health", "audit_mode", "mode", "status"):
         value = summary.get(key)
         if isinstance(value, str):
             return value

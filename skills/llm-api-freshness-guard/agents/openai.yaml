@@ -1,7 +1,7 @@
 interface:
   display_name: "LLM API Freshness Guard"
-  short_description: "检查主流 LLM provider / wrapper API 用法是否过时，并可通过 registry 扩展"
-  default_prompt: "Use $llm-api-freshness-guard to audit code, a repository, or a diff for stale LLM API usage across mainstream provider and wrapper surfaces. Resolve the relevant current docs via Context7, compare the code against the current official behavior, and produce a blunt human report, a handoff-oriented agent brief, and a machine-readable summary JSON. Keep the deliverable report-only."
+  short_description: "先抽取 Python / TS LLM surface 证据，再由 agent 归因并用 Context7 做 freshness 验证"
+  default_prompt: "Use $llm-api-freshness-guard to audit Python / TypeScript code, a repository, a diff, or a file for stale LLM API usage. First run the local triage workflow to produce `.repo-harness/llm-api-surface-evidence.json`, then resolve the actual provider / family / wrapper surface per candidate, then use Context7 to verify the current docs for each resolved surface. Keep `provider-resolved`, `family-resolved`, `wrapper-resolved`, and `ambiguous` separate. Do not guess a concrete provider from weak clues. Finalize the official summary, report, and agent brief with the verified-flow helper so the output conforms to the machine contract. Keep the deliverable report-only."
 policy:
   allow_implicit_invocation: true
 dependencies:

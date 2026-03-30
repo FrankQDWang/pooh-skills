@@ -38,7 +38,7 @@ YELLOW_VERDICTS = {
     "paper-guardrails",
     "partially-contained",
     "scan-blocked",
-    "local-scan-only",
+    "triage",
 }
 POSITIVE_VERDICTS = {
     "sound",
@@ -113,7 +113,7 @@ def load_json(path: Path) -> tuple[dict[str, Any] | None, str | None]:
 
 
 def extract_verdict(data: dict[str, Any]) -> str | None:
-    for key in ("overall_health", "overall_verdict", "verdict", "status", "mode"):
+    for key in ("overall_health", "overall_verdict", "verdict", "status", "audit_mode", "mode"):
         value = data.get(key)
         if isinstance(value, str):
             return value
@@ -299,8 +299,8 @@ def main() -> int:
             notes = f"{failure_name}: {failure_reason}"
         elif status == "not-applicable":
             notes = "child skill marked this domain not applicable"
-        elif domain == "llm-api-freshness" and child_verdict == "local-scan-only":
-            notes = "current provider docs were not verified in this run"
+        elif domain == "llm-api-freshness" and child_verdict == "triage":
+            notes = "this run only produced local surface triage; current docs were not verified"
         elif domain == "llm-api-freshness" and child_verdict == "verified":
             notes = "current provider docs were verified for the detected surfaces"
 

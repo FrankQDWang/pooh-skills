@@ -1,8 +1,6 @@
 {
   "schema_version": "1.0",
   "skill": "llm-api-freshness-guard",
-  "runtime_features": [
-    "mcp-context7"
-  ],
+  "runtime_features": [],
   "tools": []
 }

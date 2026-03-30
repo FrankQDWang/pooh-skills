@@ -8,8 +8,10 @@
     "skill",
     "version",
     "generated_at",
-    "mode",
+    "audit_mode",
+    "target_scope",
     "repo_profile",
+    "surface_resolution",
     "doc_verification",
     "findings",
     "priorities",
@@ -17,58 +19,6 @@
     "dependency_status",
     "bootstrap_actions",
     "dependency_failures"
-  ],
-  "allOf": [
-    {
-      "if": {
-        "properties": {
-          "mode": {
-            "const": "verified"
-          }
-        },
-        "required": [
-          "mode"
-        ]
-      },
-      "then": {
-        "properties": {
-          "doc_verification": {
-            "type": "array",
-            "minItems": 1,
-            "contains": {
-              "type": "object",
-              "properties": {
-                "status": {
-                  "const": "verified"
-                }
-              },
-              "required": [
-                "status"
-              ]
-            }
-          }
-        }
-      }
-    },
-    {
-      "if": {
-        "properties": {
-          "mode": {
-            "const": "blocked"
-          }
-        },
-        "required": [
-          "mode"
-        ]
-      },
-      "then": {
-        "properties": {
-          "dependency_status": {
-            "const": "blocked"
-          }
-        }
-      }
-    }
   ],
   "properties": {
     "skill": {
@@ -80,15 +30,32 @@
     "generated_at": {
       "type": "string"
     },
-    "mode": {
+    "audit_mode": {
+      "type": "string",
       "enum": [
         "verified",
-        "local-scan-only",
-        "blocked"
+        "triage",
+        "blocked",
+        "not-applicable"
+      ]
+    },
+    "target_scope": {
+      "type": "string",
+      "enum": [
+        "repo",
+        "diff",
+        "file",
+        "snippet"
       ]
     },
     "repo_profile": {
       "$ref": "#/$defs/repoProfile"
+    },
+    "surface_resolution": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/surface"
+      }
     },
     "doc_verification": {
       "type": "array",
@@ -112,6 +79,7 @@
       }
     },
     "dependency_status": {
+      "type": "string",
       "enum": [
         "ready",
         "auto-installed",
@@ -139,12 +107,10 @@
         "repo_root",
         "files_scanned",
         "languages",
-        "providers_detected",
-        "provider_scores",
-        "wrappers_detected",
-        "version_hints",
-        "model_hints",
-        "base_url_hints"
+        "package_managers",
+        "surface_count",
+        "wrapper_count",
+        "provider_count"
       ],
       "properties": {
         "repo_root": {
@@ -160,50 +126,117 @@
             "type": "string"
           }
         },
-        "providers_detected": {
+        "package_managers": {
           "type": "array",
           "items": {
             "type": "string"
           }
         },
-        "provider_scores": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "integer",
-            "minimum": 0
-          }
+        "surface_count": {
+          "type": "integer",
+          "minimum": 0
         },
-        "wrappers_detected": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
+        "wrapper_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "provider_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "path",
+        "line",
+        "snippet"
+      ],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "snippet": {
+          "type": "string"
+        }
+      }
+    },
+    "surface": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "surface_id",
+        "surface_family",
+        "provider",
+        "wrapper",
+        "resolution_level",
+        "confidence",
+        "language",
+        "primary_sdk",
+        "version_hints",
+        "model_hints",
+        "base_url_hints",
+        "evidence"
+      ],
+      "properties": {
+        "surface_id": {
+          "type": "string"
+        },
+        "surface_family": {
+          "type": "string"
+        },
+        "provider": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "wrapper": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "resolution_level": {
+          "type": "string"
+        },
+        "confidence": {
+          "type": "string"
+        },
+        "language": {
+          "type": "string"
+        },
+        "primary_sdk": {
+          "type": "string"
         },
         "version_hints": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
+          "type": "array",
+          "items": {
+            "type": "string"
           }
         },
         "model_hints": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
+          "type": "array",
+          "items": {
+            "type": "string"
           }
         },
         "base_url_hints": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidence"
           }
         }
       }
@@ -212,11 +245,13 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
+        "surface_id",
+        "surface_family",
         "provider",
+        "wrapper",
         "library",
         "library_id",
         "language",
-        "version_hint",
         "queries",
         "status",
         "checked_at",
@@ -224,8 +259,23 @@
         "notes"
       ],
       "properties": {
-        "provider": {
+        "surface_id": {
           "type": "string"
+        },
+        "surface_family": {
+          "type": "string"
+        },
+        "provider": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "wrapper": {
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "library": {
           "type": "string"
@@ -236,9 +286,6 @@
         "language": {
           "type": "string"
         },
-        "version_hint": {
-          "type": "string"
-        },
         "queries": {
           "type": "array",
           "items": {
@@ -246,12 +293,7 @@
           }
         },
         "status": {
-          "enum": [
-            "verified",
-            "ambiguous",
-            "failed",
-            "skipped"
-          ]
+          "type": "string"
         },
         "checked_at": {
           "type": "string"
@@ -269,82 +311,64 @@
       "additionalProperties": false,
       "required": [
         "id",
-        "provider",
-        "kind",
+        "surface_id",
         "severity",
-        "confidence",
-        "status",
-        "scope",
+        "kind",
+        "resolution_level",
+        "surface_family",
+        "provider",
+        "wrapper",
         "title",
-        "stale_usage",
+        "current_behavior",
         "current_expectation",
-        "evidence",
+        "verification_status",
         "recommended_change_shape",
-        "docs_verified",
-        "autofix_allowed",
-        "notes"
+        "evidence"
       ],
       "properties": {
         "id": {
           "type": "string"
         },
-        "provider": {
+        "surface_id": {
+          "type": "string"
+        },
+        "severity": {
           "type": "string"
         },
         "kind": {
-          "enum": [
-            "scan-blocker",
-            "provider-ambiguous",
-            "docs-unverified",
-            "local-suspicion",
-            "sdk-stale",
-            "endpoint-stale",
-            "request-schema-drift",
-            "response-shape-drift",
-            "tool-calling-drift",
-            "streaming-drift",
-            "structured-output-drift",
-            "model-stale",
-            "auth-config-drift",
-            "compat-layer-drift",
-            "wrapper-pass-through-risk"
+          "type": "string"
+        },
+        "resolution_level": {
+          "type": "string"
+        },
+        "surface_family": {
+          "type": "string"
+        },
+        "provider": {
+          "type": [
+            "string",
+            "null"
           ]
         },
-        "severity": {
-          "enum": [
-            "critical",
-            "high",
-            "medium",
-            "low"
+        "wrapper": {
+          "type": [
+            "string",
+            "null"
           ]
-        },
-        "confidence": {
-          "enum": [
-            "high",
-            "medium",
-            "low"
-          ]
-        },
-        "status": {
-          "enum": [
-            "present",
-            "possible",
-            "unknown"
-          ]
-        },
-        "scope": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
         },
         "title": {
           "type": "string"
         },
-        "stale_usage": {
+        "current_behavior": {
           "type": "string"
         },
         "current_expectation": {
+          "type": "string"
+        },
+        "verification_status": {
+          "type": "string"
+        },
+        "recommended_change_shape": {
           "type": "string"
         },
         "evidence": {
@@ -352,39 +376,6 @@
           "items": {
             "$ref": "#/$defs/evidence"
           }
-        },
-        "recommended_change_shape": {
-          "type": "string"
-        },
-        "docs_verified": {
-          "type": "boolean"
-        },
-        "autofix_allowed": {
-          "type": "boolean"
-        },
-        "notes": {
-          "type": "string"
-        }
-      }
-    },
-    "evidence": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "path",
-        "line",
-        "snippet"
-      ],
-      "properties": {
-        "path": {
-          "type": "string"
-        },
-        "line": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "snippet": {
-          "type": "string"
         }
       }
     },

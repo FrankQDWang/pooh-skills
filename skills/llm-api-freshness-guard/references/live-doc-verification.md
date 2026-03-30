@@ -1,22 +1,34 @@
-# Live-Doc Verification
+# Live-Doc Verification Contract
 
-This skill treats **Context7-backed official documentation verification** as a hard dependency for an official verdict.
+Use this only for the official `verified` flow.
+Context7 is the required live-doc source for that flow.
 
-Rules:
+## Truth rules
 
-- identify the real provider or compatibility layer first
-- extract version hints from manifests, lockfiles, or package metadata
-- resolve official docs with Context7 before calling anything stale, deprecated, removed, or current
-- when wrappers add semantics, verify wrapper docs and underlying provider docs separately
+- `triage` means local evidence only
+- `verified` means current docs were actually checked
+- `blocked` means the verified flow could not complete truthfully because Context7 or another required verification dependency failed
+- `not-applicable` means no relevant Python / TypeScript LLM surface was found
 
-Blocked behavior:
+## Required `doc_verification` fields
 
-- if Context7 is unavailable, do not emit a successful freshness verdict
-- emit blocked artifacts or a blocked summary mode instead
-- local signal collection may still run as triage evidence, but it must not be mislabeled as a verified result
+Every doc entry must record:
 
-Accepted doc evidence for deterministic wrappers:
+- `surface_id`
+- `surface_family`
+- `provider`
+- `wrapper`
+- `library`
+- `library_id`
+- `language`
+- `queries`
+- `status`
+- `checked_at`
+- `source_ref`
+- `notes`
 
-- a JSON artifact passed via `--doc-evidence-json`
-- each entry records `provider`, `library`, `library_id`, `language`, `version_hint`, `queries`, `status`, `checked_at`, `source_ref`, and `notes`
-- at least one entry must have `status=verified` for the wrapper to emit a non-blocked official result
+## Severity guardrails
+
+- `high` / `critical` requires verified docs and a concrete runtime mismatch
+- `family-resolved` findings may not exceed `medium`
+- `triage` findings may not exceed `low`

@@ -57,6 +57,15 @@ def blocked_summary(skill_name: str, verdict: str = "scan-blocked") -> dict:
     return payload
 
 
+def triage_freshness_summary() -> dict:
+    return {
+        "skill": "llm-api-freshness-guard",
+        "dependency_status": "ready",
+        "audit_mode": "triage",
+        "findings": [],
+    }
+
+
 SKILL_BY_DOMAIN = {
     "structure": "dependency-audit",
     "contracts": "signature-contract-hardgate",
@@ -115,6 +124,8 @@ def make_cases() -> list[Case]:
     invalid["contracts"] = {"invalid_json": True}
     watched = dict(healthy)
     watched["pythonic-ddd-drift"] = watch_summary("pythonic-ddd-drift-audit")
+    triaged = dict(healthy)
+    triaged["llm-api-freshness"] = triage_freshness_summary()
     return [
         Case("healthy-complete", healthy, "healthy", "complete"),
         Case("all-not-applicable", all_not_applicable, "not-applicable", "complete"),
@@ -122,6 +133,7 @@ def make_cases() -> list[Case]:
         Case("missing-child-summary", missing, "watch", "partial"),
         Case("invalid-child-summary", invalid, "watch", "partial"),
         Case("watch-signal", watched, "watch", "complete"),
+        Case("triage-freshness", triaged, "watch", "complete"),
     ]
 
 

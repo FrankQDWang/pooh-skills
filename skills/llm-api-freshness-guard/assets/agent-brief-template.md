@@ -1,57 +1,47 @@
 # LLM API Freshness Agent Brief
 
-## Execution mode
-- `report-only`
+## Run state
+- audit_mode:
+- target_scope:
+- dependency_status:
+- diagnosis:
 
-## Scope summary
-- Providers:
-- Wrappers / gateways:
-- Verification mode:
-- Trust rule: `verified` is reserved for runs with real current-doc checks; `blocked` means fix runtime prerequisites first; `local-scan-only` must not be treated as a final migration verdict.
-- Files / directories in scope:
-- Version hints:
-- Current docs checked:
+## Ordered actions
 
-## Findings queue
+### now
+- resolve the real runtime surface before claiming provider-specific drift
+
+### next
+- verify wrapper-owned semantics and provider-owned semantics separately
+
+### later
+- reduce ambiguity by centralizing adapter ownership and base-url policy
+
+## Surface queue
+- surface_id:
+- label:
+- resolution_level:
+- confidence:
+- primary_sdk:
+
+## Findings
 
 ### [finding-id] [title]
-- provider:
+- surface_id:
 - kind:
 - severity:
-- confidence:
-- status:
-- scope:
-- stale_usage:
-- current_expectation:
-- evidence_summary:
-- decision:
-- recommended_change_shape:
-- validation_checks:
-- docs_verified:
-- autofix_allowed:
-- notes:
-
-### [finding-id] [title]
+- resolution_level:
+- surface_family:
 - provider:
-- kind:
-- severity:
-- confidence:
-- status:
-- scope:
-- stale_usage:
+- wrapper:
+- current_behavior:
 - current_expectation:
-- evidence_summary:
-- decision:
+- verification_status:
 - recommended_change_shape:
-- validation_checks:
-- docs_verified:
-- autofix_allowed:
-- notes:
+- evidence:
 
 ## Output rules for the coding agent
-- Keep patches small and reversible first.
-- Do not rewrite unrelated provider code.
-- Do not change runtime semantics unless the finding requires it.
-- Preserve behavior when replacing deprecated syntax with current syntax.
-- If a wrapper and provider disagree, fix the code only after the source of truth is clear.
-- Treat this brief as handoff guidance, not as permission for automatic fixes.
+- Do not silently guess the provider when evidence only supports a family-level conclusion.
+- Do not report high-severity provider-specific drift without verified docs.
+- Keep wrapper and provider semantics separate when both exist.
+- Treat triage findings as prompts for Context7 verification, not as migration permission.

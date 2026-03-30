@@ -218,8 +218,13 @@ def check_live_doc_contract(skill_name: str, skill_dir: Path, errors: list[Check
             errors.append(CheckError(skill_name, str(live_doc_path), "live-doc-verification.md must define Context7 usage and blocked behavior."))
 
     run_all_path = skill_dir / "scripts" / "run_all.sh"
-    if run_all_path.exists() and "--doc-evidence-json" not in read_text(run_all_path):
-        errors.append(CheckError(skill_name, str(run_all_path), "run_all.sh must accept --doc-evidence-json for live-doc-sensitive skills."))
+    if run_all_path.exists():
+        run_all_text = read_text(run_all_path)
+        if skill_name == "llm-api-freshness-guard":
+            if "llm-api-surface-evidence.json" not in run_all_text or "triage" not in run_all_text:
+                errors.append(CheckError(skill_name, str(run_all_path), "llm-api-freshness-guard run_all.sh must clearly operate in triage mode and emit the local evidence bundle."))
+        elif "--doc-evidence-json" not in run_all_text:
+            errors.append(CheckError(skill_name, str(run_all_path), "run_all.sh must accept --doc-evidence-json for live-doc-sensitive skills."))
 
     for pattern in TIME_SENSITIVE_PATTERNS:
         match = pattern.search(skill_md)

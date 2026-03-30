@@ -1,0 +1,178 @@
+{
+  "schema_version": "2.0",
+  "package_aliases": {
+    "openai": {
+      "provider": "openai",
+      "wrapper": null,
+      "surface_family": "openai-compatible",
+      "sdk": "openai"
+    },
+    "@anthropic-ai/sdk": {
+      "provider": "anthropic",
+      "wrapper": null,
+      "surface_family": "anthropic-messages",
+      "sdk": "@anthropic-ai/sdk"
+    },
+    "anthropic": {
+      "provider": "anthropic",
+      "wrapper": null,
+      "surface_family": "anthropic-messages",
+      "sdk": "anthropic"
+    },
+    "@google/genai": {
+      "provider": "gemini",
+      "wrapper": null,
+      "surface_family": "google-genai",
+      "sdk": "@google/genai"
+    },
+    "@google/generative-ai": {
+      "provider": "gemini",
+      "wrapper": null,
+      "surface_family": "google-genai",
+      "sdk": "@google/generative-ai"
+    },
+    "google-generativeai": {
+      "provider": "gemini",
+      "wrapper": null,
+      "surface_family": "google-genai",
+      "sdk": "google-generativeai"
+    },
+    "google-genai": {
+      "provider": "gemini",
+      "wrapper": null,
+      "surface_family": "google-genai",
+      "sdk": "google-genai"
+    },
+    "litellm": {
+      "provider": null,
+      "wrapper": "litellm",
+      "surface_family": "generic-wrapper",
+      "sdk": "litellm"
+    },
+    "langchain": {
+      "provider": null,
+      "wrapper": "langchain",
+      "surface_family": "generic-wrapper",
+      "sdk": "langchain"
+    },
+    "@langchain/openai": {
+      "provider": "openai",
+      "wrapper": "langchain",
+      "surface_family": "openai-compatible",
+      "sdk": "@langchain/openai"
+    },
+    "@langchain/anthropic": {
+      "provider": "anthropic",
+      "wrapper": "langchain",
+      "surface_family": "anthropic-messages",
+      "sdk": "@langchain/anthropic"
+    },
+    "@langchain/google-genai": {
+      "provider": "gemini",
+      "wrapper": "langchain",
+      "surface_family": "google-genai",
+      "sdk": "@langchain/google-genai"
+    },
+    "langchain-openai": {
+      "provider": "openai",
+      "wrapper": "langchain",
+      "surface_family": "openai-compatible",
+      "sdk": "langchain-openai"
+    },
+    "langchain-anthropic": {
+      "provider": "anthropic",
+      "wrapper": "langchain",
+      "surface_family": "anthropic-messages",
+      "sdk": "langchain-anthropic"
+    },
+    "langchain-google-genai": {
+      "provider": "gemini",
+      "wrapper": "langchain",
+      "surface_family": "google-genai",
+      "sdk": "langchain-google-genai"
+    },
+    "ai": {
+      "provider": null,
+      "wrapper": "vercel-ai-sdk",
+      "surface_family": "generic-wrapper",
+      "sdk": "ai"
+    },
+    "@ai-sdk/openai": {
+      "provider": "openai",
+      "wrapper": "vercel-ai-sdk",
+      "surface_family": "openai-compatible",
+      "sdk": "@ai-sdk/openai"
+    },
+    "@ai-sdk/anthropic": {
+      "provider": "anthropic",
+      "wrapper": "vercel-ai-sdk",
+      "surface_family": "anthropic-messages",
+      "sdk": "@ai-sdk/anthropic"
+    },
+    "@ai-sdk/google": {
+      "provider": "gemini",
+      "wrapper": "vercel-ai-sdk",
+      "surface_family": "google-genai",
+      "sdk": "@ai-sdk/google"
+    },
+    "pydantic-ai": {
+      "provider": null,
+      "wrapper": "pydantic-ai",
+      "surface_family": "generic-wrapper",
+      "sdk": "pydantic-ai"
+    },
+    "instructor": {
+      "provider": null,
+      "wrapper": "instructor",
+      "surface_family": "generic-wrapper",
+      "sdk": "instructor"
+    }
+  },
+  "query_seeds": {
+    "openai": [
+      "OpenAI Python SDK current Responses API migration from chat.completions",
+      "OpenAI TypeScript SDK current responses.create tools streaming structured output"
+    ],
+    "anthropic": [
+      "Anthropic Messages API current Python and TypeScript SDK surface",
+      "Anthropic current streaming events and messages migration from older completions surfaces"
+    ],
+    "gemini": [
+      "Google GenAI SDK current Python and TypeScript surface generate content tools streaming",
+      "Gemini current SDK migration from google-generativeai to google genai"
+    ],
+    "bedrock": [
+      "AWS Bedrock runtime current Python and TypeScript invocation patterns for model calls"
+    ],
+    "openai-compatible": [
+      "Current OpenAI compatible responses or chat completions surface for tool calling structured output streaming"
+    ],
+    "anthropic-messages": [
+      "Current Anthropic Messages API surface for messages create streaming tools"
+    ],
+    "google-genai": [
+      "Current Google GenAI SDK surface for Python TypeScript generate content tools streaming"
+    ],
+    "generic-wrapper": [
+      "Current wrapper semantics and provider pass through behavior for detected LLM adapter"
+    ],
+    "custom-http-llm": [
+      "Current compatibility guidance for custom OpenAI compatible or vendor hosted LLM HTTP gateway"
+    ],
+    "litellm": [
+      "LiteLLM current provider pass through and compatibility behavior for tool calling structured output streaming"
+    ],
+    "langchain": [
+      "LangChain current chat model adapters and provider specific pass through behavior"
+    ],
+    "vercel-ai-sdk": [
+      "Vercel AI SDK current provider adapter surface generateText streamText tools structured output"
+    ],
+    "pydantic-ai": [
+      "PydanticAI current provider adapter semantics and model integration surface"
+    ],
+    "instructor": [
+      "Instructor current adapter behavior and provider specific response parsing constraints"
+    ]
+  }
+}

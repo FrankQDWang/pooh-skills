@@ -1,339 +1,216 @@
 ---
 name: llm-api-freshness-guard
-description: "Audits code, repos, diffs, or snippets for stale LLM API usage and documentation drift across mainstream provider and wrapper surfaces. Use for LLM API 过时检查、SDK/endpoint drift review、tool/streaming/structured-output drift、compat-layer drift、Context7-backed latest-doc verification. Produces a blunt human report, a concise agent brief, and a machine-readable summary."
+description: "Audits Python / TypeScript repositories for stale LLM API usage, surface ambiguity, wrapper/provider drift, and outdated integration assumptions. Use for LLM API 新鲜度审计、SDK/endpoint drift review、wrapper/provider mismatch、gateway surface 归因、Context7-backed official verification. Produces a blunt human report, a concise agent brief, a machine-readable summary, and a local evidence bundle."
 ---
 
 # LLM API Freshness Guard
+
+This skill audits one thing: whether a Python or TypeScript codebase is still aligned with the current LLM API surfaces it actually uses.
+
+It is report-only. It does not rewrite integrations unless the user explicitly asks for fixes after the audit.
 
 ## When to use this
 
 Use this skill when the user wants to:
 
-- check whether **mainstream provider or wrapper surfaces** such as **OpenAI / Anthropic / Gemini / Azure OpenAI / OpenRouter / Bedrock / LiteLLM / LangChain / Vercel AI SDK / PydanticAI / Instructor** are stale, deprecated, legacy, renamed, or otherwise drifting from current docs
-- audit a repo, code diff, file, or snippet for **LLM SDK freshness**
-- verify whether **tool calling**, **structured outputs**, **streaming**, **model names**, **request parameters**, or **client initialization** are still current
-- sanity-check AI-generated code that may have used **old docs** or **hallucinated APIs**
-- compare a wrapper-based stack (**LiteLLM, LangChain, Vercel AI SDK, PydanticAI, Instructor, etc.**) against the current underlying provider docs
-- produce a decision-ready diagnosis instead of vague "this looks old" guesses
+- audit a repo, diff, file, or snippet for stale LLM SDK / endpoint / wrapper usage
+- check whether a wrapper stack still matches its underlying provider or protocol surface
+- verify tool calling, structured output, streaming, auth, base URL, or model-name usage against current docs
+- separate real provider drift from weak clues copied from docs, comments, or old examples
+- produce a decision-ready freshness diagnosis instead of vague "this looks old" guesses
 
-Do **not** use this skill for:
+## Do not use this
 
-- generic code review unrelated to LLM provider APIs
-- prompt quality tuning
-- model benchmarking
-- pricing comparisons
-- library docs lookup when there is **no freshness or drift question**
-- broad automated refactors when the user only asked whether the current API surface is stale
+Do not use this skill as the primary skill when the user mainly wants:
 
-## Mission
+- prompt tuning
+- model benchmarking or pricing comparison
+- generic code review with no LLM surface freshness question
+- full automated migration without first verifying the current docs
 
-Your job is to **detect, verify, classify, and prioritize** stale or risky LLM API usage.
+## Supported scope
 
-This skill exists because memory rots fast and vendor docs change constantly. Your standard is simple:
+Official verified freshness conclusions apply only to Python / TypeScript surfaces.
 
-- **Live docs beat memory**
-- **Official docs beat third-party summaries**
-- **Verified mismatch beats intuition**
-- **A legacy surface is not automatically a broken surface**
-- **Wrappers do not erase provider-specific risk**
+Other languages may appear as weak evidence, but they must not drive provider-specific verified conclusions in this skill.
 
-## Required environment
+## Audit modes
 
-This skill is built around **Context7 MCP** for current, version-aware documentation lookup.
+This skill uses four explicit modes:
 
-If Context7 is unavailable:
+- `verified`
+  - the agent resolved the real runtime surface and checked current docs through Context7
+- `triage`
+  - the local evidence extractor found candidate surfaces, but current docs were not checked yet
+- `blocked`
+  - an official verified audit was requested, but runtime or doc verification could not complete truthfully
+- `not-applicable`
+  - no meaningful Python / TypeScript LLM surface was detected in scope
 
-- say so plainly
-- stop the official audit flow
-- emit blocked summary / report / agent brief artifacts
-- mark the run `dependency_status=blocked`
-- do **not** pretend a local signal pass is an official freshness verdict
+`triage` is not a success substitute for `verified`.
 
-`scripts/collect_llm_api_signals.py` may still be used as an internal triage helper, but `local-scan-only` is no longer the accepted success path when Context7 is missing.
+## Inputs and outputs
+
+Required machine artifacts:
+
+- `.repo-harness/llm-api-surface-evidence.json`
+- `.repo-harness/llm-api-freshness-summary.json`
+- `.repo-harness/llm-api-freshness-report.md`
+- `.repo-harness/llm-api-freshness-agent-brief.md`
+
+Final checks:
+
+- summary validates against `assets/llm-api-freshness-summary.schema.json`
+- every verified finding points to real doc evidence
+- family-level conclusions never pretend to be concrete provider resolution
+- triage output never pretends current docs were checked
 
 ## Reading map
 
-- For the human-readable report, start from [`assets/human-report-template.md`](assets/human-report-template.md).
-- For the agent remediation brief, start from [`assets/agent-brief-template.md`](assets/agent-brief-template.md).
-- For `.repo-harness/llm-api-freshness-summary.json`, conform to [`assets/llm-api-freshness-summary.schema.json`](assets/llm-api-freshness-summary.schema.json).
-- For shared output rules, read [`references/shared-output-contract.md`](references/shared-output-contract.md).
-- For shared reporting tone and reader expectations, read [`references/shared-reporting-style.md`](references/shared-reporting-style.md).
-- For shared runtime truth and blocked-artifact behavior, read [`references/shared-runtime-artifact-contract.md`](references/shared-runtime-artifact-contract.md).
-- For live-doc gating and blocked behavior, read [`references/live-doc-verification.md`](references/live-doc-verification.md).
-- For Context7 query composition, read [`references/context7-query-playbook.md`](references/context7-query-playbook.md).
-- For live documentation lookup policy, query design, failure mode, and evidence rules, read [`references/context7-usage-policy.md`](references/context7-usage-policy.md).
-- For provider detection, wrapper handling, and official-doc precedence, read [`references/provider-resolution-policy.md`](references/provider-resolution-policy.md).
-- For concrete Context7 query examples by provider and wrapper, read [`references/provider-query-cheatsheet.md`](references/provider-query-cheatsheet.md).
-- For Codex / MCP runtime assumptions, read [`references/context7-runtime-setup.md`](references/context7-runtime-setup.md).
-- For provider and wrapper detection rules, read [`assets/provider-registry.json`](assets/provider-registry.json).
-- For deterministic runtime bootstrap and blocked-artifact behavior, use `scripts/run_all.sh`.
-- For local triage only, use `scripts/collect_llm_api_signals.py` and `scripts/validate_llm_api_freshness_summary.py`.
+Read only what you need.
+
+- `assets/llm-api-freshness-summary.schema.json`
+- `assets/provider-hints.json`
+- `assets/human-report-template.md`
+- `assets/agent-brief-template.md`
+- `references/shared-output-contract.md`
+- `references/shared-reporting-style.md`
+- `references/shared-runtime-artifact-contract.md`
+- `references/surface-resolution-policy.md`
+- `references/context7-usage-policy.md`
+- `references/context7-query-playbook.md`
+- `references/provider-query-cheatsheet.md`
+- `references/live-doc-verification.md`
+- `references/context7-runtime-setup.md`
+- `references/evals.md`
+- `scripts/run_all.sh`
+- `scripts/collect_llm_api_signals.py`
+- `scripts/finalize_verified_llm_api_audit.py`
+- `scripts/validate_llm_api_freshness_summary.py`
 
 ## Operating stance
 
-- Default to **verify + report**.
-- Keep the deliverable report-only.
-- Keep the report **decision-rich and command-light**.
-- Write in the **user's language**. Keep provider names, method names, JSON keys, and SDK symbols in their native technical form.
-- Treat the built-in registry as the supported detection boundary. It covers mainstream providers and wrappers, and can be extended for other surfaces. Do not pretend zero-config support for every unknown provider.
-- Separate:
-  - **removed / unsupported**
-  - **deprecated but still documented**
-  - **legacy but still valid**
-  - **wrapper-specific compatibility behavior**
-  - **configuration mismatch rather than API mismatch**
-- Never call something stale based only on a vague vibe, an old-looking snippet, or memory of how the API used to work.
+- Live docs beat memory.
+- Direct runtime evidence beats comments, docs, and sample code.
+- Do not guess the provider when the evidence only supports a family-level conclusion.
+- Wrappers do not erase provider or gateway risk.
+- A repo can legitimately contain multiple LLM surfaces. Split them.
+- High-severity freshness findings require verified docs. Pattern matching alone is not enough.
+
+## Surface resolution contract
+
+Use these resolution levels exactly:
+
+- `provider-resolved`
+- `family-resolved`
+- `wrapper-resolved`
+- `ambiguous`
+
+Use these family labels exactly:
+
+- `openai-compatible`
+- `anthropic-messages`
+- `google-genai`
+- `bedrock-hosted`
+- `generic-wrapper`
+- `custom-http-llm`
+- `unknown`
+
+Rules:
+
+- only use `provider-resolved` when strong runtime evidence identifies one concrete provider
+- if the repo only proves a protocol family, stay at `family-resolved`
+- if the wrapper is clear but the provider is not, use `wrapper-resolved`
+- if evidence is still too weak, use `ambiguous`
 
 ## Workflow
 
-1. **Profile the target**
-   - Determine whether the user provided a repo, a diff, one file, or a code snippet.
-   - Detect language, runtime, likely package manager, SDK dependencies, wrappers, base URLs, env vars, and model strings.
-   - If you can access a repo, prefer the deterministic baseline collector first:
-     ```bash
-     python3 scripts/collect_llm_api_signals.py /path/to/repo
-     ```
-   - Record blockers early: no manifests, generated code only, wrapper indirection, hidden provider selection, or missing runtime config.
+### 1. Run local triage first
 
-2. **Resolve the real LLM surface**
-   - Identify the actual provider and transport surface in use:
-     - direct provider SDK
-     - compatibility layer or gateway
-     - orchestration wrapper
-     - provider-specific pass-through parameters
-   - A repo can legitimately contain multiple providers. Do **not** collapse them into one fake "LLM API" bucket.
-   - If the target provider is not covered by the built-in registry, add a registry extension or fall back to `provider-ambiguous`. Do not guess.
-   - Use direct runtime evidence first. Treat comments and docs as weak evidence.
-
-3. **Verify current docs with Context7**
-   - Use the Context7 policy in [`references/context7-usage-policy.md`](references/context7-usage-policy.md).
-   - Resolve the relevant SDK or platform docs **per provider and per surface**.
-   - Prefer:
-     1. official provider SDK docs
-     2. official platform docs
-     3. compatibility-layer docs
-     4. wrapper docs
-   - If a wrapper adds runtime semantics, verify **both** wrapper docs and underlying provider docs.
-   - Use specific queries tied to:
-     - language and SDK
-     - version hint from manifests or lockfiles
-     - exact method / endpoint / feature surface
-     - suspected drift type
-
-4. **Compare code against current expectations**
-   Focus on the surfaces that usually drift first:
-
-   - **SDK initialization**
-   - **endpoint family** (`responses`, `chat.completions`, `messages`, `generateContent`, etc.)
-   - **request schema**
-   - **response shape**
-   - **tool / function calling**
-   - **streaming events**
-   - **structured output / schema binding**
-   - **model lifecycle**
-   - **base_url / deployment / gateway semantics**
-   - **auth and environment configuration**
-   - **wrapper pass-through behavior**
-
-5. **Classify the findings**
-   Map each issue into one of the shared categories below:
-
-   - `scan-blocker`
-   - `provider-ambiguous`
-   - `docs-unverified`
-   - `local-suspicion`
-   - `sdk-stale`
-   - `endpoint-stale`
-   - `request-schema-drift`
-   - `response-shape-drift`
-   - `tool-calling-drift`
-   - `streaming-drift`
-   - `structured-output-drift`
-   - `model-stale`
-   - `auth-config-drift`
-   - `compat-layer-drift`
-   - `wrapper-pass-through-risk`
-
-   If multiple files express the same underlying problem, merge them into one root-cause finding.
-
-6. **Prioritize by runtime risk and change leverage**
-   Use this default order unless the repo clearly needs another one:
-
-   ### Phase 0 - unblock the verdict
-   - provider ambiguity
-   - missing manifests / lockfiles
-   - no way to identify wrapper vs provider semantics
-  - Context7 unavailable or docs could not be resolved
-
-   ### Phase 1 - remove hard breakage or obvious drift
-   - removed endpoints
-   - removed request fields
-   - broken model names
-   - wrapper usage that no longer maps cleanly to current provider behavior
-
-   ### Phase 2 - normalize preferred current surfaces
-   - migrate from legacy-but-valid surfaces when the current surface is clearly better
-   - align tool calling, structured outputs, and streaming with current docs
-   - tighten client initialization and config handling
-
-   ### Phase 3 - harden against future drift
-   - add version pinning or explicit SDK selection
-   - centralize provider adapters
-   - add CI or review checks
-   - document approved API surfaces
-
-7. **Produce dual-audience outputs**
-   Always produce:
-   - a human-readable report
-   - an agent remediation brief
-   - a machine-readable summary JSON
-
-8. **Keep the deliverable report-only**
-   - prefer precise findings and a clean handoff brief
-   - preserve current behavior in any suggested migration path
-   - do not silently rewrite a whole provider integration
-   - do not "upgrade everything" just because one field is stale
-
-## Provider handling rules
-
-### Direct provider beats wrapper inference
-
-If the code directly imports or instantiates a provider SDK, that is the primary documentation surface.
-
-### Compatibility layers are real surfaces
-
-Treat these as distinct semantics that need their own doc checks:
-
-- Azure OpenAI
-- OpenRouter
-- Bedrock-hosted provider APIs
-- custom `base_url` gateways
-- proxies that reinterpret model names or auth
-
-### Wrappers do not remove provider obligations
-
-If the repo uses wrappers like LiteLLM, LangChain, Vercel AI SDK, PydanticAI, or Instructor:
-
-- verify wrapper docs for wrapper-owned behavior
-- verify provider docs for provider-owned behavior
-- if the wrapper passes raw provider params through, check the raw provider surface too
-- if provider cannot be identified confidently, emit `wrapper-pass-through-risk` plus `provider-ambiguous`
-
-### Multiple providers are normal
-
-Split findings by provider and by runtime surface. Do not produce one mushy cross-provider verdict.
-
-### Registry boundary is real
-
-This skill ships with a built-in provider registry for mainstream provider and wrapper surfaces.
-
-- Extend the registry when you need to support an additional provider or gateway.
-- Do not claim a provider is supported just because a loose regex happened to match.
-- Unknown providers should degrade to `provider-ambiguous` plus `docs-unverified`, not false confidence.
-
-## Human report contract
-
-Use [`assets/human-report-template.md`](assets/human-report-template.md) with [`references/shared-reporting-style.md`](references/shared-reporting-style.md).
-
-This skill adds these freshness-specific requirements:
-
-- clearly say whether this is a **verified**, **blocked**, or internal **local-scan-only** triage artifact
-- explain each major finding as **是什么 / 为什么重要 / 建议做什么**
-- distinguish hard stale usage, migration candidates, ambiguous cases, and docs-unverified cases
-- say which providers / wrappers were checked and which docs were actually verified
-- prioritize actions into **现在 / 下一步 / 之后**
-- avoid vague “maybe old” hand-waving; every claim must tie back to code evidence or verified doc drift
-
-## Agent brief contract
-
-Use [`assets/agent-brief-template.md`](assets/agent-brief-template.md) with [`references/shared-output-contract.md`](references/shared-output-contract.md).
-
-For each finding, provide:
-
-- `id`
-- `provider`
-- `kind`
-- `severity`
-- `confidence`
-- `status`
-- `scope`
-- `title`
-- `stale_usage`
-- `current_expectation`
-- `evidence_summary`
-- `decision`
-- `recommended_change_shape`
-- `validation_checks`
-- `docs_verified`
-- `autofix_allowed`
-- `notes`
-
-## Output contract
-
-Follow [`references/shared-output-contract.md`](references/shared-output-contract.md).
-For this skill, the concrete artifact names are:
-
-- `.repo-harness/llm-api-freshness-report.md`
-- `.repo-harness/llm-api-freshness-agent-brief.md`
-- `.repo-harness/llm-api-freshness-summary.json`
-
-The summary JSON must conform to [`assets/llm-api-freshness-summary.schema.json`](assets/llm-api-freshness-summary.schema.json).
-
-## Severity and confidence model
-
-Use both **severity** and **confidence**.
-
-### Severity
-
-- `critical` - current usage is likely broken now, removed, or blocked by hard provider changes
-- `high` - real runtime risk, real migration pressure, or a high-churn surface is clearly drifting
-- `medium` - credible drift or compatibility risk, but not obviously a hard failure
-- `low` - hygiene, guardrails, or long-tail normalization
-
-### Confidence
-
-- `high` - direct code evidence plus current official docs line up clearly
-- `medium` - docs are good, but runtime version or wrapper behavior has some ambiguity
-- `low` - provider resolution, wrapper semantics, or live-doc verification is incomplete
-
-Never present a `low`-confidence suspicion as a hard fact.
-
-## Fleet baseline mode
-
-When another skill or CI needs stable artifacts quickly, run:
+For repository scope, start with the wrapper:
 
 ```bash
 bash scripts/run_all.sh /path/to/repo
 ```
 
-This helper first enforces runtime bootstrap. If Context7 is unavailable, it emits blocked artifacts and exits non-zero. When Context7 is available, it can still emit a **local-scan-only** triage baseline:
+This produces:
 
-- `.repo-harness/llm-api-signals.json`
+- `.repo-harness/llm-api-surface-evidence.json`
+- `.repo-harness/llm-api-freshness-summary.json`
 - `.repo-harness/llm-api-freshness-report.md`
 - `.repo-harness/llm-api-freshness-agent-brief.md`
-- `.repo-harness/llm-api-freshness-summary.json`
 
-It does **not** pretend that current docs were verified.
+That output is always `triage` or `not-applicable`, never `verified`.
 
-## Safety rules
+### 2. Resolve real surfaces
 
-- Default mode is **report-only**.
-- Do not silently replace a provider, gateway, or wrapper.
-- Do not upgrade SDKs as a side effect of a diagnosis run.
-- Do not recommend destructive refactors as the first move.
-- Never leak API keys, org IDs, or proprietary prompts into Context7 queries.
-- Do not call a gateway or wrapper "OpenAI-compatible" in a way that hides real semantic differences.
+Read the local evidence bundle and decide, per surface:
 
-## Final reminder
+- what the real provider or family is
+- whether a wrapper owns runtime semantics
+- whether a gateway / base URL changes the semantics
+- whether ambiguity remains honest and unresolved
 
-This skill is for **freshness verification, drift detection, and migration planning**.
+Do not collapse everything into one fake global provider.
 
-It is **not** a blind "upgrade the whole LLM stack" skill.
+### 3. Verify docs with Context7
 
-When in doubt:
+For each surface, use 1 to 3 precise Context7 queries.
 
-- identify the real provider surface
-- verify against current docs
-- say exactly what is known
-- mark what is not verified
-- keep destructive change opt-in
+Query order:
+
+- `provider-resolved`
+  - provider SDK docs first
+  - then provider platform docs
+  - then wrapper docs if a wrapper also owns behavior
+- `family-resolved`
+  - family-level upstream or compatibility docs first
+  - then wrapper docs when the repo clearly uses a wrapper
+- `wrapper-resolved`
+  - wrapper docs first
+  - provider or family docs only if pass-through behavior is visible
+- `ambiguous`
+  - do not force a provider-specific verdict
+
+### 4. Finalize verified artifacts
+
+After writing the verified summary draft, finalize with:
+
+```bash
+python3 scripts/finalize_verified_llm_api_audit.py \
+  --evidence-json .repo-harness/llm-api-surface-evidence.json \
+  --summary-in /path/to/draft-summary.json \
+  --summary-out .repo-harness/llm-api-freshness-summary.json \
+  --report-out .repo-harness/llm-api-freshness-report.md \
+  --brief-out .repo-harness/llm-api-freshness-agent-brief.md
+```
+
+If Context7 evidence is stored separately, pass `--doc-evidence-json`.
+
+## Finding contract
+
+Use these finding kinds:
+
+- `stale-surface`
+- `deprecated-surface`
+- `wrapper-provider-mismatch`
+- `gateway-resolution-gap`
+- `provider-ambiguous`
+- `docs-unverified`
+- `legacy-suspicion`
+
+Severity rules:
+
+- triage-only findings may not exceed `low`
+- family-resolved findings may not exceed `medium`
+- `high` / `critical` requires verified docs and a concrete runtime mismatch
+
+## Quality bar
+
+A good result from this skill:
+
+- says what surface is actually in use instead of guessing from vibes
+- keeps `family-resolved` and `provider-resolved` separate
+- tells the reader which conclusions are verified and which are still triage-only
+- avoids false stale claims from docs, comments, or copied examples
+- gives the next verification step, not just a pile of raw clues

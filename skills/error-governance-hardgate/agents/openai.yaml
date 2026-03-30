@@ -1,0 +1,6 @@
+interface:
+  display_name: "Error Governance"
+  short_description: "错误契约、Problem Details 与 error code 治理审计"
+  default_prompt: "Use $error-governance-hardgate to audit this repository for public error-contract governance, Problem Details alignment, structured error-code discipline, protocol drift, outward leakage, and SSOT/codegen gaps."
+policy:
+  allow_implicit_invocation: true

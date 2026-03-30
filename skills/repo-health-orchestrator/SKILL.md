@@ -102,7 +102,7 @@ Each child subagent prompt must include:
 - exact summary path it must write
 - its human report path and agent brief path when applicable
 - the rule that it owns only its domain and must not make cross-domain conclusions
-- the rule that best-effort artifacts are still required on uncertainty, using states like `unverified`, `scan-blocked`, or `not-applicable`
+- the rule that best-effort artifacts are still required on uncertainty, using states like `triage`, `unverified`, `scan-blocked`, or `not-applicable`
 - the rule that dependency bootstrap failures are not ordinary uncertainty: they must emit blocked artifacts with machine-readable dependency failures
 
 Child subagents may call their own deterministic scripts or local wrappers if their skill defines them.

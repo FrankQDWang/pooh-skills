@@ -77,7 +77,7 @@
 - invalid summary
 - missing child human report
 - missing child agent brief
-- trust-gap domains such as `local-scan-only`
+- trust-gap domains such as `triage`
 
 ## 7. What this repo is teaching AI to do wrong overall
 

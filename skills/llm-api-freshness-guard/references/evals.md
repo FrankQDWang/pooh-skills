@@ -1,12 +1,12 @@
 # Evaluation cases
 
-Use these as the minimum regression set for skill triggering and freshness audit drift.
+Use these as the minimum regression set for trigger behavior and freshness audit drift.
 
 ## Should trigger
 
-1. "Check whether this repo still uses stale OpenAI / Anthropic / Gemini SDK surfaces."
-2. "Audit these diffs for LLM API drift across tool calling, structured outputs, and streaming."
-3. "Verify whether this wrapper stack still matches the current provider docs."
+1. "Audit this Python repo for stale OpenAI / Anthropic / Gemini API usage."
+2. "Check whether this TypeScript wrapper stack still matches the current provider docs."
+3. "Review this repo for LLM API freshness drift across tool calling, structured output, and streaming."
 
 ## Should not trigger
 
@@ -16,9 +16,13 @@ Use these as the minimum regression set for skill triggering and freshness audit
 
 ## False Positive / Regression Cases
 
-1. A wrapper is present but the underlying provider cannot be resolved.  
-Expected: emit provider ambiguity, not a fabricated stale-provider verdict.
-2. A legacy-looking method name appears only in docs or comments.  
-Expected: keep it as weak evidence until code usage and live docs agree.
-3. Context7 is unavailable.  
-Expected: block the official audit flow instead of returning a successful local-only verdict.
+1. A custom gateway exposes OpenAI-compatible paths but does not identify one concrete vendor.  
+Expected: emit `family-resolved`, not a fabricated concrete provider.
+2. LiteLLM or LangChain is present, but the underlying provider remains hidden.  
+Expected: emit `wrapper-resolved` or `ambiguous`, not a fake provider-specific stale verdict.
+3. A legacy-looking method name appears only in docs or comments.  
+Expected: treat it as weak evidence unless executable code also depends on it.
+4. The wrapper runs without Context7.  
+Expected: produce `triage`, not `blocked`, because local evidence extraction still succeeded.
+5. A verified audit is requested but Context7 cannot resolve the necessary docs.  
+Expected: the official verified flow must stay `blocked` or unresolved instead of pretending success.

@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""Validate llm-api-freshness-summary.json produced by the skill.
-
-This is a lightweight validator that checks the shape used by the skill's summary
-schema without requiring external dependencies.
-"""
+"""Validate llm-api-freshness-summary.json for the family-first contract."""
 
 from __future__ import annotations
 
@@ -11,43 +7,109 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any, Iterable, List
+from typing import Any, Iterable
 
-ALLOWED_MODES = {"verified", "local-scan-only", "blocked"}
-ALLOWED_FINDING_KINDS = {
-    "scan-blocker",
-    "provider-ambiguous",
-    "docs-unverified",
-    "local-suspicion",
-    "sdk-stale",
-    "endpoint-stale",
-    "request-schema-drift",
-    "response-shape-drift",
-    "tool-calling-drift",
-    "streaming-drift",
-    "structured-output-drift",
-    "model-stale",
-    "auth-config-drift",
-    "compat-layer-drift",
-    "wrapper-pass-through-risk",
+ALLOWED_AUDIT_MODES = {"verified", "triage", "blocked", "not-applicable"}
+ALLOWED_TARGET_SCOPE = {"repo", "diff", "file", "snippet"}
+ALLOWED_RESOLUTION_LEVELS = {
+    "provider-resolved",
+    "family-resolved",
+    "wrapper-resolved",
+    "ambiguous",
 }
-ALLOWED_SEVERITIES = {"critical", "high", "medium", "low"}
+ALLOWED_FAMILIES = {
+    "openai-compatible",
+    "anthropic-messages",
+    "google-genai",
+    "bedrock-hosted",
+    "generic-wrapper",
+    "custom-http-llm",
+    "unknown",
+}
 ALLOWED_CONFIDENCE = {"high", "medium", "low"}
-ALLOWED_STATUS = {"present", "possible", "unknown"}
-ALLOWED_DOC_STATUSES = {"verified", "ambiguous", "failed", "skipped"}
-STRICT_VERIFIED_FORBIDDEN_KINDS = {
-    "scan-blocker",
+ALLOWED_SEVERITIES = {"critical", "high", "medium", "low"}
+ALLOWED_DEPENDENCY_STATUS = {"ready", "auto-installed", "blocked"}
+ALLOWED_FINDING_KINDS = {
+    "stale-surface",
+    "deprecated-surface",
+    "wrapper-provider-mismatch",
+    "gateway-resolution-gap",
     "provider-ambiguous",
     "docs-unverified",
-    "local-suspicion",
+    "legacy-suspicion",
 }
-STRICT_VERIFIED_FORBIDDEN_LIMITATION_SNIPPETS = (
-    "not verified",
-    "unverified",
-    "local signal collector only",
-    "local-scan-only",
-)
-ALLOWED_DEPENDENCY_STATUS = {"ready", "auto-installed", "blocked"}
+ALLOWED_VERIFICATION_STATUS = {"verified", "triage-only", "not-run", "blocked", "ambiguous"}
+ALLOWED_DOC_STATUSES = {"verified", "ambiguous", "failed", "skipped"}
+REQUIRED_TOP = {
+    "skill",
+    "version",
+    "generated_at",
+    "audit_mode",
+    "target_scope",
+    "repo_profile",
+    "surface_resolution",
+    "doc_verification",
+    "findings",
+    "priorities",
+    "scan_limitations",
+    "dependency_status",
+    "bootstrap_actions",
+    "dependency_failures",
+}
+REQUIRED_REPO_PROFILE = {
+    "repo_root",
+    "files_scanned",
+    "languages",
+    "package_managers",
+    "surface_count",
+    "wrapper_count",
+    "provider_count",
+}
+REQUIRED_SURFACE = {
+    "surface_id",
+    "surface_family",
+    "provider",
+    "wrapper",
+    "resolution_level",
+    "confidence",
+    "language",
+    "primary_sdk",
+    "version_hints",
+    "model_hints",
+    "base_url_hints",
+    "evidence",
+}
+REQUIRED_DOC_ENTRY = {
+    "surface_id",
+    "surface_family",
+    "provider",
+    "wrapper",
+    "library",
+    "library_id",
+    "language",
+    "queries",
+    "status",
+    "checked_at",
+    "source_ref",
+    "notes",
+}
+REQUIRED_FINDING = {
+    "id",
+    "surface_id",
+    "severity",
+    "kind",
+    "resolution_level",
+    "surface_family",
+    "provider",
+    "wrapper",
+    "title",
+    "current_behavior",
+    "current_expectation",
+    "verification_status",
+    "recommended_change_shape",
+    "evidence",
+}
+REQUIRED_PRIORITIES = {"now", "next", "later"}
 REQUIRED_BOOTSTRAP_ACTION = {"name", "kind", "status", "command", "details"}
 REQUIRED_DEPENDENCY_FAILURE = {
     "name",
@@ -61,39 +123,39 @@ REQUIRED_DEPENDENCY_FAILURE = {
 }
 
 
-def add_error(errors: List[str], message: str) -> None:
+def add_error(errors: list[str], message: str) -> None:
     errors.append(message)
 
 
-def expect_type(value: Any, expected_type: type | tuple[type, ...], path: str, errors: List[str]) -> bool:
-    if not isinstance(value, expected_type):
-        add_error(errors, f"{path}: expected {expected_type}, got {type(value).__name__}")
+def expect_type(value: Any, expected: type | tuple[type, ...], path: str, errors: list[str]) -> bool:
+    if not isinstance(value, expected):
+        add_error(errors, f"{path}: expected {expected}, got {type(value).__name__}")
         return False
     return True
 
 
-def expect_keys(obj: dict, required: Iterable[str], path: str, errors: List[str]) -> None:
+def expect_keys(obj: dict[str, Any], required: Iterable[str], path: str, errors: list[str]) -> None:
     missing = [key for key in required if key not in obj]
     for key in missing:
         add_error(errors, f"{path}: missing required key '{key}'")
 
 
-def validate_string_list(value: Any, path: str, errors: List[str]) -> None:
+def validate_string_list(value: Any, path: str, errors: list[str]) -> None:
     if not expect_type(value, list, path, errors):
         return
     for idx, item in enumerate(value):
         if not isinstance(item, str):
-            add_error(errors, f"{path}[{idx}]: expected string, got {type(item).__name__}")
+            add_error(errors, f"{path}[{idx}]: expected string")
 
 
-def validate_evidence_list(value: Any, path: str, errors: List[str]) -> None:
+def validate_evidence_list(value: Any, path: str, errors: list[str]) -> None:
     if not expect_type(value, list, path, errors):
         return
     for idx, item in enumerate(value):
         item_path = f"{path}[{idx}]"
         if not expect_type(item, dict, item_path, errors):
             continue
-        expect_keys(item, ["path", "line", "snippet"], item_path, errors)
+        expect_keys(item, {"path", "line", "snippet"}, item_path, errors)
         if "path" in item and not isinstance(item["path"], str):
             add_error(errors, f"{item_path}.path: expected string")
         if "line" in item and not isinstance(item["line"], int):
@@ -102,247 +164,198 @@ def validate_evidence_list(value: Any, path: str, errors: List[str]) -> None:
             add_error(errors, f"{item_path}.snippet: expected string")
 
 
-def validate_doc_verification(entries: Any, errors: List[str]) -> None:
-    if not expect_type(entries, list, "doc_verification", errors):
-        return
-    for idx, entry in enumerate(entries):
-        path = f"doc_verification[{idx}]"
-        if not expect_type(entry, dict, path, errors):
-            continue
-        expect_keys(entry, ["provider", "library", "library_id", "language", "version_hint", "queries", "status", "checked_at", "source_ref", "notes"], path, errors)
-        if "status" in entry and entry["status"] not in ALLOWED_DOC_STATUSES:
-            add_error(errors, f"{path}.status: invalid value {entry['status']!r}")
-        if "queries" in entry:
-            validate_string_list(entry["queries"], f"{path}.queries", errors)
-        if "checked_at" in entry and not isinstance(entry["checked_at"], str):
-            add_error(errors, f"{path}.checked_at: expected string")
-        if "source_ref" in entry and not isinstance(entry["source_ref"], str):
-            add_error(errors, f"{path}.source_ref: expected string")
-
-
-def validate_findings(entries: Any, errors: List[str]) -> None:
-    if not expect_type(entries, list, "findings", errors):
-        return
-    for idx, entry in enumerate(entries):
-        path = f"findings[{idx}]"
-        if not expect_type(entry, dict, path, errors):
-            continue
-        expect_keys(
-            entry,
-            [
-                "id",
-                "provider",
-                "kind",
-                "severity",
-                "confidence",
-                "status",
-                "scope",
-                "title",
-                "stale_usage",
-                "current_expectation",
-                "evidence",
-                "recommended_change_shape",
-                "docs_verified",
-                "autofix_allowed",
-                "notes",
-            ],
-            path,
-            errors,
-        )
-        if "kind" in entry and entry["kind"] not in ALLOWED_FINDING_KINDS:
-            add_error(errors, f"{path}.kind: invalid value {entry['kind']!r}")
-        if "severity" in entry and entry["severity"] not in ALLOWED_SEVERITIES:
-            add_error(errors, f"{path}.severity: invalid value {entry['severity']!r}")
-        if "confidence" in entry and entry["confidence"] not in ALLOWED_CONFIDENCE:
-            add_error(errors, f"{path}.confidence: invalid value {entry['confidence']!r}")
-        if "status" in entry and entry["status"] not in ALLOWED_STATUS:
-            add_error(errors, f"{path}.status: invalid value {entry['status']!r}")
-        if "scope" in entry:
-            validate_string_list(entry["scope"], f"{path}.scope", errors)
-        if "evidence" in entry:
-            validate_evidence_list(entry["evidence"], f"{path}.evidence", errors)
-        if "docs_verified" in entry and not isinstance(entry["docs_verified"], bool):
-            add_error(errors, f"{path}.docs_verified: expected boolean")
-        if "autofix_allowed" in entry and not isinstance(entry["autofix_allowed"], bool):
-            add_error(errors, f"{path}.autofix_allowed: expected boolean")
-
-
-def validate_repo_profile(profile: Any, errors: List[str]) -> None:
+def validate_repo_profile(value: Any, errors: list[str]) -> None:
     path = "repo_profile"
-    if not expect_type(profile, dict, path, errors):
+    if not expect_type(value, dict, path, errors):
         return
-    expect_keys(
-        profile,
-        [
-            "repo_root",
-            "files_scanned",
-            "languages",
-            "providers_detected",
-            "provider_scores",
-            "wrappers_detected",
-            "version_hints",
-            "model_hints",
-            "base_url_hints",
-        ],
-        path,
-        errors,
-    )
-    if "files_scanned" in profile and not isinstance(profile["files_scanned"], int):
-        add_error(errors, "repo_profile.files_scanned: expected integer")
-    for key in ["languages", "providers_detected", "wrappers_detected"]:
-        if key in profile:
-            validate_string_list(profile[key], f"repo_profile.{key}", errors)
-    for key in ["provider_scores", "version_hints", "model_hints", "base_url_hints"]:
-        if key in profile and not isinstance(profile[key], dict):
-            add_error(errors, f"repo_profile.{key}: expected object")
-        elif key in profile:
-            for sub_key, sub_value in profile[key].items():
-                if not isinstance(sub_key, str):
-                    add_error(errors, f"repo_profile.{key}: non-string key encountered")
-                if key == "provider_scores":
-                    if not isinstance(sub_value, int):
-                        add_error(errors, f"repo_profile.provider_scores[{sub_key!r}]: expected integer")
-                else:
-                    validate_string_list(sub_value, f"repo_profile.{key}[{sub_key!r}]", errors)
+    expect_keys(value, REQUIRED_REPO_PROFILE, path, errors)
+    for key in ("languages", "package_managers"):
+        if key in value:
+            validate_string_list(value[key], f"{path}.{key}", errors)
+    for key in ("files_scanned", "surface_count", "wrapper_count", "provider_count"):
+        if key in value and not isinstance(value[key], int):
+            add_error(errors, f"{path}.{key}: expected integer")
 
 
-def validate_priorities(value: Any, errors: List[str]) -> None:
+def validate_surfaces(entries: Any, errors: list[str]) -> set[str]:
+    path = "surface_resolution"
+    surface_ids: set[str] = set()
+    if not expect_type(entries, list, path, errors):
+        return surface_ids
+    for idx, entry in enumerate(entries):
+        entry_path = f"{path}[{idx}]"
+        if not expect_type(entry, dict, entry_path, errors):
+            continue
+        expect_keys(entry, REQUIRED_SURFACE, entry_path, errors)
+        surface_id = entry.get("surface_id")
+        if isinstance(surface_id, str):
+            surface_ids.add(surface_id)
+        else:
+            add_error(errors, f"{entry_path}.surface_id: expected string")
+        level = entry.get("resolution_level")
+        if level not in ALLOWED_RESOLUTION_LEVELS:
+            add_error(errors, f"{entry_path}.resolution_level: invalid value {level!r}")
+        family = entry.get("surface_family")
+        if family not in ALLOWED_FAMILIES:
+            add_error(errors, f"{entry_path}.surface_family: invalid value {family!r}")
+        confidence = entry.get("confidence")
+        if confidence not in ALLOWED_CONFIDENCE:
+            add_error(errors, f"{entry_path}.confidence: invalid value {confidence!r}")
+        for key in ("version_hints", "model_hints", "base_url_hints"):
+            if key in entry:
+                validate_string_list(entry[key], f"{entry_path}.{key}", errors)
+        if "evidence" in entry:
+            validate_evidence_list(entry["evidence"], f"{entry_path}.evidence", errors)
+        for key in ("provider", "wrapper"):
+            if key in entry and entry[key] is not None and not isinstance(entry[key], str):
+                add_error(errors, f"{entry_path}.{key}: expected string or null")
+    return surface_ids
+
+
+def validate_doc_verification(entries: Any, surface_ids: set[str], errors: list[str]) -> None:
+    path = "doc_verification"
+    if not expect_type(entries, list, path, errors):
+        return
+    for idx, entry in enumerate(entries):
+        entry_path = f"{path}[{idx}]"
+        if not expect_type(entry, dict, entry_path, errors):
+            continue
+        expect_keys(entry, REQUIRED_DOC_ENTRY, entry_path, errors)
+        if entry.get("status") not in ALLOWED_DOC_STATUSES:
+            add_error(errors, f"{entry_path}.status: invalid value {entry.get('status')!r}")
+        if isinstance(entry.get("surface_id"), str) and surface_ids and entry["surface_id"] not in surface_ids:
+            add_error(errors, f"{entry_path}.surface_id: unknown surface_id {entry['surface_id']!r}")
+        if "queries" in entry:
+            validate_string_list(entry["queries"], f"{entry_path}.queries", errors)
+        for key in ("provider", "wrapper"):
+            if key in entry and entry[key] is not None and not isinstance(entry[key], str):
+                add_error(errors, f"{entry_path}.{key}: expected string or null")
+
+
+def validate_findings(entries: Any, surface_ids: set[str], audit_mode: str, errors: list[str]) -> None:
+    path = "findings"
+    if not expect_type(entries, list, path, errors):
+        return
+    for idx, entry in enumerate(entries):
+        entry_path = f"{path}[{idx}]"
+        if not expect_type(entry, dict, entry_path, errors):
+            continue
+        expect_keys(entry, REQUIRED_FINDING, entry_path, errors)
+        if entry.get("kind") not in ALLOWED_FINDING_KINDS:
+            add_error(errors, f"{entry_path}.kind: invalid value {entry.get('kind')!r}")
+        severity = entry.get("severity")
+        if severity not in ALLOWED_SEVERITIES:
+            add_error(errors, f"{entry_path}.severity: invalid value {severity!r}")
+        if entry.get("resolution_level") not in ALLOWED_RESOLUTION_LEVELS:
+            add_error(errors, f"{entry_path}.resolution_level: invalid value {entry.get('resolution_level')!r}")
+        if entry.get("surface_family") not in ALLOWED_FAMILIES:
+            add_error(errors, f"{entry_path}.surface_family: invalid value {entry.get('surface_family')!r}")
+        if entry.get("verification_status") not in ALLOWED_VERIFICATION_STATUS:
+            add_error(errors, f"{entry_path}.verification_status: invalid value {entry.get('verification_status')!r}")
+        if isinstance(entry.get("surface_id"), str) and surface_ids and entry["surface_id"] not in surface_ids:
+            add_error(errors, f"{entry_path}.surface_id: unknown surface_id {entry['surface_id']!r}")
+        if "evidence" in entry:
+            validate_evidence_list(entry["evidence"], f"{entry_path}.evidence", errors)
+        for key in ("provider", "wrapper"):
+            if key in entry and entry[key] is not None and not isinstance(entry[key], str):
+                add_error(errors, f"{entry_path}.{key}: expected string or null")
+
+        if audit_mode == "triage" and severity in {"critical", "high", "medium"}:
+            add_error(errors, f"{entry_path}.severity: triage findings may not exceed 'low'")
+        if entry.get("resolution_level") == "family-resolved" and severity in {"critical", "high"}:
+            add_error(errors, f"{entry_path}.severity: family-resolved findings may not exceed 'medium'")
+        if severity in {"critical", "high"} and entry.get("verification_status") != "verified":
+            add_error(errors, f"{entry_path}.verification_status: high-severity findings require verified docs")
+        if audit_mode == "verified" and entry.get("verification_status") == "not-run":
+            add_error(errors, f"{entry_path}.verification_status: verified audit may not contain not-run findings")
+
+
+def validate_priorities(value: Any, errors: list[str]) -> None:
     path = "priorities"
     if not expect_type(value, dict, path, errors):
         return
-    expect_keys(value, ["now", "next", "later"], path, errors)
-    for key in ["now", "next", "later"]:
+    expect_keys(value, REQUIRED_PRIORITIES, path, errors)
+    for key in REQUIRED_PRIORITIES:
         if key in value:
-            validate_string_list(value[key], f"priorities.{key}", errors)
+            validate_string_list(value[key], f"{path}.{key}", errors)
 
 
-def validate_verified_contract(data: dict, errors: List[str]) -> None:
-    if data.get("mode") != "verified":
+def validate_bootstrap_actions(value: Any, errors: list[str]) -> None:
+    path = "bootstrap_actions"
+    if not expect_type(value, list, path, errors):
         return
-
-    doc_verification = data.get("doc_verification")
-    if not isinstance(doc_verification, list) or not doc_verification:
-        add_error(errors, "summary.mode=verified requires a non-empty doc_verification array")
-    elif not any(isinstance(entry, dict) and entry.get("status") == "verified" for entry in doc_verification):
-        add_error(errors, "summary.mode=verified requires at least one doc_verification entry with status='verified'")
-
-    findings = data.get("findings")
-    if isinstance(findings, list):
-        for idx, finding in enumerate(findings):
-            if not isinstance(finding, dict):
-                continue
-            kind = finding.get("kind")
-            if kind in STRICT_VERIFIED_FORBIDDEN_KINDS:
-                add_error(errors, f"findings[{idx}].kind: {kind!r} is not allowed when summary.mode='verified'")
-            if finding.get("docs_verified") is not True:
-                add_error(errors, f"findings[{idx}].docs_verified: must be true when summary.mode='verified'")
-
-    scan_limitations = data.get("scan_limitations")
-    if isinstance(scan_limitations, list):
-        for idx, item in enumerate(scan_limitations):
-            if not isinstance(item, str):
-                continue
-            lowered = item.lower()
-            if any(snippet in lowered for snippet in STRICT_VERIFIED_FORBIDDEN_LIMITATION_SNIPPETS):
-                add_error(
-                    errors,
-                    f"scan_limitations[{idx}]: incompatible with summary.mode='verified' because it still describes unverified docs",
-                )
-
-
-def validate_dependency_contract(data: dict, errors: List[str]) -> None:
-    status = data.get("dependency_status")
-    if status not in ALLOWED_DEPENDENCY_STATUS:
-        add_error(errors, f"summary.dependency_status: invalid value {status!r}")
-
-    bootstrap_actions = data.get("bootstrap_actions")
-    if not expect_type(bootstrap_actions, list, "bootstrap_actions", errors):
-        return
-    for idx, action in enumerate(bootstrap_actions):
-        path = f"bootstrap_actions[{idx}]"
-        if not expect_type(action, dict, path, errors):
+    for idx, entry in enumerate(value):
+        entry_path = f"{path}[{idx}]"
+        if not expect_type(entry, dict, entry_path, errors):
             continue
-        expect_keys(action, REQUIRED_BOOTSTRAP_ACTION, path, errors)
+        expect_keys(entry, REQUIRED_BOOTSTRAP_ACTION, entry_path, errors)
 
-    dependency_failures = data.get("dependency_failures")
-    if not expect_type(dependency_failures, list, "dependency_failures", errors):
+
+def validate_dependency_failures(value: Any, errors: list[str]) -> None:
+    path = "dependency_failures"
+    if not expect_type(value, list, path, errors):
         return
-    for idx, failure in enumerate(dependency_failures):
-        path = f"dependency_failures[{idx}]"
-        if not expect_type(failure, dict, path, errors):
+    for idx, entry in enumerate(value):
+        entry_path = f"{path}[{idx}]"
+        if not expect_type(entry, dict, entry_path, errors):
             continue
-        expect_keys(failure, REQUIRED_DEPENDENCY_FAILURE, path, errors)
-
-    if status == "blocked" and not dependency_failures:
-        add_error(errors, "summary.dependency_status=blocked requires at least one dependency_failure")
+        expect_keys(entry, REQUIRED_DEPENDENCY_FAILURE, entry_path, errors)
 
 
-def validate_summary(data: Any) -> List[str]:
-    errors: List[str] = []
-    if not expect_type(data, dict, "summary", errors):
-        return errors
-    expect_keys(
-        data,
-        [
-            "skill",
-            "version",
-            "generated_at",
-            "mode",
-            "repo_profile",
-            "doc_verification",
-            "findings",
-            "priorities",
-            "scan_limitations",
-            "dependency_status",
-            "bootstrap_actions",
-            "dependency_failures",
-        ],
-        "summary",
-        errors,
-    )
+def validate_summary(data: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    expect_keys(data, REQUIRED_TOP, "summary", errors)
     if data.get("skill") != "llm-api-freshness-guard":
         add_error(errors, "summary.skill: must be 'llm-api-freshness-guard'")
-    if "mode" in data and data["mode"] not in ALLOWED_MODES:
-        add_error(errors, f"summary.mode: invalid value {data['mode']!r}")
-    if "repo_profile" in data:
-        validate_repo_profile(data["repo_profile"], errors)
-    if "doc_verification" in data:
-        validate_doc_verification(data["doc_verification"], errors)
-    if "findings" in data:
-        validate_findings(data["findings"], errors)
-    if "priorities" in data:
-        validate_priorities(data["priorities"], errors)
-    if "scan_limitations" in data:
-        validate_string_list(data["scan_limitations"], "scan_limitations", errors)
-    validate_dependency_contract(data, errors)
-    validate_verified_contract(data, errors)
+    audit_mode = data.get("audit_mode")
+    if audit_mode not in ALLOWED_AUDIT_MODES:
+        add_error(errors, f"summary.audit_mode: invalid value {audit_mode!r}")
+    target_scope = data.get("target_scope")
+    if target_scope not in ALLOWED_TARGET_SCOPE:
+        add_error(errors, f"summary.target_scope: invalid value {target_scope!r}")
+    dependency_status = data.get("dependency_status")
+    if dependency_status not in ALLOWED_DEPENDENCY_STATUS:
+        add_error(errors, f"summary.dependency_status: invalid value {dependency_status!r}")
+
+    validate_repo_profile(data.get("repo_profile"), errors)
+    surface_ids = validate_surfaces(data.get("surface_resolution"), errors)
+    validate_doc_verification(data.get("doc_verification"), surface_ids, errors)
+    validate_findings(data.get("findings"), surface_ids, str(audit_mode or ""), errors)
+    validate_priorities(data.get("priorities"), errors)
+    validate_string_list(data.get("scan_limitations"), "scan_limitations", errors)
+    validate_bootstrap_actions(data.get("bootstrap_actions"), errors)
+    validate_dependency_failures(data.get("dependency_failures"), errors)
+
+    if dependency_status == "blocked" and not data.get("dependency_failures"):
+        add_error(errors, "summary.dependency_status=blocked requires at least one dependency_failure")
+    if audit_mode == "blocked" and dependency_status != "blocked":
+        add_error(errors, "summary.audit_mode='blocked' requires dependency_status='blocked'")
+    if audit_mode == "verified":
+        doc_entries = data.get("doc_verification")
+        if not isinstance(doc_entries, list) or not any(isinstance(entry, dict) and entry.get("status") == "verified" for entry in doc_entries):
+            add_error(errors, "summary.audit_mode='verified' requires at least one doc_verification entry with status='verified'")
+    if audit_mode == "not-applicable" and data.get("surface_resolution"):
+        add_error(errors, "summary.audit_mode='not-applicable' should not contain surface_resolution entries")
     return errors
 
 
-def main() -> int:
+def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Validate llm-api-freshness-summary.json")
-    parser.add_argument("summary_json", help="Path to .repo-harness/llm-api-freshness-summary.json")
-    args = parser.parse_args()
+    parser.add_argument("summary_json", nargs="?", help="Path to the summary JSON")
+    parser.add_argument("--summary", dest="summary_flag", help="Path to the summary JSON")
+    args = parser.parse_args(argv)
+    summary_path = args.summary_flag or args.summary_json
+    if not summary_path:
+        parser.error("summary path is required")
 
-    path = Path(args.summary_json).expanduser().resolve()
-    if not path.exists():
-        print(f"error: file does not exist: {path}", file=sys.stderr)
-        return 2
-
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except Exception as exc:
-        print(f"error: failed to parse JSON: {exc}", file=sys.stderr)
-        return 2
-
+    path = Path(summary_path).resolve()
+    data = json.loads(path.read_text(encoding="utf-8"))
     errors = validate_summary(data)
     if errors:
-        print("invalid summary:", file=sys.stderr)
         for error in errors:
-            print(f"- {error}", file=sys.stderr)
-        return 1
-
-    print("summary is valid")
+            print(error, file=sys.stderr)
+        return 2
+    print(f"Validated {path}")
     return 0
 
 

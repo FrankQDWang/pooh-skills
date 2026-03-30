@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
-"""Deterministic local signal collector for LLM API freshness work.
+"""Collect local LLM API surface evidence for llm-api-freshness-guard.
 
-This script does not verify live docs. It identifies likely providers, wrappers, version
-hints, model strings, base URLs, and suspicious surfaces that should be checked against
-current docs with Context7.
-
-It can also emit baseline artifacts so CI or higher-level orchestration can consume a
-truthful "local-scan-only" result without pretending that live documentation was checked.
+This script is the deterministic triage layer only. It extracts Python / TypeScript
+surface evidence, builds surface candidates, and writes triage artifacts. It does not
+claim a verified freshness verdict, because current-doc verification belongs to the
+agent-first Context7 flow.
 """
 
 from __future__ import annotations
@@ -18,14 +16,20 @@ import os
 import re
 import sys
 from collections import Counter, defaultdict
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Sequence
+from typing import Any, Optional, Sequence
 
 try:
     import tomllib  # Python 3.11+
-except Exception:  # pragma: no cover - only for very old runtimes
+except Exception:  # pragma: no cover
     tomllib = None  # type: ignore[assignment]
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+from llm_api_freshness_artifacts import render_agent_brief
+from llm_api_freshness_artifacts import render_report
 
 SKIP_DIRS = {
     ".git",
@@ -52,10 +56,11 @@ SKIP_DIRS = {
     "out",
     ".idea",
     ".vscode",
+    ".pooh-runtime",
 }
-
 TEXT_EXTENSIONS = {
     ".py",
+    ".pyi",
     ".js",
     ".jsx",
     ".ts",
@@ -75,202 +80,319 @@ TEXT_EXTENSIONS = {
     ".properties",
     ".lock",
     ".xml",
+    ".md",
+    ".mdx",
+    ".rst",
 }
-
-SPECIAL_FILENAMES = {
-    "package.json",
-    "package-lock.json",
-    "pnpm-lock.yaml",
-    "yarn.lock",
-    "pyproject.toml",
-    "poetry.lock",
-    "requirements.txt",
-    "requirements-dev.txt",
-    "requirements-test.txt",
-    "uv.lock",
-    "Pipfile",
-    "Pipfile.lock",
-    "Dockerfile",
-    "docker-compose.yml",
-    "docker-compose.yaml",
-    ".env",
-    ".env.example",
-    ".env.local",
-}
-
+CODE_EXTENSIONS = {".py", ".pyi", ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"}
+DOC_EXTENSIONS = {".md", ".mdx", ".rst", ".txt"}
 MAX_FILE_SIZE_BYTES = 1_000_000
-MAX_SNIPPET_CHARS = 240
-
-
-@dataclass(frozen=True)
-class Pattern:
-    label: str
-    category: str
-    weight: int
-    regex: re.Pattern[str]
-    provider: Optional[str] = None
-    wrapper: Optional[str] = None
-
-
-@dataclass(frozen=True)
-class ProviderRegistry:
-    providers: frozenset[str]
-    wrappers: frozenset[str]
-    package_hints: Dict[str, Dict[str, Optional[str]]]
-    patterns: List[Pattern]
-    model_patterns: Dict[str, re.Pattern[str]]
-    url_patterns: Dict[str, re.Pattern[str]]
-
-
-def compile_pattern(pattern: str) -> re.Pattern[str]:
-    return re.compile(pattern, re.IGNORECASE)
-
-
-DEFAULT_PROVIDER_REGISTRY_PATH = Path(__file__).resolve().parent.parent / "assets" / "provider-registry.json"
-
-
-def load_provider_registry(path: Path) -> ProviderRegistry:
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except FileNotFoundError as exc:
-        raise RuntimeError(f"provider registry file does not exist: {path}") from exc
-    except json.JSONDecodeError as exc:
-        raise RuntimeError(f"provider registry is not valid JSON: {path}: {exc}") from exc
-
-    providers = frozenset(str(item) for item in raw.get("providers", []))
-    wrappers = frozenset(str(item) for item in raw.get("wrappers", []))
-    package_hints: Dict[str, Dict[str, Optional[str]]] = {}
-    for name, hint in raw.get("package_hints", {}).items():
-        if not isinstance(hint, dict):
-            raise RuntimeError(f"package_hints[{name!r}] must be an object")
-        package_hints[name.strip().lower()] = {
-            "provider": hint.get("provider"),
-            "wrapper": hint.get("wrapper"),
-        }
-
-    patterns: List[Pattern] = []
-    for entry in raw.get("signal_patterns", []):
-        if not isinstance(entry, dict):
-            raise RuntimeError("signal_patterns entries must be objects")
-        provider = entry.get("provider")
-        wrapper = entry.get("wrapper")
-        if provider is not None and provider not in providers:
-            raise RuntimeError(f"unknown provider in signal_patterns: {provider!r}")
-        if wrapper is not None and wrapper not in wrappers:
-            raise RuntimeError(f"unknown wrapper in signal_patterns: {wrapper!r}")
-        patterns.append(
-            Pattern(
-                label=str(entry["label"]),
-                category=str(entry["category"]),
-                weight=int(entry["weight"]),
-                regex=compile_pattern(str(entry["regex"])),
-                provider=provider,
-                wrapper=wrapper,
-            )
-        )
-
-    model_patterns = {
-        str(provider): re.compile(str(pattern))
-        for provider, pattern in raw.get("model_patterns", {}).items()
-    }
-    url_patterns = {
-        str(provider): re.compile(str(pattern), re.IGNORECASE)
-        for provider, pattern in raw.get("url_patterns", {}).items()
-    }
-
-    return ProviderRegistry(
-        providers=providers,
-        wrappers=wrappers,
-        package_hints=package_hints,
-        patterns=patterns,
-        model_patterns=model_patterns,
-        url_patterns=url_patterns,
-    )
+MAX_SIGNAL_OUTPUT = 1500
+MAX_SURFACE_EVIDENCE = 8
+VERSION = "2.0.0"
+ALLOWED_FAMILIES = {
+    "openai-compatible",
+    "anthropic-messages",
+    "google-genai",
+    "bedrock-hosted",
+    "generic-wrapper",
+    "custom-http-llm",
+    "unknown",
+}
+ALLOWED_RESOLUTION_LEVELS = {
+    "provider-resolved",
+    "family-resolved",
+    "wrapper-resolved",
+    "ambiguous",
+}
+PROVIDER_TO_FAMILY = {
+    "openai": "openai-compatible",
+    "azure-openai": "openai-compatible",
+    "openrouter": "openai-compatible",
+    "anthropic": "anthropic-messages",
+    "gemini": "google-genai",
+    "google-genai": "google-genai",
+    "bedrock": "bedrock-hosted",
+}
+PACKAGE_MANAGER_FILES = {
+    "package.json": "node",
+    "pnpm-lock.yaml": "pnpm",
+    "package-lock.json": "npm",
+    "yarn.lock": "yarn",
+    "pyproject.toml": "python",
+    "uv.lock": "uv",
+    "requirements.txt": "python",
+    "requirements-dev.txt": "python",
+    "requirements-test.txt": "python",
+}
+PROVIDER_PATTERNS = [
+    {
+        "label": "openai-sdk-import",
+        "regex": re.compile(r"\bfrom\s+openai\s+import\b|\bimport\s+openai\b|\bOpenAI\s*\(", re.IGNORECASE),
+        "provider": "openai",
+        "family": "openai-compatible",
+        "strength": "strong",
+        "kind": "provider-sdk",
+        "sdk": "openai",
+    },
+    {
+        "label": "anthropic-sdk-import",
+        "regex": re.compile(r"@anthropic-ai/sdk|\bfrom\s+anthropic\s+import\b|\bimport\s+anthropic\b|\bAnthropic\s*\(", re.IGNORECASE),
+        "provider": "anthropic",
+        "family": "anthropic-messages",
+        "strength": "strong",
+        "kind": "provider-sdk",
+        "sdk": "@anthropic-ai/sdk",
+    },
+    {
+        "label": "google-genai-import",
+        "regex": re.compile(r"@google/genai|google-generativeai|google\.genai|genai\.Client|GoogleGenAI", re.IGNORECASE),
+        "provider": "gemini",
+        "family": "google-genai",
+        "strength": "strong",
+        "kind": "provider-sdk",
+        "sdk": "@google/genai",
+    },
+    {
+        "label": "bedrock-runtime",
+        "regex": re.compile(r"bedrock-runtime|boto3\.client\(\s*['\"]bedrock-runtime['\"]|invoke_model|converse\(", re.IGNORECASE),
+        "provider": "bedrock",
+        "family": "bedrock-hosted",
+        "strength": "strong",
+        "kind": "provider-sdk",
+        "sdk": "bedrock-runtime",
+    },
+    {
+        "label": "openrouter-host",
+        "regex": re.compile(r"openrouter\.ai", re.IGNORECASE),
+        "provider": "openrouter",
+        "family": "openai-compatible",
+        "strength": "strong",
+        "kind": "gateway-host",
+        "sdk": "openrouter",
+    },
+    {
+        "label": "azure-openai-host",
+        "regex": re.compile(r"openai\.azure\.com|AZURE_OPENAI_(?:ENDPOINT|API_KEY)", re.IGNORECASE),
+        "provider": "azure-openai",
+        "family": "openai-compatible",
+        "strength": "strong",
+        "kind": "gateway-host",
+        "sdk": "azure-openai",
+    },
+]
+WRAPPER_PATTERNS = [
+    {
+        "label": "litellm-import",
+        "regex": re.compile(r"\blitellm\b", re.IGNORECASE),
+        "wrapper": "litellm",
+        "family": "generic-wrapper",
+        "strength": "medium",
+        "kind": "wrapper-sdk",
+        "sdk": "litellm",
+    },
+    {
+        "label": "langchain-openai",
+        "regex": re.compile(r"langchain[-_/]openai|ChatOpenAI|OpenAIEmbeddings", re.IGNORECASE),
+        "wrapper": "langchain",
+        "provider": "openai",
+        "family": "openai-compatible",
+        "strength": "strong",
+        "kind": "wrapper-sdk",
+        "sdk": "langchain-openai",
+    },
+    {
+        "label": "langchain-anthropic",
+        "regex": re.compile(r"langchain[-_/]anthropic|ChatAnthropic", re.IGNORECASE),
+        "wrapper": "langchain",
+        "provider": "anthropic",
+        "family": "anthropic-messages",
+        "strength": "strong",
+        "kind": "wrapper-sdk",
+        "sdk": "langchain-anthropic",
+    },
+    {
+        "label": "langchain-google",
+        "regex": re.compile(r"langchain[-_/]google-genai|ChatGoogleGenerativeAI", re.IGNORECASE),
+        "wrapper": "langchain",
+        "provider": "gemini",
+        "family": "google-genai",
+        "strength": "strong",
+        "kind": "wrapper-sdk",
+        "sdk": "langchain-google-genai",
+    },
+    {
+        "label": "vercel-ai-openai",
+        "regex": re.compile(r"@ai-sdk/openai|createOpenAI", re.IGNORECASE),
+        "wrapper": "vercel-ai-sdk",
+        "provider": "openai",
+        "family": "openai-compatible",
+        "strength": "strong",
+        "kind": "wrapper-sdk",
+        "sdk": "@ai-sdk/openai",
+    },
+    {
+        "label": "vercel-ai-anthropic",
+        "regex": re.compile(r"@ai-sdk/anthropic|createAnthropic", re.IGNORECASE),
+        "wrapper": "vercel-ai-sdk",
+        "provider": "anthropic",
+        "family": "anthropic-messages",
+        "strength": "strong",
+        "kind": "wrapper-sdk",
+        "sdk": "@ai-sdk/anthropic",
+    },
+    {
+        "label": "vercel-ai-google",
+        "regex": re.compile(r"@ai-sdk/google|createGoogleGenerativeAI", re.IGNORECASE),
+        "wrapper": "vercel-ai-sdk",
+        "provider": "gemini",
+        "family": "google-genai",
+        "strength": "strong",
+        "kind": "wrapper-sdk",
+        "sdk": "@ai-sdk/google",
+    },
+    {
+        "label": "pydantic-ai",
+        "regex": re.compile(r"\bpydantic_ai\b|\bpydantic-ai\b|Agent\(", re.IGNORECASE),
+        "wrapper": "pydantic-ai",
+        "family": "generic-wrapper",
+        "strength": "medium",
+        "kind": "wrapper-sdk",
+        "sdk": "pydantic-ai",
+    },
+    {
+        "label": "instructor",
+        "regex": re.compile(r"\binstructor\b|from_openai|from_anthropic", re.IGNORECASE),
+        "wrapper": "instructor",
+        "family": "generic-wrapper",
+        "strength": "medium",
+        "kind": "wrapper-sdk",
+        "sdk": "instructor",
+    },
+]
+FAMILY_PATTERNS = [
+    {
+        "label": "openai-compatible-path",
+        "regex": re.compile(r"/v1/(chat/completions|responses)\b|chat\.completions\.create|responses\.create", re.IGNORECASE),
+        "family": "openai-compatible",
+        "strength": "medium",
+        "kind": "family-surface",
+        "sdk": "openai-compatible-http",
+    },
+    {
+        "label": "anthropic-messages-path",
+        "regex": re.compile(r"/v1/messages\b|messages\.create|anthropic-version", re.IGNORECASE),
+        "family": "anthropic-messages",
+        "strength": "medium",
+        "kind": "family-surface",
+        "sdk": "anthropic-messages-http",
+    },
+    {
+        "label": "google-genai-surface",
+        "regex": re.compile(r"generateContent|models\.generate_content|models\.generateContent|contents\s*=", re.IGNORECASE),
+        "family": "google-genai",
+        "strength": "medium",
+        "kind": "family-surface",
+        "sdk": "google-genai-http",
+    },
+    {
+        "label": "custom-http-llm",
+        "regex": re.compile(r"base_url|api_base|llm[_-]?gateway|model_router|gateway_url", re.IGNORECASE),
+        "family": "custom-http-llm",
+        "strength": "weak",
+        "kind": "custom-surface",
+        "sdk": "custom-http-llm",
+    },
+]
+LEGACY_PATTERNS = [
+    {
+        "label": "openai-chatcompletion-legacy",
+        "regex": re.compile(r"\bopenai\.ChatCompletion\.create\s*\(|\bChatCompletion\.create\s*\(", re.IGNORECASE),
+        "family": "openai-compatible",
+        "provider": "openai",
+        "kind": "legacy-suspicion",
+        "suggestion": "Verify migration pressure from legacy ChatCompletion calls to the current OpenAI SDK surface.",
+    },
+    {
+        "label": "openai-completion-legacy",
+        "regex": re.compile(r"\bopenai\.Completion\.create\s*\(|\bCompletion\.create\s*\(", re.IGNORECASE),
+        "family": "openai-compatible",
+        "provider": "openai",
+        "kind": "legacy-suspicion",
+        "suggestion": "Verify whether completion-style calls still match the current OpenAI surface in this codebase.",
+    },
+    {
+        "label": "anthropic-completions-legacy",
+        "regex": re.compile(r"\bcompletions\.create\s*\(|/v1/complete\b", re.IGNORECASE),
+        "family": "anthropic-messages",
+        "provider": "anthropic",
+        "kind": "legacy-suspicion",
+        "suggestion": "Verify whether this Anthropicsurface still depends on completions-era APIs instead of Messages.",
+    },
+    {
+        "label": "google-generativeai-legacy",
+        "regex": re.compile(r"google\.generativeai|GenerativeModel\s*\(", re.IGNORECASE),
+        "family": "google-genai",
+        "provider": "gemini",
+        "kind": "legacy-suspicion",
+        "suggestion": "Verify whether the repo still depends on the older google-generativeai package or migration shims.",
+    },
+]
+MODEL_HINTS = [
+    ("openai-compatible", re.compile(r"\bgpt-[a-z0-9\-]+\b", re.IGNORECASE)),
+    ("anthropic-messages", re.compile(r"\bclaude-[a-z0-9\-]+\b", re.IGNORECASE)),
+    ("google-genai", re.compile(r"\bgemini-[a-z0-9\-.]+\b", re.IGNORECASE)),
+]
+HOST_HINTS = [
+    ("openai-compatible", "openai", re.compile(r"api\.openai\.com", re.IGNORECASE)),
+    ("anthropic-messages", "anthropic", re.compile(r"api\.anthropic\.com", re.IGNORECASE)),
+    ("google-genai", "gemini", re.compile(r"generativelanguage\.googleapis\.com|googleapis\.com/.+generateContent", re.IGNORECASE)),
+    ("openai-compatible", "openrouter", re.compile(r"openrouter\.ai", re.IGNORECASE)),
+    ("openai-compatible", "azure-openai", re.compile(r"openai\.azure\.com", re.IGNORECASE)),
+]
+PY_COMMENT_RE = re.compile(r"^\s*#")
+TS_COMMENT_RE = re.compile(r"^\s*(//|/\*|\*)")
+ENV_VALUE_RE = re.compile(r"(OPENAI_API_KEY|ANTHROPIC_API_KEY|GEMINI_API_KEY|GOOGLE_API_KEY|AZURE_OPENAI_(?:ENDPOINT|API_KEY)|OPENROUTER_API_KEY)")
 
 
 def utc_now() -> str:
     return dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat()
 
 
-def blocked_dependency_failure() -> dict[str, object]:
-    return {
-        "name": "context7",
-        "kind": "mcp",
-        "required_for": "llm-api-freshness-guard",
-        "attempted_command": "Context7 live-doc verification",
-        "failure_reason": "Context7-backed live documentation evidence was not provided",
-        "blocked_by_security": False,
-        "blocked_by_permissions": False,
-        "blocked_by_network": False,
-    }
+def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Collect local LLM API surface evidence for freshness triage.")
+    parser.add_argument("repo", help="Path to the repository or directory to scan.")
+    parser.add_argument("--provider-hints", help="Optional path to a provider hints JSON override.")
+    parser.add_argument("--json-out", help="Write the evidence bundle to this path.")
+    parser.add_argument("--summary-out", help="Write the triage summary JSON to this path.")
+    parser.add_argument("--report-out", help="Write the triage report to this path.")
+    parser.add_argument("--agent-brief-out", help="Write the triage agent brief to this path.")
+    parser.add_argument("--stdout", choices=["signals", "summary"], default="signals")
+    return parser.parse_args(argv)
 
 
-def load_doc_evidence(path: Optional[str]) -> List[dict]:
-    if not path:
-        return []
-    payload = json.loads(Path(path).read_text(encoding="utf-8"))
-    if isinstance(payload, list):
-        entries = payload
-    elif isinstance(payload, dict):
-        entries = payload.get("doc_verification", [])
-    else:
-        raise ValueError("doc evidence must be a list or an object with doc_verification")
-
-    normalized: List[dict] = []
-    required = {
-        "provider",
-        "library",
-        "library_id",
-        "language",
-        "version_hint",
-        "queries",
-        "status",
-        "checked_at",
-        "source_ref",
-        "notes",
-    }
-    for idx, entry in enumerate(entries):
-        if not isinstance(entry, dict):
-            raise ValueError(f"doc_verification[{idx}] must be an object")
-        missing = required - set(entry)
-        if missing:
-            raise ValueError(f"doc_verification[{idx}] missing keys: {sorted(missing)}")
-        normalized.append(
-            {
-                "provider": str(entry["provider"]),
-                "library": str(entry["library"]),
-                "library_id": str(entry["library_id"]),
-                "language": str(entry["language"]),
-                "version_hint": str(entry["version_hint"]),
-                "queries": [str(item) for item in entry["queries"]],
-                "status": str(entry["status"]),
-                "checked_at": str(entry["checked_at"]),
-                "source_ref": str(entry["source_ref"]),
-                "notes": str(entry["notes"]),
-            }
-        )
-    return normalized
-
-
-def debug(msg: str) -> None:
-    # Uncomment for debugging:
-    # print(msg, file=sys.stderr)
-    return
-
-
-def is_text_candidate(path: Path) -> bool:
-    if path.name in SPECIAL_FILENAMES:
-        return True
-    return path.suffix.lower() in TEXT_EXTENSIONS
+def load_provider_hints(path: Path) -> dict[str, Any]:
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise RuntimeError(f"provider hints must be a JSON object: {path}")
+    raw.setdefault("package_aliases", {})
+    raw.setdefault("query_seeds", {})
+    raw.setdefault("host_hints", {})
+    return raw
 
 
 def should_skip_dir(name: str) -> bool:
-    return name in SKIP_DIRS or name.startswith(".ruff_cache")
+    return name in SKIP_DIRS
 
 
-def iter_files(root: Path) -> Iterator[Path]:
+def is_text_candidate(path: Path) -> bool:
+    return path.suffix.lower() in TEXT_EXTENSIONS or path.name in PACKAGE_MANAGER_FILES
+
+
+def iter_files(root: Path) -> list[Path]:
+    files: list[Path] = []
     for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [d for d in dirnames if not should_skip_dir(d)]
+        dirnames[:] = [item for item in dirnames if not should_skip_dir(item)]
         for filename in filenames:
             path = Path(dirpath) / filename
             if not is_text_candidate(path):
@@ -280,61 +402,131 @@ def iter_files(root: Path) -> Iterator[Path]:
                     continue
             except OSError:
                 continue
-            yield path
+            files.append(path)
+    return files
 
 
-def read_text(path: Path) -> Optional[str]:
+def read_text(path: Path) -> str:
     try:
+        return path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
         return path.read_text(encoding="utf-8", errors="ignore")
     except OSError:
-        return None
-
-
-def trim_snippet(text: str) -> str:
-    text = " ".join(text.strip().split())
-    if len(text) <= MAX_SNIPPET_CHARS:
-        return text
-    return text[: MAX_SNIPPET_CHARS - 1] + "…"
+        return ""
 
 
 def relative_to(path: Path, root: Path) -> str:
     try:
-        return str(path.relative_to(root))
+        return path.relative_to(root).as_posix()
     except ValueError:
         return str(path)
 
 
-def detect_language(path: Path) -> Optional[str]:
-    mapping = {
-        ".py": "python",
-        ".js": "javascript",
-        ".jsx": "javascript",
-        ".ts": "typescript",
-        ".tsx": "typescript",
-        ".mjs": "javascript",
-        ".cjs": "javascript",
-        ".sh": "shell",
-    }
-    if path.name == "package.json":
-        return "json"
-    if path.name == "pyproject.toml":
-        return "toml"
-    return mapping.get(path.suffix.lower())
-
-
-def add_unique(bucket: Dict[str, List[str]], key: str, value: str) -> None:
-    if not value:
-        return
-    existing = bucket.setdefault(key, [])
-    if value not in existing:
-        existing.append(value)
+def detect_language(path: Path) -> str:
+    suffix = path.suffix.lower()
+    if suffix in {".py", ".pyi"}:
+        return "python"
+    if suffix in {".ts", ".tsx"}:
+        return "typescript"
+    if suffix in {".js", ".jsx", ".mjs", ".cjs"}:
+        return "javascript"
+    return "unknown"
 
 
 def package_name_key(name: str) -> str:
     return name.strip().lower()
 
 
-def extract_package_hints_from_package_json(path: Path, root: Path, provider_scores: Counter, wrapper_scores: Counter, version_hints: Dict[str, List[str]], evidence: List[dict], package_hints: Dict[str, Dict[str, Optional[str]]]) -> None:
+def trim_snippet(text: str) -> str:
+    return " ".join(text.strip().split())[:240]
+
+
+def is_doc_or_comment(path: Path, line: str) -> bool:
+    suffix = path.suffix.lower()
+    if suffix in DOC_EXTENSIONS:
+        return True
+    stripped = line.strip()
+    if suffix in {".py", ".pyi"}:
+        return bool(PY_COMMENT_RE.match(stripped))
+    if suffix in {".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"}:
+        return bool(TS_COMMENT_RE.match(stripped))
+    return False
+
+
+def write_json(path: Path, payload: object) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def write_text(path: Path, payload: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(payload.rstrip() + "\n", encoding="utf-8")
+
+
+def evidence_item(
+    *,
+    root: Path,
+    path: Path,
+    line_no: int,
+    snippet: str,
+    label: str,
+    kind: str,
+    strength: str,
+    source: str,
+    provider: Optional[str] = None,
+    wrapper: Optional[str] = None,
+    surface_family: Optional[str] = None,
+    sdk: Optional[str] = None,
+    version_hint: Optional[str] = None,
+    model_hint: Optional[str] = None,
+    base_url_hint: Optional[str] = None,
+) -> dict[str, Any]:
+    return {
+        "path": relative_to(path, root),
+        "line": line_no,
+        "snippet": trim_snippet(snippet),
+        "label": label,
+        "kind": kind,
+        "strength": strength,
+        "source": source,
+        "language": detect_language(path),
+        "provider": provider,
+        "wrapper": wrapper,
+        "surface_family": surface_family or provider_to_family(provider) or "unknown",
+        "sdk": sdk,
+        "version_hint": version_hint,
+        "model_hint": model_hint,
+        "base_url_hint": base_url_hint,
+    }
+
+
+def provider_to_family(provider: Optional[str]) -> Optional[str]:
+    if not provider:
+        return None
+    return PROVIDER_TO_FAMILY.get(provider)
+
+
+def load_manifest_aliases(hints: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    aliases = hints.get("package_aliases") or {}
+    normalized: dict[str, dict[str, Any]] = {}
+    for name, payload in aliases.items():
+        if not isinstance(payload, dict):
+            continue
+        normalized[package_name_key(str(name))] = {
+            "provider": payload.get("provider"),
+            "wrapper": payload.get("wrapper"),
+            "surface_family": payload.get("surface_family") or provider_to_family(payload.get("provider")) or "generic-wrapper",
+            "sdk": payload.get("sdk") or str(name),
+        }
+    return normalized
+
+
+def extract_package_hints_from_package_json(
+    path: Path,
+    root: Path,
+    aliases: dict[str, dict[str, Any]],
+    evidence: list[dict[str, Any]],
+) -> None:
     text = read_text(path)
     if not text:
         return
@@ -343,38 +535,39 @@ def extract_package_hints_from_package_json(path: Path, root: Path, provider_sco
     except json.JSONDecodeError:
         return
 
-    sections = ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"]
-    for section in sections:
+    for section in ("dependencies", "devDependencies", "peerDependencies", "optionalDependencies"):
         deps = data.get(section, {})
         if not isinstance(deps, dict):
             continue
         for raw_name, raw_version in deps.items():
-            name = package_name_key(raw_name)
-            hint = package_hints.get(name)
-            if not hint:
+            payload = aliases.get(package_name_key(raw_name))
+            if not payload:
                 continue
-            version = str(raw_version)
-            if hint["provider"]:
-                provider_scores[hint["provider"]] += 4
-                add_unique(version_hints, hint["provider"], f"{name}@{version}")
-            if hint["wrapper"]:
-                wrapper_scores[hint["wrapper"]] += 4
-                add_unique(version_hints, hint["wrapper"], f"{name}@{version}")
             evidence.append(
-                {
-                    "path": relative_to(path, root),
-                    "line": 1,
-                    "snippet": trim_snippet(f"{section}: {name}: {version}"),
-                    "kind": "manifest",
-                    "label": f"package-json-{name}",
-                    "provider": hint["provider"],
-                    "wrapper": hint["wrapper"],
-                    "category": "manifest",
-                }
+                evidence_item(
+                    root=root,
+                    path=path,
+                    line_no=1,
+                    snippet=f"{section}: {raw_name}: {raw_version}",
+                    label=f"manifest-{raw_name}",
+                    kind="manifest-package",
+                    strength="strong" if payload.get("provider") else "medium",
+                    source="manifest",
+                    provider=payload.get("provider"),
+                    wrapper=payload.get("wrapper"),
+                    surface_family=payload.get("surface_family"),
+                    sdk=payload.get("sdk"),
+                    version_hint=f"{raw_name}@{raw_version}",
+                )
             )
 
 
-def extract_package_hints_from_pyproject(path: Path, root: Path, provider_scores: Counter, wrapper_scores: Counter, version_hints: Dict[str, List[str]], evidence: List[dict], package_hints: Dict[str, Dict[str, Optional[str]]]) -> None:
+def extract_package_hints_from_pyproject(
+    path: Path,
+    root: Path,
+    aliases: dict[str, dict[str, Any]],
+    evidence: list[dict[str, Any]],
+) -> None:
     if tomllib is None:
         return
     text = read_text(path)
@@ -385,716 +578,648 @@ def extract_package_hints_from_pyproject(path: Path, root: Path, provider_scores
     except Exception:
         return
 
-    candidates: List[str] = []
-
+    candidates: list[str] = []
     project = data.get("project", {})
     if isinstance(project, dict):
         deps = project.get("dependencies", [])
         if isinstance(deps, list):
-            candidates.extend(str(dep) for dep in deps)
+            candidates.extend(str(item) for item in deps)
         optional = project.get("optional-dependencies", {})
         if isinstance(optional, dict):
-            for group_deps in optional.values():
-                if isinstance(group_deps, list):
-                    candidates.extend(str(dep) for dep in group_deps)
-
+            for items in optional.values():
+                if isinstance(items, list):
+                    candidates.extend(str(item) for item in items)
     tool = data.get("tool", {})
     if isinstance(tool, dict):
         poetry = tool.get("poetry", {})
         if isinstance(poetry, dict):
-            poetry_deps = poetry.get("dependencies", {})
-            if isinstance(poetry_deps, dict):
-                for name, spec in poetry_deps.items():
+            deps = poetry.get("dependencies", {})
+            if isinstance(deps, dict):
+                for name, spec in deps.items():
                     if name == "python":
                         continue
                     candidates.append(f"{name}{spec if isinstance(spec, str) else ''}")
             group = poetry.get("group", {})
             if isinstance(group, dict):
-                for group_name, group_body in group.items():
-                    if not isinstance(group_body, dict):
+                for body in group.values():
+                    if not isinstance(body, dict):
                         continue
-                    deps = group_body.get("dependencies", {})
+                    deps = body.get("dependencies", {})
                     if isinstance(deps, dict):
                         for name, spec in deps.items():
                             candidates.append(f"{name}{spec if isinstance(spec, str) else ''}")
 
-    for dep in candidates:
-        dep = dep.strip()
-        if not dep:
+    for entry in candidates:
+        match = re.match(r"([A-Za-z0-9_.\-@/]+)", entry.strip())
+        if not match:
             continue
-        m = re.match(r"([A-Za-z0-9_.\-@/]+)", dep)
-        if not m:
+        name = package_name_key(match.group(1))
+        payload = aliases.get(name)
+        if not payload:
             continue
-        name = package_name_key(m.group(1))
-        hint = package_hints.get(name)
-        if not hint:
-            continue
-        version_text = dep[len(m.group(1)):].strip() or "unspecified"
-        if hint["provider"]:
-            provider_scores[hint["provider"]] += 4
-            add_unique(version_hints, hint["provider"], f"{name}{version_text}")
-        if hint["wrapper"]:
-            wrapper_scores[hint["wrapper"]] += 4
-            add_unique(version_hints, hint["wrapper"], f"{name}{version_text}")
         evidence.append(
-            {
-                "path": relative_to(path, root),
-                "line": 1,
-                "snippet": trim_snippet(dep),
-                "kind": "manifest",
-                "label": f"pyproject-{name}",
-                "provider": hint["provider"],
-                "wrapper": hint["wrapper"],
-                "category": "manifest",
-            }
+            evidence_item(
+                root=root,
+                path=path,
+                line_no=1,
+                snippet=entry,
+                label=f"pyproject-{name}",
+                kind="manifest-package",
+                strength="strong" if payload.get("provider") else "medium",
+                source="manifest",
+                provider=payload.get("provider"),
+                wrapper=payload.get("wrapper"),
+                surface_family=payload.get("surface_family"),
+                sdk=payload.get("sdk"),
+                version_hint=entry.strip(),
+            )
         )
 
 
-def extract_package_hints_from_requirements(path: Path, root: Path, provider_scores: Counter, wrapper_scores: Counter, version_hints: Dict[str, List[str]], evidence: List[dict], package_hints: Dict[str, Dict[str, Optional[str]]]) -> None:
+def extract_package_hints_from_requirements(
+    path: Path,
+    root: Path,
+    aliases: dict[str, dict[str, Any]],
+    evidence: list[dict[str, Any]],
+) -> None:
     text = read_text(path)
     if not text:
         return
-    for lineno, raw_line in enumerate(text.splitlines(), start=1):
-        line = raw_line.strip()
+    for line_no, raw in enumerate(text.splitlines(), start=1):
+        line = raw.strip()
         if not line or line.startswith("#") or line.startswith("-r "):
             continue
-        m = re.match(r"([A-Za-z0-9_.\-@/]+)", line)
-        if not m:
+        match = re.match(r"([A-Za-z0-9_.\-@/]+)", line)
+        if not match:
             continue
-        name = package_name_key(m.group(1))
-        hint = package_hints.get(name)
-        if not hint:
+        name = package_name_key(match.group(1))
+        payload = aliases.get(name)
+        if not payload:
             continue
-        version_text = line[len(m.group(1)):].strip() or "unspecified"
-        if hint["provider"]:
-            provider_scores[hint["provider"]] += 4
-            add_unique(version_hints, hint["provider"], f"{name}{version_text}")
-        if hint["wrapper"]:
-            wrapper_scores[hint["wrapper"]] += 4
-            add_unique(version_hints, hint["wrapper"], f"{name}{version_text}")
         evidence.append(
-            {
-                "path": relative_to(path, root),
-                "line": lineno,
-                "snippet": trim_snippet(line),
-                "kind": "manifest",
-                "label": f"requirements-{name}",
-                "provider": hint["provider"],
-                "wrapper": hint["wrapper"],
-                "category": "manifest",
-            }
+            evidence_item(
+                root=root,
+                path=path,
+                line_no=line_no,
+                snippet=line,
+                label=f"requirements-{name}",
+                kind="manifest-package",
+                strength="strong" if payload.get("provider") else "medium",
+                source="manifest",
+                provider=payload.get("provider"),
+                wrapper=payload.get("wrapper"),
+                surface_family=payload.get("surface_family"),
+                sdk=payload.get("sdk"),
+                version_hint=line,
+            )
         )
 
 
-def extract_patterns_from_text(path: Path, root: Path, text: str, provider_scores: Counter, wrapper_scores: Counter, model_hints: Dict[str, List[str]], base_url_hints: Dict[str, List[str]], evidence: List[dict], suspicions: List[dict], language_counts: Counter, patterns: Sequence[Pattern], model_patterns: Dict[str, re.Pattern[str]], url_patterns: Dict[str, re.Pattern[str]]) -> None:
-    rel = relative_to(path, root)
-    language = detect_language(path)
-    if language:
-        language_counts[language] += 1
-
-    lines = text.splitlines()
-    for lineno, line in enumerate(lines, start=1):
-        for pattern in patterns:
-            if not pattern.regex.search(line):
+def add_pattern_evidence(path: Path, root: Path, lines: list[str], evidence: list[dict[str, Any]]) -> None:
+    for line_no, line in enumerate(lines, start=1):
+        doc_or_comment = is_doc_or_comment(path, line)
+        source = "docs" if doc_or_comment else ("code" if path.suffix.lower() in CODE_EXTENSIONS else "config")
+        for pattern in PROVIDER_PATTERNS:
+            if not pattern["regex"].search(line):
                 continue
-            if pattern.provider:
-                provider_scores[pattern.provider] += pattern.weight
-            if pattern.wrapper:
-                wrapper_scores[pattern.wrapper] += pattern.weight
-            entry = {
-                "path": rel,
-                "line": lineno,
-                "snippet": trim_snippet(line),
-                "kind": "signal",
-                "label": pattern.label,
-                "provider": pattern.provider,
-                "wrapper": pattern.wrapper,
-                "category": pattern.category,
-            }
-            evidence.append(entry)
-            if pattern.category in {"stale-pattern", "legacy-surface-suspect", "compatibility-layer"}:
-                suspicions.append(entry)
-
-        for provider, regex in model_patterns.items():
-            for match in regex.finditer(line):
-                model = match.group(0)
-                add_unique(model_hints, provider, model)
-                evidence.append(
-                    {
-                        "path": rel,
-                        "line": lineno,
-                        "snippet": trim_snippet(line),
-                        "kind": "model",
-                        "label": f"{provider}-model",
-                        "provider": provider,
-                        "wrapper": None,
-                        "category": "model",
-                    }
+            evidence.append(
+                evidence_item(
+                    root=root,
+                    path=path,
+                    line_no=line_no,
+                    snippet=line,
+                    label=pattern["label"],
+                    kind=pattern["kind"],
+                    strength="weak" if doc_or_comment else pattern["strength"],
+                    source=source,
+                    provider=pattern.get("provider"),
+                    surface_family=pattern.get("family"),
+                    sdk=pattern.get("sdk"),
+                    base_url_hint=trim_snippet(line) if pattern["kind"] == "gateway-host" else None,
                 )
-                if provider in provider_scores:
-                    provider_scores[provider] += 2
-
-        for provider, regex in url_patterns.items():
-            for match in regex.finditer(line):
-                add_unique(base_url_hints, provider, match.group(0))
-                if provider in provider_scores:
-                    provider_scores[provider] += 4
-                evidence.append(
-                    {
-                        "path": rel,
-                        "line": lineno,
-                        "snippet": trim_snippet(line),
-                        "kind": "base_url",
-                        "label": f"{provider}-base-url",
-                        "provider": provider,
-                        "wrapper": None,
-                        "category": "base-url",
-                    }
-                )
-
-
-def build_provider_file_map(evidence: Sequence[dict]) -> Dict[str, List[str]]:
-    files: Dict[str, List[str]] = defaultdict(list)
-    for item in evidence:
-        provider = item.get("provider")
-        path = item.get("path")
-        if provider and path and path not in files[provider]:
-            files[provider].append(path)
-    return dict(files)
-
-
-def group_suspicions(suspicions: Sequence[dict]) -> List[dict]:
-    grouped: Dict[tuple, dict] = {}
-    for item in suspicions:
-        key = (item.get("provider") or "unknown", item.get("label") or "unknown")
-        group = grouped.setdefault(
-            key,
-            {
-                "provider": item.get("provider") or "unknown",
-                "label": item.get("label") or "unknown",
-                "category": item.get("category") or "unknown",
-                "evidence": [],
-                "files": [],
-            },
-        )
-        if len(group["evidence"]) < 6:
-            group["evidence"].append(
-                {
-                    "path": item["path"],
-                    "line": item["line"],
-                    "snippet": item["snippet"],
-                }
             )
-        if item["path"] not in group["files"]:
-            group["files"].append(item["path"])
-    return sorted(grouped.values(), key=lambda g: (g["provider"], g["label"]))
-
-
-def select_detected(scores: Counter, minimum_score: int) -> List[str]:
-    items = [name for name, score in scores.items() if score >= minimum_score]
-    return sorted(items)
-
-
-def make_docs_unverified_finding(provider: str, files: Sequence[str], suspicions: Sequence[dict], version_hints: Dict[str, List[str]], model_hints: Dict[str, List[str]]) -> dict:
-    evidence = []
-    seen = set()
-    for suspicion in suspicions:
-        if suspicion["provider"] != provider:
-            continue
-        for item in suspicion["evidence"]:
-            key = (item["path"], item["line"], item["snippet"])
-            if key in seen:
+        for pattern in WRAPPER_PATTERNS:
+            if not pattern["regex"].search(line):
                 continue
-            seen.add(key)
-            evidence.append(item)
-            if len(evidence) >= 6:
-                break
-        if len(evidence) >= 6:
-            break
-
-    versions = ", ".join(version_hints.get(provider, [])[:3]) or "no version hint found"
-    models = ", ".join(model_hints.get(provider, [])[:4]) or "no model hint found"
-    return {
-        "id": f"docs-unverified-{provider}",
-        "provider": provider,
-        "kind": "docs-unverified",
-        "severity": "medium",
-        "confidence": "low",
-        "status": "present",
-        "scope": list(files)[:10],
-        "title": f"{provider} surface detected, but current docs were not verified",
-        "stale_usage": f"Local signals indicate {provider} usage, but this run did not check current official docs. Version hints: {versions}. Model hints: {models}.",
-        "current_expectation": f"Resolve the current {provider} docs with Context7 before labeling any surface stale, deprecated, or removed.",
-        "evidence": evidence,
-        "recommended_change_shape": f"Run a Context7-backed verification pass for {provider}: official SDK docs first, then platform or gateway docs as needed.",
-        "docs_verified": False,
-        "autofix_allowed": False,
-        "notes": "This is a truthful placeholder finding for local-scan-only mode.",
-    }
-
-
-def suspicion_kind_from_label(label: str) -> str:
-    label = label.lower()
-    if "model" in label:
-        return "model-stale"
-    if "function" in label or "tools" in label:
-        return "tool-calling-drift"
-    if "stream" in label:
-        return "streaming-drift"
-    if "complete" in label or "chatcompletion" in label or "responses" in label:
-        return "endpoint-stale"
-    if "api-version" in label or "base-url" in label or "azure" in label or "openrouter" in label or "bedrock" in label:
-        return "compat-layer-drift"
-    return "local-suspicion"
-
-
-def suspicion_severity_from_category(category: str) -> str:
-    if category == "stale-pattern":
-        return "high"
-    if category == "compatibility-layer":
-        return "medium"
-    return "medium"
-
-
-def make_local_suspicion_finding(group: dict) -> dict:
-    provider = group["provider"]
-    label = group["label"]
-    title = f"Possible stale surface: {label}"
-    if provider == "unknown":
-        title = f"Possible stale surface with unclear provider: {label}"
-    return {
-        "id": f"local-suspicion-{provider}-{label}",
-        "provider": provider,
-        "kind": suspicion_kind_from_label(label),
-        "severity": suspicion_severity_from_category(group["category"]),
-        "confidence": "low",
-        "status": "possible",
-        "scope": group["files"][:10],
-        "title": title,
-        "stale_usage": f"Local scan found a suspicious pattern (`{label}`) that often deserves a current-doc check.",
-        "current_expectation": "Verify the current official docs before deciding whether this is removed, deprecated, or still valid.",
-        "evidence": group["evidence"],
-        "recommended_change_shape": "Use Context7 to verify the exact current surface, then normalize only the affected call sites.",
-        "docs_verified": False,
-        "autofix_allowed": False,
-        "notes": "This is intentionally low-confidence because the local collector does not verify live docs.",
-    }
-
-
-def make_provider_ambiguous_finding(wrapper_scores: Counter, evidence: Sequence[dict]) -> dict:
-    sample_evidence = []
-    for item in evidence:
-        if item.get("wrapper"):
-            sample_evidence.append(
-                {
-                    "path": item["path"],
-                    "line": item["line"],
-                    "snippet": item["snippet"],
-                }
+            evidence.append(
+                evidence_item(
+                    root=root,
+                    path=path,
+                    line_no=line_no,
+                    snippet=line,
+                    label=pattern["label"],
+                    kind=pattern["kind"],
+                    strength="weak" if doc_or_comment else pattern["strength"],
+                    source=source,
+                    provider=pattern.get("provider"),
+                    wrapper=pattern.get("wrapper"),
+                    surface_family=pattern.get("family"),
+                    sdk=pattern.get("sdk"),
+                )
             )
-        if len(sample_evidence) >= 6:
-            break
-    wrappers = ", ".join(sorted(name for name, score in wrapper_scores.items() if score > 0)) or "no clear wrapper"
-    return {
-        "id": "provider-ambiguous-001",
-        "provider": "unknown",
-        "kind": "provider-ambiguous",
-        "severity": "medium",
-        "confidence": "low",
-        "status": "present",
-        "scope": [],
-        "title": "The underlying LLM provider could not be resolved with high confidence",
-        "stale_usage": f"Local evidence points to wrappers or indirection ({wrappers}), but not to one clear active provider surface.",
-        "current_expectation": "Identify the real runtime provider or gateway before calling anything stale. If the integration is outside the built-in registry, extend the registry first.",
-        "evidence": sample_evidence,
-        "recommended_change_shape": "Resolve runtime wiring from manifests, base URLs, env handling, or deployment config, extend the provider registry if needed, then run Context7 verification.",
-        "docs_verified": False,
-        "autofix_allowed": False,
-        "notes": "Do not guess the provider from model vibes alone.",
-    }
-
-
-def build_priorities(providers: Sequence[str], wrappers: Sequence[str], ambiguity: bool, official_verdict_available: bool) -> dict:
-    now: List[str] = []
-    nxt: List[str] = []
-    later: List[str] = []
-
-    if not official_verdict_available:
-        now.append("Restore Context7-backed live documentation verification before trusting this audit result.")
-    if ambiguity:
-        now.append("Resolve the actual runtime provider surface before making any freshness claims; extend the provider registry first if the integration is outside the built-in set.")
-    if providers:
-        now.extend(
-            [
-                f"Run Context7 verification for {provider} on the exact SDK / gateway surface detected in code."
-                for provider in providers
-            ]
-        )
-    if wrappers:
-        nxt.append(
-            "Check wrapper-owned semantics separately from provider-owned semantics; do not assume wrappers preserve provider parity."
-        )
-    nxt.append("Verify tool calling, structured output, streaming, and model lifecycle before patching call sites.")
-    later.extend(
-        [
-            "Add a repeatable freshness audit to CI or review flows.",
-            "Centralize provider adapters so future migrations are smaller and less error-prone.",
-        ]
-    )
-    return {
-        "now": now[:6],
-        "next": nxt[:6],
-        "later": later[:6],
-    }
-
-
-def render_report(summary: dict, grouped_suspicions: Sequence[dict]) -> str:
-    providers = ", ".join(summary["repo_profile"]["providers_detected"]) or "none"
-    wrappers = ", ".join(summary["repo_profile"]["wrappers_detected"]) or "none"
-    mode = summary["mode"]
-    if mode == "verified":
-        verdict_line = "Official docs were verified for this run."
-        diagnosis = "This is an official freshness audit result backed by Context7-tracked live docs plus deterministic local signals."
-    elif mode == "blocked":
-        verdict_line = "The official audit flow is blocked because live-doc verification evidence is missing."
-        diagnosis = "This run may still contain local triage evidence, but it is not an official freshness verdict because Context7-backed live-doc verification is missing."
-    else:
-        verdict_line = "Only local triage evidence was collected."
-        diagnosis = "This is not a real freshness verdict yet. It is a deterministic local scan that found likely provider surfaces, wrappers, and suspicious patterns, but it did not check current docs. Treat it as triage, not truth."
-    version_lines = []
-    for key, values in summary["repo_profile"]["version_hints"].items():
-        if values:
-            version_lines.append(f"- {key}: {', '.join(values[:5])}")
-    if not version_lines:
-        version_lines.append("- no strong version hints found")
-
-    findings = summary["findings"]
-    lines = [
-        "# LLM API Freshness Audit",
-        "",
-        "## Verdict",
-        f"- Overall verdict: {verdict_line}",
-        f"- Verification mode: `{mode}`",
-        f"- Providers in scope: {providers}",
-        f"- Wrappers / gateways in scope: {wrappers}",
-        "- Highest-risk surface: anything listed below under suspicious patterns still needs current-doc verification.",
-        "",
-        "## Executive diagnosis",
-        diagnosis,
-        "",
-        "## 现在最该做的事",
-    ]
-    for item in summary["priorities"]["now"] or ["Run a Context7-backed verification pass."]:
-        lines.append(f"1. {item}")
-
-    lines.extend(
-        [
-            "",
-            "## Version hints",
-            *version_lines,
-            "",
-            "## Suspicious surfaces to verify",
-        ]
-    )
-    if grouped_suspicions:
-        for group in grouped_suspicions[:20]:
-            files = ", ".join(group["files"][:4]) or "no files listed"
-            lines.append(f"- `{group['provider']}` / `{group['label']}` -> {files}")
-    else:
-        lines.append("- no obvious suspicious patterns were detected locally")
-
-    lines.extend(
-        [
-            "",
-            "## Main findings",
-        ]
-    )
-    for finding in findings[:20]:
-        lines.extend(
-            [
-                "",
-                f"### {finding['id']} {finding['title']}",
-                f"- Provider: {finding['provider']}",
-                f"- Kind: {finding['kind']}",
-                f"- Severity: {finding['severity']}",
-                f"- Confidence: {finding['confidence']}",
-                f"- Status: {finding['status']}",
-                f"- Scope: {', '.join(finding['scope'][:8]) or 'n/a'}",
-                f"- 是什么：{finding['stale_usage']}",
-                f"- 为什么重要：{finding['current_expectation']}",
-                f"- 建议做什么：{finding['recommended_change_shape']}",
-            ]
-        )
-        if finding["evidence"]:
-            lines.append("- 代码证据：")
-            for ev in finding["evidence"][:4]:
-                lines.append(f"  - `{ev['path']}:{ev['line']}` {ev['snippet']}")
-
-    lines.extend(
-        [
-            "",
-            "## Blockers and ambiguity",
-            f"- Live docs verification mode: `{mode}`.",
-            "- Wrapper or gateway usage may hide the true provider semantics.",
-            "- Local pattern matches can identify migration candidates, but they cannot prove current deprecation state.",
-            "",
-            "## Prioritized plan",
-            "",
-            "### 现在",
-        ]
-    )
-    for item in summary["priorities"]["now"]:
-        lines.append(f"- {item}")
-    lines.extend(["", "### 下一步"])
-    for item in summary["priorities"]["next"]:
-        lines.append(f"- {item}")
-    lines.extend(["", "### 之后"])
-    for item in summary["priorities"]["later"]:
-        lines.append(f"- {item}")
-
-    lines.extend(["", "## Skipped checks"])
-    if mode != "verified":
-        lines.append("- Context7-backed current-doc verification is still missing for this run.")
-        lines.append("- No provider-specific migration recommendation is final until the live docs are checked.")
-    else:
-        lines.append("- No major live-doc verification gap is visible in the recorded doc evidence.")
-    lines.append("")
-    return "\n".join(lines)
-
-
-def render_agent_brief(summary: dict, grouped_suspicions: Sequence[dict]) -> str:
-    providers = summary["repo_profile"]["providers_detected"]
-    wrappers = summary["repo_profile"]["wrappers_detected"]
-    mode = summary["mode"]
-    lines = [
-        "# LLM API Freshness Agent Brief",
-        "",
-        "## Execution mode",
-        "- `report-only`",
-        "",
-        "## Scope summary",
-        f"- Providers: {', '.join(providers) or 'none'}",
-        f"- Wrappers / gateways: {', '.join(wrappers) or 'none'}",
-        f"- Verification mode: {summary['mode']}",
-        f"- Files scanned: {summary['repo_profile']['files_scanned']}",
-        f"- Current docs checked: {'yes' if summary['mode'] == 'verified' else 'no'}",
-        "",
-        "## Findings queue",
-    ]
-    for finding in summary["findings"][:20]:
-        evidence_summary = "; ".join(
-            f"{ev['path']}:{ev['line']}" for ev in finding["evidence"][:4]
-        ) or "n/a"
-        lines.extend(
-            [
-                "",
-                f"### {finding['id']} {finding['title']}",
-                f"- provider: {finding['provider']}",
-                f"- kind: {finding['kind']}",
-                f"- severity: {finding['severity']}",
-                f"- confidence: {finding['confidence']}",
-                f"- status: {finding['status']}",
-                f"- scope: {', '.join(finding['scope'][:8]) or 'n/a'}",
-                f"- stale_usage: {finding['stale_usage']}",
-                f"- current_expectation: {finding['current_expectation']}",
-                f"- evidence_summary: {evidence_summary}",
-                f"- decision: {finding['recommended_change_shape']}",
-                "- recommended_change_shape: verify current docs first; do not patch blindly",
-                "- validation_checks: compare provider docs, wrapper docs, and runtime config before changing code",
-                f"- docs_verified: {str(finding['docs_verified']).lower()}",
-                f"- autofix_allowed: {str(finding['autofix_allowed']).lower()}",
-                f"- notes: {finding['notes']}",
-            ]
-        )
-
-    if grouped_suspicions:
-        lines.extend(["", "## Query targets"])
-        for group in grouped_suspicions[:20]:
-            lines.append(
-                f"- {group['provider']} / {group['label']}: verify exact current surface via Context7 before editing {', '.join(group['files'][:3])}"
+        for pattern in FAMILY_PATTERNS:
+            if not pattern["regex"].search(line):
+                continue
+            evidence.append(
+                evidence_item(
+                    root=root,
+                    path=path,
+                    line_no=line_no,
+                    snippet=line,
+                    label=pattern["label"],
+                    kind=pattern["kind"],
+                    strength="weak" if doc_or_comment else pattern["strength"],
+                    source=source,
+                    surface_family=pattern.get("family"),
+                    sdk=pattern.get("sdk"),
+                )
             )
-
-    lines.extend(
-        [
-            "",
-            "## Output rules for the coding agent",
-            "- Keep patches small and reversible first.",
-            "- Do not rewrite unrelated provider code.",
-            f"- Treat this run as {'an official verified audit' if mode == 'verified' else 'blocked/triage evidence'} for change planning.",
-            "- Convert suspicious patterns into real findings only after live-doc verification.",
-            "",
-        ]
-    )
-    return "\n".join(lines)
-
-
-def build_summary(root: Path, files_scanned: int, language_counts: Counter, provider_scores: Counter, wrapper_scores: Counter, version_hints: Dict[str, List[str]], model_hints: Dict[str, List[str]], base_url_hints: Dict[str, List[str]], evidence: List[dict], grouped_suspicions: Sequence[dict], doc_verification: Sequence[dict]) -> dict:
-    detected_providers = select_detected(provider_scores, minimum_score=4)
-    detected_wrappers = select_detected(wrapper_scores, minimum_score=4)
-    if not detected_providers and doc_verification:
-        detected_providers = sorted({entry["provider"] for entry in doc_verification if entry.get("provider")})
-    provider_files = build_provider_file_map(evidence)
-    official_verdict_available = any(entry.get("status") == "verified" for entry in doc_verification)
-
-    findings: List[dict] = []
-    if not detected_providers:
-        findings.append(make_provider_ambiguous_finding(wrapper_scores, evidence))
-
-    if not official_verdict_available:
-        for provider in detected_providers:
-            findings.append(
-                make_docs_unverified_finding(
+        for family, provider, regex in HOST_HINTS:
+            for match in regex.finditer(line):
+                evidence.append(
+                    evidence_item(
+                        root=root,
+                        path=path,
+                        line_no=line_no,
+                        snippet=line,
+                        label=f"host-{provider or family}",
+                        kind="base-url",
+                        strength="weak" if doc_or_comment else "strong",
+                        source=source,
+                        provider=provider,
+                        surface_family=family,
+                        sdk=provider or family,
+                        base_url_hint=match.group(0),
+                    )
+                )
+        for family, regex in MODEL_HINTS:
+            for match in regex.finditer(line):
+                evidence.append(
+                    evidence_item(
+                        root=root,
+                        path=path,
+                        line_no=line_no,
+                        snippet=line,
+                        label=f"model-{family}",
+                        kind="model-hint",
+                        strength="weak" if doc_or_comment else "medium",
+                        source=source,
+                        surface_family=family,
+                        sdk=family,
+                        model_hint=match.group(0),
+                    )
+                )
+        for pattern in LEGACY_PATTERNS:
+            if not pattern["regex"].search(line):
+                continue
+            evidence.append(
+                evidence_item(
+                    root=root,
+                    path=path,
+                    line_no=line_no,
+                    snippet=line,
+                    label=pattern["label"],
+                    kind=pattern["kind"],
+                    strength="weak" if doc_or_comment else "medium",
+                    source=source,
+                    provider=pattern.get("provider"),
+                    surface_family=pattern.get("family"),
+                    sdk=pattern.get("provider") or pattern.get("family"),
+                )
+            )
+        for match in ENV_VALUE_RE.finditer(line):
+            provider = {
+                "OPENAI_API_KEY": "openai",
+                "ANTHROPIC_API_KEY": "anthropic",
+                "GEMINI_API_KEY": "gemini",
+                "GOOGLE_API_KEY": "gemini",
+                "AZURE_OPENAI_ENDPOINT": "azure-openai",
+                "AZURE_OPENAI_API_KEY": "azure-openai",
+                "OPENROUTER_API_KEY": "openrouter",
+            }.get(match.group(1))
+            evidence.append(
+                evidence_item(
+                    root=root,
+                    path=path,
+                    line_no=line_no,
+                    snippet=line,
+                    label=f"env-{match.group(1)}",
+                    kind="env",
+                    strength="weak" if doc_or_comment else "strong",
+                    source=source,
                     provider=provider,
-                    files=provider_files.get(provider, []),
-                    suspicions=grouped_suspicions,
-                    version_hints=version_hints,
-                    model_hints=model_hints,
+                    surface_family=provider_to_family(provider) or "unknown",
+                    sdk=provider or "env",
                 )
             )
 
-    for group in grouped_suspicions:
-        findings.append(make_local_suspicion_finding(group))
 
-    mode = "verified" if official_verdict_available else "blocked"
-    dependency_status = "ready" if official_verdict_available else "blocked"
-    dependency_failures = [] if official_verdict_available else [blocked_dependency_failure()]
+def select_candidate_evidence(evidence: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        item for item in evidence
+        if item.get("source") in {"manifest", "code", "config"}
+    ]
+
+
+def build_surface_candidates(evidence: list[dict[str, Any]], query_seeds: dict[str, Any]) -> list[dict[str, Any]]:
+    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for item in select_candidate_evidence(evidence):
+        provider = item.get("provider") or ""
+        wrapper = item.get("wrapper") or ""
+        family = item.get("surface_family") or "unknown"
+        key = f"{provider}|{wrapper}|{family}"
+        grouped[key].append(item)
+
+    candidates: list[dict[str, Any]] = []
+    for group in grouped.values():
+        strong_provider = [item for item in group if item.get("provider") and item.get("strength") == "strong"]
+        providers = Counter(str(item.get("provider")) for item in group if item.get("provider"))
+        wrappers = Counter(str(item.get("wrapper")) for item in group if item.get("wrapper"))
+        families = Counter(str(item.get("surface_family") or "unknown") for item in group)
+        languages = Counter(str(item.get("language") or "unknown") for item in group if item.get("language"))
+        sdks = Counter(str(item.get("sdk")) for item in group if item.get("sdk"))
+        provider = strong_provider[0].get("provider") if strong_provider else (providers.most_common(1)[0][0] if providers else None)
+        wrapper = wrappers.most_common(1)[0][0] if wrappers else None
+        family = families.most_common(1)[0][0] if families else "unknown"
+        if family not in ALLOWED_FAMILIES:
+            family = provider_to_family(provider) or ("generic-wrapper" if wrapper else "unknown")
+
+        if provider and strong_provider:
+            resolution_level = "provider-resolved"
+        elif wrapper:
+            resolution_level = "wrapper-resolved"
+        elif family != "unknown":
+            resolution_level = "family-resolved"
+        else:
+            resolution_level = "ambiguous"
+
+        confidence_score = 0
+        confidence_score += min(len([item for item in group if item.get("strength") == "strong"]), 2)
+        confidence_score += min(len([item for item in group if item.get("kind") == "manifest-package"]), 1)
+        confidence_score += min(len([item for item in group if item.get("kind") == "base-url"]), 1)
+        confidence = "high" if confidence_score >= 3 else ("medium" if confidence_score >= 2 else "low")
+
+        version_hints = unique_values(item.get("version_hint") for item in group if item.get("version_hint"))
+        model_hints = unique_values(item.get("model_hint") for item in group if item.get("model_hint"))
+        base_url_hints = unique_values(item.get("base_url_hint") for item in group if item.get("base_url_hint"))
+        surface_id = f"surface-{len(candidates) + 1:03d}"
+        candidate = {
+            "surface_id": surface_id,
+            "surface_family": family,
+            "provider": provider if resolution_level == "provider-resolved" else None,
+            "wrapper": wrapper,
+            "resolution_level": resolution_level,
+            "confidence": confidence,
+            "language": languages.most_common(1)[0][0] if languages else "unknown",
+            "primary_sdk": sdks.most_common(1)[0][0] if sdks else "unknown",
+            "version_hints": version_hints,
+            "model_hints": model_hints,
+            "base_url_hints": base_url_hints,
+            "query_seeds": list(query_seeds.get(provider or family) or query_seeds.get(wrapper or "") or []),
+            "evidence": group[:MAX_SURFACE_EVIDENCE],
+        }
+        if resolution_level == "ambiguous":
+            candidate["surface_family"] = "unknown"
+        if resolution_level == "wrapper-resolved" and family == "unknown":
+            candidate["surface_family"] = "generic-wrapper"
+        candidates.append(candidate)
+
+    candidates = collapse_candidates(candidates)
+    candidates.sort(key=lambda item: (resolution_rank(item["resolution_level"]), item["surface_family"], item["primary_sdk"]))
+    for idx, candidate in enumerate(candidates, start=1):
+        candidate["surface_id"] = f"surface-{idx:03d}"
+    return candidates
+
+
+def unique_values(values: Sequence[Optional[str]]) -> list[str]:
+    result: list[str] = []
+    for value in values:
+        if not value:
+            continue
+        text = str(value)
+        if text not in result:
+            result.append(text)
+    return result
+
+
+def resolution_rank(level: str) -> int:
+    order = {
+        "provider-resolved": 0,
+        "family-resolved": 1,
+        "wrapper-resolved": 2,
+        "ambiguous": 3,
+    }
+    return order.get(level, 9)
+
+
+def confidence_rank(value: str) -> int:
+    return {"high": 0, "medium": 1, "low": 2}.get(value, 9)
+
+
+def merge_candidate(target: dict[str, Any], source: dict[str, Any]) -> None:
+    target["evidence"] = sorted(
+        list(target.get("evidence") or []) + list(source.get("evidence") or []),
+        key=lambda item: (str(item.get("path") or ""), int(item.get("line") or 0), str(item.get("label") or "")),
+    )[:MAX_SURFACE_EVIDENCE]
+    target["version_hints"] = unique_values(list(target.get("version_hints") or []) + list(source.get("version_hints") or []))
+    target["model_hints"] = unique_values(list(target.get("model_hints") or []) + list(source.get("model_hints") or []))
+    target["base_url_hints"] = unique_values(list(target.get("base_url_hints") or []) + list(source.get("base_url_hints") or []))
+    target["query_seeds"] = unique_values(list(target.get("query_seeds") or []) + list(source.get("query_seeds") or []))
+    if target.get("surface_family") in {"unknown", "generic-wrapper", "custom-http-llm"} and source.get("surface_family") not in {"unknown", "generic-wrapper", "custom-http-llm"}:
+        target["surface_family"] = source["surface_family"]
+    if target.get("provider") is None and source.get("provider") is not None:
+        target["provider"] = source["provider"]
+    if target.get("wrapper") is None and source.get("wrapper") is not None:
+        target["wrapper"] = source["wrapper"]
+    if target.get("primary_sdk") in {"unknown", "generic-wrapper"} and source.get("primary_sdk") not in {"unknown", "generic-wrapper"}:
+        target["primary_sdk"] = source["primary_sdk"]
+    if target.get("language") == "unknown" and source.get("language") != "unknown":
+        target["language"] = source["language"]
+    if confidence_rank(str(source.get("confidence") or "low")) < confidence_rank(str(target.get("confidence") or "low")):
+        target["confidence"] = source["confidence"]
+
+
+def collapse_candidates(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    deduped: list[dict[str, Any]] = []
+    for candidate in candidates:
+        duplicate = next(
+            (
+                item for item in deduped
+                if item.get("provider") == candidate.get("provider")
+                and item.get("wrapper") == candidate.get("wrapper")
+                and item.get("surface_family") == candidate.get("surface_family")
+                and item.get("resolution_level") == candidate.get("resolution_level")
+            ),
+            None,
+        )
+        if duplicate is None:
+            deduped.append(candidate)
+            continue
+        merge_candidate(duplicate, candidate)
+
+    candidates = deduped
+    changed = True
+    while changed:
+        changed = False
+        for source in list(candidates):
+            if source["resolution_level"] not in {"family-resolved", "ambiguous"}:
+                continue
+            source_paths = {str(item.get("path") or "") for item in source.get("evidence") or []}
+            target = next(
+                (
+                    item for item in candidates
+                    if item is not source
+                    and item["resolution_level"] in {"provider-resolved", "wrapper-resolved"}
+                    and (
+                        item.get("surface_family") == source.get("surface_family")
+                        or item.get("surface_family") == "generic-wrapper"
+                        or (
+                            source.get("surface_family") in {"custom-http-llm", "unknown"}
+                            and source_paths & {str(e.get("path") or "") for e in item.get("evidence") or []}
+                        )
+                    )
+                ),
+                None,
+            )
+            if target is None:
+                continue
+            merge_candidate(target, source)
+            candidates.remove(source)
+            changed = True
+            break
+
+    family_candidates = [item for item in candidates if item["resolution_level"] == "family-resolved"]
+    for source in list(family_candidates):
+        source_paths = {str(item.get("path") or "") for item in source.get("evidence") or []}
+        target = next(
+            (
+                item for item in candidates
+                if item is not source
+                and item["resolution_level"] == "family-resolved"
+                and source_paths & {str(e.get("path") or "") for e in item.get("evidence") or []}
+                and source.get("surface_family") in {"custom-http-llm", "unknown"}
+                and item.get("surface_family") not in {"custom-http-llm", "unknown"}
+            ),
+            None,
+        )
+        if target is None:
+            continue
+        merge_candidate(target, source)
+        candidates.remove(source)
+    return candidates
+
+
+def attach_surface_ids(evidence: list[dict[str, Any]], candidates: list[dict[str, Any]]) -> dict[tuple[str, int, str], str]:
+    mapping: dict[tuple[str, int, str], str] = {}
+    for candidate in candidates:
+        for item in candidate.get("evidence") or []:
+            mapping[(str(item.get("path")), int(item.get("line") or 0), str(item.get("label") or ""))] = str(candidate["surface_id"])
+    return mapping
+
+
+def build_findings(evidence: list[dict[str, Any]], candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    candidate_index = {candidate["surface_id"]: candidate for candidate in candidates}
+    evidence_to_surface = attach_surface_ids(evidence, candidates)
+    findings: list[dict[str, Any]] = []
+
+    for candidate in candidates:
+        if candidate["resolution_level"] == "ambiguous":
+            findings.append(
+                {
+                    "id": f"{candidate['surface_id']}-provider-ambiguous",
+                    "surface_id": candidate["surface_id"],
+                    "severity": "low",
+                    "kind": "provider-ambiguous",
+                    "resolution_level": candidate["resolution_level"],
+                    "surface_family": candidate["surface_family"],
+                    "provider": candidate.get("provider"),
+                    "wrapper": candidate.get("wrapper"),
+                    "title": "The underlying provider still cannot be resolved confidently",
+                    "current_behavior": "Local evidence points to an LLM-like integration surface, but it does not identify one concrete provider or wrapper with confidence.",
+                    "current_expectation": "Keep the surface ambiguous until stronger runtime evidence or Context7-backed docs narrow it safely.",
+                    "verification_status": "not-run",
+                    "recommended_change_shape": "Resolve the real runtime surface from imports, hosts, env wiring, or deployment config before making provider-specific freshness claims.",
+                    "evidence": candidate["evidence"][:4],
+                }
+            )
+        elif candidate["resolution_level"] == "wrapper-resolved" and not candidate.get("provider"):
+            findings.append(
+                {
+                    "id": f"{candidate['surface_id']}-gateway-gap",
+                    "surface_id": candidate["surface_id"],
+                    "severity": "low",
+                    "kind": "gateway-resolution-gap",
+                    "resolution_level": candidate["resolution_level"],
+                    "surface_family": candidate["surface_family"],
+                    "provider": candidate.get("provider"),
+                    "wrapper": candidate.get("wrapper"),
+                    "title": "A wrapper or gateway is clear, but the provider underneath it is still hidden",
+                    "current_behavior": "The repo exposes wrapper-level evidence without enough provider-specific evidence to claim one concrete upstream API surface.",
+                    "current_expectation": "Verify wrapper-owned docs first, then only escalate to provider-specific docs if pass-through behavior is visible.",
+                    "verification_status": "not-run",
+                    "recommended_change_shape": "Use Context7 on the wrapper first and record any provider pass-through parameters before making freshness judgments.",
+                    "evidence": candidate["evidence"][:4],
+                }
+            )
+
+    for item in evidence:
+        if item.get("kind") != "legacy-suspicion":
+            continue
+        key = (str(item.get("path")), int(item.get("line") or 0), str(item.get("label") or ""))
+        surface_id = evidence_to_surface.get(key)
+        if not surface_id:
+            continue
+        candidate = candidate_index[surface_id]
+        findings.append(
+            {
+                "id": f"{surface_id}-{item['label']}",
+                "surface_id": surface_id,
+                "severity": "low",
+                "kind": "legacy-suspicion",
+                "resolution_level": candidate["resolution_level"],
+                "surface_family": candidate["surface_family"],
+                "provider": candidate.get("provider"),
+                "wrapper": candidate.get("wrapper"),
+                "title": "A legacy-looking LLM API surface was found in executable code",
+                "current_behavior": item["snippet"],
+                "current_expectation": "Treat this as a migration clue until Context7 verifies whether the current official docs still support this exact surface.",
+                "verification_status": "triage-only",
+                "recommended_change_shape": "Run a verified Context7 pass for this surface before changing code or reporting it as stale.",
+                "evidence": [item],
+            }
+        )
+    return dedupe_findings(findings)
+
+
+def dedupe_findings(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    seen: set[tuple[str, str]] = set()
+    deduped: list[dict[str, Any]] = []
+    for finding in findings:
+        key = (str(finding.get("surface_id")), str(finding.get("kind")))
+        if key in seen and finding.get("kind") != "legacy-suspicion":
+            continue
+        seen.add(key)
+        deduped.append(finding)
+    return deduped
+
+
+def build_priorities(candidates: list[dict[str, Any]], findings: list[dict[str, Any]]) -> dict[str, list[str]]:
+    now: list[str] = []
+    next_actions: list[str] = []
+    later: list[str] = []
+
+    if any(item.get("kind") == "legacy-suspicion" for item in findings):
+        now.append("Use Context7 to verify the exact current SDK surface for each legacy-looking code path before calling anything stale or migrating syntax.")
+    if any(item.get("resolution_level") == "ambiguous" for item in candidates):
+        now.append("Resolve ambiguous LLM surfaces from imports, base URLs, env wiring, or runtime config before provider-specific freshness claims.")
+    if any(item.get("resolution_level") == "wrapper-resolved" and not item.get("provider") for item in candidates):
+        next_actions.append("Verify wrapper-owned semantics first, then only add provider-specific docs when pass-through behavior is explicit in code.")
+    if any(item.get("resolution_level") == "family-resolved" for item in candidates):
+        next_actions.append("Use family-level Context7 queries for openai-compatible / anthropic-messages / google-genai surfaces that do not expose one concrete vendor.")
+    if candidates:
+        later.append("Centralize LLM adapter ownership so future freshness audits resolve surfaces with fewer ambiguous clues.")
+    if not now:
+        now.append("No urgent freshness drift was verified locally. Treat this artifact as triage and escalate only after Context7 checks.")
+    if not next_actions:
+        next_actions.append("Run a verified agent-first pass only on the detected surfaces instead of querying every possible provider.")
+    if not later:
+        later.append("Add lightweight review guidance so new LLM integrations declare provider, wrapper, and base URL more explicitly.")
+    return {"now": now[:3], "next": next_actions[:3], "later": later[:3]}
+
+
+def build_repo_profile(root: Path, files: list[Path], candidates: list[dict[str, Any]]) -> dict[str, Any]:
+    languages = Counter()
+    package_managers: list[str] = []
+    manifests_seen: set[str] = set()
+    for path in files:
+        language = detect_language(path)
+        if language != "unknown":
+            languages[language] += 1
+        if path.name in PACKAGE_MANAGER_FILES:
+            manifests_seen.add(path.name)
+    for name, manager in PACKAGE_MANAGER_FILES.items():
+        if name in manifests_seen and manager not in package_managers:
+            package_managers.append(manager)
+    return {
+        "repo_root": str(root.resolve()),
+        "files_scanned": len(files),
+        "languages": [name for name, _count in languages.most_common()],
+        "package_managers": package_managers,
+        "surface_count": len(candidates),
+        "wrapper_count": len([item for item in candidates if item.get("wrapper")]),
+        "provider_count": len([item for item in candidates if item.get("provider")]),
+    }
+
+
+def build_summary(root: Path, files: list[Path], evidence: list[dict[str, Any]], candidates: list[dict[str, Any]]) -> dict[str, Any]:
+    findings = build_findings(evidence, candidates)
+    if not candidates:
+        audit_mode = "not-applicable"
+        limitations = ["No Python / TypeScript LLM SDK, wrapper, host, or family-level runtime surface was detected in executable files or manifests."]
+    else:
+        audit_mode = "triage"
+        limitations = [
+            "This is a triage artifact only. Current docs were not checked in this run.",
+            "High-severity provider-specific freshness claims are reserved for the agent-first Context7 verification flow.",
+        ]
     summary = {
         "skill": "llm-api-freshness-guard",
-        "version": "1.0.0",
+        "version": VERSION,
         "generated_at": utc_now(),
-        "mode": mode,
-        "repo_profile": {
-            "repo_root": str(root.resolve()),
-            "files_scanned": files_scanned,
-            "languages": [name for name, _count in language_counts.most_common()],
-            "providers_detected": detected_providers,
-            "provider_scores": dict(sorted(provider_scores.items())),
-            "wrappers_detected": detected_wrappers,
-            "version_hints": dict(sorted(version_hints.items())),
-            "model_hints": dict(sorted(model_hints.items())),
-            "base_url_hints": dict(sorted(base_url_hints.items())),
-        },
-        "doc_verification": list(doc_verification),
+        "audit_mode": audit_mode,
+        "target_scope": "repo",
+        "repo_profile": build_repo_profile(root, files, candidates),
+        "surface_resolution": candidates,
+        "doc_verification": [],
         "findings": findings,
-        "priorities": build_priorities(
-            providers=detected_providers,
-            wrappers=detected_wrappers,
-            ambiguity=not bool(detected_providers),
-            official_verdict_available=official_verdict_available,
-        ),
-        "scan_limitations": (
-            [
-                "Current provider docs were verified through supplied Context7-backed evidence.",
-                "Local suspicious patterns still need code-aware prioritization before any patching.",
-            ]
-            if official_verdict_available
-            else [
-                "This run is blocked because Context7-backed live-doc verification evidence was not provided.",
-                "Local suspicious patterns are triage clues, not final freshness verdicts.",
-            ]
-        ),
-        "dependency_status": dependency_status,
+        "priorities": build_priorities(candidates, findings) if candidates else {"now": [], "next": [], "later": []},
+        "scan_limitations": limitations,
+        "dependency_status": "ready",
         "bootstrap_actions": [],
-        "dependency_failures": dependency_failures,
+        "dependency_failures": [],
     }
     return summary
 
 
-def write_json(path: Path, data: object) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+def build_evidence_bundle(root: Path, files: list[Path], hints: dict[str, Any], evidence: list[dict[str, Any]], candidates: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "skill": "llm-api-freshness-guard",
+        "version": VERSION,
+        "generated_at": utc_now(),
+        "target_scope": "repo",
+        "repo_profile": build_repo_profile(root, files, candidates),
+        "query_seeds": hints.get("query_seeds") or {},
+        "surface_candidates": candidates,
+        "signals": evidence[:MAX_SIGNAL_OUTPUT],
+    }
 
 
-def write_text(path: Path, data: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(data, encoding="utf-8")
-
-
-def collect(root: Path, registry: ProviderRegistry, doc_verification: Sequence[dict]) -> dict:
-    provider_scores: Counter = Counter()
-    wrapper_scores: Counter = Counter()
-    version_hints: Dict[str, List[str]] = {}
-    model_hints: Dict[str, List[str]] = {}
-    base_url_hints: Dict[str, List[str]] = {}
-    evidence: List[dict] = []
-    suspicions: List[dict] = []
-    language_counts: Counter = Counter()
-    files_scanned = 0
-
-    for path in iter_files(root):
-        files_scanned += 1
+def collect(root: Path, hints: dict[str, Any]) -> dict[str, Any]:
+    files = iter_files(root)
+    evidence: list[dict[str, Any]] = []
+    aliases = load_manifest_aliases(hints)
+    for path in files:
         if path.name == "package.json":
-            extract_package_hints_from_package_json(path, root, provider_scores, wrapper_scores, version_hints, evidence, registry.package_hints)
+            extract_package_hints_from_package_json(path, root, aliases, evidence)
         elif path.name == "pyproject.toml":
-            extract_package_hints_from_pyproject(path, root, provider_scores, wrapper_scores, version_hints, evidence, registry.package_hints)
+            extract_package_hints_from_pyproject(path, root, aliases, evidence)
         elif path.name.startswith("requirements") and path.suffix == ".txt":
-            extract_package_hints_from_requirements(path, root, provider_scores, wrapper_scores, version_hints, evidence, registry.package_hints)
+            extract_package_hints_from_requirements(path, root, aliases, evidence)
 
         text = read_text(path)
-        if text is None:
+        if not text:
             continue
-        extract_patterns_from_text(
-            path=path,
-            root=root,
-            text=text,
-            provider_scores=provider_scores,
-            wrapper_scores=wrapper_scores,
-            model_hints=model_hints,
-            base_url_hints=base_url_hints,
-            evidence=evidence,
-            suspicions=suspicions,
-            language_counts=language_counts,
-            patterns=registry.patterns,
-            model_patterns=registry.model_patterns,
-            url_patterns=registry.url_patterns,
-        )
+        add_pattern_evidence(path, root, text.splitlines(), evidence)
 
-    grouped_suspicions = group_suspicions(suspicions)
-    summary = build_summary(
-        root=root,
-        files_scanned=files_scanned,
-        language_counts=language_counts,
-        provider_scores=provider_scores,
-        wrapper_scores=wrapper_scores,
-        version_hints=version_hints,
-        model_hints=model_hints,
-        base_url_hints=base_url_hints,
-        evidence=evidence,
-        grouped_suspicions=grouped_suspicions,
-        doc_verification=doc_verification,
-    )
-    signals = {
-        "generated_at": utc_now(),
-        "repo_root": str(root.resolve()),
-        "files_scanned": files_scanned,
-        "languages": [name for name, _count in language_counts.most_common()],
-        "provider_scores": dict(sorted(provider_scores.items())),
-        "wrapper_scores": dict(sorted(wrapper_scores.items())),
-        "version_hints": dict(sorted(version_hints.items())),
-        "model_hints": dict(sorted(model_hints.items())),
-        "base_url_hints": dict(sorted(base_url_hints.items())),
-        "signals": evidence[:1500],
-        "suspicious_groups": grouped_suspicions,
-    }
+    candidates = build_surface_candidates(evidence, hints.get("query_seeds") or {})
+    summary = build_summary(root, files, evidence, candidates)
+    evidence_bundle = build_evidence_bundle(root, files, hints, evidence, candidates)
     return {
-        "signals": signals,
+        "signals": evidence_bundle,
         "summary": summary,
-        "report": render_report(summary, grouped_suspicions),
-        "agent_brief": render_agent_brief(summary, grouped_suspicions),
+        "report": render_report(summary),
+        "agent_brief": render_agent_brief(summary),
     }
-
-
-def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Collect local LLM API signals for freshness audits.")
-    parser.add_argument("repo", help="Path to the repository or directory to scan.")
-    parser.add_argument("--provider-registry", help="Optional path to a provider registry JSON override.")
-    parser.add_argument("--doc-evidence-json", help="JSON file containing Context7-backed doc_verification evidence.")
-    parser.add_argument("--json-out", help="Write the raw signals JSON to this path.")
-    parser.add_argument("--summary-out", help="Write the freshness summary JSON to this path.")
-    parser.add_argument("--report-out", help="Write a baseline human report to this path.")
-    parser.add_argument("--agent-brief-out", help="Write a baseline agent brief to this path.")
-    parser.add_argument("--stdout", choices=["signals", "summary"], default="signals", help="What to print to stdout when no output path is given.")
-    return parser.parse_args(argv)
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
@@ -1107,20 +1232,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print(f"error: path is not a directory: {root}", file=sys.stderr)
         return 2
 
-    registry_path = Path(args.provider_registry).expanduser().resolve() if args.provider_registry else DEFAULT_PROVIDER_REGISTRY_PATH
+    hints_path = (
+        Path(args.provider_hints).expanduser().resolve()
+        if args.provider_hints
+        else Path(__file__).resolve().parent.parent / "assets" / "provider-hints.json"
+    )
     try:
-        registry = load_provider_registry(registry_path)
-    except RuntimeError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 2
-    try:
-        doc_verification = load_doc_evidence(args.doc_evidence_json)
+        hints = load_provider_hints(hints_path)
     except Exception as exc:
-        print(f"error: could not load doc evidence: {exc}", file=sys.stderr)
+        print(f"error: could not load provider hints: {exc}", file=sys.stderr)
         return 2
 
-    result = collect(root, registry, doc_verification)
-
+    result = collect(root, hints)
     if args.json_out:
         write_json(Path(args.json_out), result["signals"])
     if args.summary_out:
