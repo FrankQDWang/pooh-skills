@@ -22,6 +22,8 @@ The orchestrator expects the following current-run artifacts in the repo-root `.
 - The richer synthesis layer may read child human reports and agent briefs, but it must still treat the machine summary as the source of truth for state.
 - Child skills may use their own local scripts or wrappers internally, but that is not the orchestrator contract.
 - Shared tool versions come only from `.pooh-runtime/python-toolchain/uv.lock` and `.pooh-runtime/node-toolchain/pnpm-lock.yaml`.
+- Python audit CLIs come only from the shared `uv` `audit` dependency group; TS/Node audit CLIs come only from shared `pnpm` `devDependencies`.
+- `lychee` and `Vale` remain docs-only hard-dependency exceptions managed by the shared runtime, not by per-skill package manifests.
 
 ## Coverage statuses
 

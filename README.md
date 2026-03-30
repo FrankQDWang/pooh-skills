@@ -76,7 +76,8 @@ scripts/
 - `.repo-harness` 是纯输出目录，只保存当前 run 的 summary / report / brief / linkcheck / control-plane state 等工件，不放默认输入
 - `repo-health-orchestrator` 采用双层汇总：`repo-health-summary.json` 负责机器真相，`repo-health-evidence.json` 负责 cross-domain synthesis，最终 `repo-health-report.md` 与 `repo-health-agent-brief.md` 基于 evidence 生成
 - 所有 child skills 统一遵守 fail-fast bootstrap 合约：先 `preflight`，再尝试自动安装缺失依赖；安装失败时停止主审计，但仍写标准 blocked 工件
-- installable tools 统一由共享 `.pooh-runtime` 锁定管理：Python CLI 只经 `uv`，TS/Node CLI 只经 `pnpm`；`lychee` 与 `Vale` 是 docs-only 例外，由共享 runtime 统一管理
+- installable tools 统一由共享 `.pooh-runtime` 锁定管理：Python CLI 只经 `uv` 的 `audit` 依赖组，TS/Node CLI 只经 `pnpm` 的 `devDependencies`；这些都属于宿主侧共享审计工具链，不是应用运行时依赖
+- `lychee` 与 `Vale` 仍是 docs-only 硬依赖例外：由共享 runtime 按官方二进制安装方式统一管理，但不进入 `uv` / `pnpm` 工具链
 - 每个 child skill 运行期间都会写 `.repo-harness/<skill-id>-runtime.json`，供 orchestrator 和终端 control plane 显示 `PREFLIGHT / BOOTSTRAPPING / RUNNING / BLOCKED / COMPLETE / NOT APPLICABLE`
 - child skill 自己的 `scripts/run_all.sh` 可以继续作为本地 deterministic helper 独立使用，但不再属于 orchestrator 的公开契约
 - 旧 skill 的 wrapper 现在会先走共享 `.pooh-runtime` 合约；缺依赖时不会再伪装成“保守 baseline 成功”

@@ -403,7 +403,7 @@ def ensure_base_prerequisites(required_ecosystems: set[str]) -> tuple[set[str], 
 
 def ensure_python_toolchain(actions: list[dict[str, Any]]) -> list[dict[str, Any]]:
     PY_TOOLCHAIN_DIR.mkdir(parents=True, exist_ok=True)
-    command = ["uv", "sync", "--project", str(PY_TOOLCHAIN_DIR), "--locked"]
+    command = ["uv", "sync", "--project", str(PY_TOOLCHAIN_DIR), "--locked", "--only-group", "audit"]
     success, output = run_command(command, PY_TOOLCHAIN_DIR)
     actions.append(bootstrap_actions_entry("python-toolchain", "toolchain", "installed" if success else "failed", command, output))
     if success:

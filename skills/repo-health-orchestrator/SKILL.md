@@ -162,6 +162,12 @@ python3 scripts/render_control_plane.py \
 
 Before spawning any child subagents, bootstrap the union of all child `tools[]` and `runtime_features[]`.
 
+The shared `.pooh-runtime` toolchain is a host-side audit environment, not an app runtime:
+
+- Python audit CLIs come only from the `uv` `audit` dependency group
+- TS/Node audit CLIs come only from `pnpm` `devDependencies`
+- `lychee` and `Vale` remain docs-only hard-dependency exceptions managed by the shared runtime
+
 Use:
 
 ```bash

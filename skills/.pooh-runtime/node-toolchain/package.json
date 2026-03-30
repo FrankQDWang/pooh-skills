@@ -9,7 +9,7 @@
       "@ast-grep/cli"
     ]
   },
-  "dependencies": {
+  "devDependencies": {
     "@ast-grep/cli": "0.42.0",
     "@typescript-eslint/eslint-plugin": "8.57.2",
     "@typescript-eslint/parser": "8.57.2",
