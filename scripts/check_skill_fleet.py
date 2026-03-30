@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import sys
 from dataclasses import dataclass
@@ -22,6 +21,17 @@ REQUIRED_EVAL_HEADERS = (
     "false positive / regression cases",
 )
 REPO_HEALTH_EXTRA_EVAL_HEADERS = ("failure scenarios",)
+SHARED_REF_MAP = {
+    "output-contract.md": "shared-output-contract.md",
+    "reporting-style.md": "shared-reporting-style.md",
+    "runtime-artifact-contract.md": "shared-runtime-artifact-contract.md",
+}
+RUNTIME_MANIFEST_ALLOWED_KEYS = {
+    "schema_version",
+    "skill",
+    "runtime_features",
+    "tools",
+}
 LIVE_DOC_SKILLS = {
     "llm-api-freshness-guard",
     "pydantic-ai-temporal-hardgate",
@@ -56,6 +66,16 @@ def parse_args() -> argparse.Namespace:
 
 def read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8")
+
+
+def generated_shared_content(source_name: str, content: str) -> str:
+    return (
+        "<!-- GENERATED FILE. Edit shared/{name} and run "
+        "`python3 scripts/sync_shared_skill_refs.py --write`. -->\n\n{body}".format(
+            name=source_name,
+            body=content.rstrip() + "\n",
+        )
+    )
 
 
 def markdown_anchor_slug(heading: str) -> str:
@@ -232,11 +252,66 @@ def check_live_doc_contract(skill_name: str, skill_dir: Path, errors: list[Check
             errors.append(CheckError(skill_name, str(skill_dir / "SKILL.md"), f"Time-sensitive literal `{match.group(0)}` found in SKILL.md; keep volatile guidance in live-doc references instead."))
 
 
+def check_runtime_manifest(skill_name: str, skill_dir: Path, errors: list[CheckError]) -> None:
+    manifest_path = skill_dir / "assets" / "runtime-dependencies.json"
+    if not manifest_path.exists():
+        errors.append(CheckError(skill_name, str(manifest_path), "Missing assets/runtime-dependencies.json."))
+        return
+
+    try:
+        payload = json.loads(read_text(manifest_path))
+    except json.JSONDecodeError as exc:
+        errors.append(CheckError(skill_name, str(manifest_path), f"runtime-dependencies.json must be valid JSON: {exc}."))
+        return
+
+    extra_keys = sorted(set(payload) - RUNTIME_MANIFEST_ALLOWED_KEYS)
+    if extra_keys:
+        errors.append(CheckError(skill_name, str(manifest_path), f"runtime-dependencies.json has unsupported keys: {', '.join(extra_keys)}."))
+    if not isinstance(payload.get("schema_version"), str) or not payload.get("schema_version"):
+        errors.append(CheckError(skill_name, str(manifest_path), "runtime-dependencies.json must provide non-empty string `schema_version`."))
+    if payload.get("skill") != skill_name:
+        errors.append(CheckError(skill_name, str(manifest_path), f"runtime-dependencies.json `skill` must equal `{skill_name}`."))
+    for key in ("runtime_features", "tools"):
+        value = payload.get(key)
+        if not isinstance(value, list):
+            errors.append(CheckError(skill_name, str(manifest_path), f"runtime-dependencies.json `{key}` must be a list."))
+        elif any(not isinstance(item, str) for item in value):
+            errors.append(CheckError(skill_name, str(manifest_path), f"runtime-dependencies.json `{key}` must contain only strings."))
+
+
+def check_canonical_shared_refs(skill_name: str, skill_dir: Path, skill_md: str, errors: list[CheckError]) -> None:
+    repo_root = skill_dir.parents[1]
+    shared_dir = repo_root / "shared"
+    references_dir = skill_dir / "references"
+    for source_name, target_name in SHARED_REF_MAP.items():
+        source_path = shared_dir / source_name
+        target_path = references_dir / target_name
+        if not target_path.exists():
+            errors.append(CheckError(skill_name, str(target_path), f"Missing canonical shared reference `{target_name}`."))
+            continue
+        expected = generated_shared_content(source_name, read_text(source_path))
+        actual = read_text(target_path)
+        if actual != expected:
+            errors.append(CheckError(skill_name, str(target_path), f"`{target_name}` is out of sync with shared/{source_name}."))
+        if target_name not in skill_md:
+            errors.append(CheckError(skill_name, str(skill_dir / "SKILL.md"), f"SKILL.md must link to `references/{target_name}`."))
+
+
+def check_packaging_noise(skill_name: str, skill_dir: Path, errors: list[CheckError]) -> None:
+    for pycache_dir in skill_dir.rglob("__pycache__"):
+        errors.append(CheckError(skill_name, str(pycache_dir), "Do not commit `__pycache__` directories inside skills."))
+    for pyc_path in skill_dir.rglob("*.pyc"):
+        errors.append(CheckError(skill_name, str(pyc_path), "Do not commit `.pyc` files inside skills."))
+    agents_readme = skill_dir / "agents" / "README.md"
+    if agents_readme.exists():
+        errors.append(CheckError(skill_name, str(agents_readme), "Do not ship placeholder `agents/README.md`; either provide real agents metadata or omit the directory."))
+
+
 def check_skill(skill_dir: Path, mode: str) -> list[CheckError]:
     errors: list[CheckError] = []
     skill_name = skill_dir.name
     skill_md_path = skill_dir / "SKILL.md"
-    frontmatter, body_lines, _ = parse_frontmatter(skill_name, skill_md_path, errors)
+    frontmatter, body_lines, skill_md = parse_frontmatter(skill_name, skill_md_path, errors)
 
     name = frontmatter.get("name")
     if name and name != skill_name:
@@ -250,8 +325,13 @@ def check_skill(skill_dir: Path, mode: str) -> list[CheckError]:
 
     check_links(skill_name, skill_dir, errors)
     check_evals(skill_name, skill_dir, mode, errors)
-    if mode == "strict" and skill_name in LIVE_DOC_SKILLS:
-        check_live_doc_contract(skill_name, skill_dir, errors)
+    if mode == "strict":
+        check_runtime_manifest(skill_name, skill_dir, errors)
+        check_packaging_noise(skill_name, skill_dir, errors)
+        if frontmatter.get("description", "").startswith("Audits "):
+            check_canonical_shared_refs(skill_name, skill_dir, skill_md, errors)
+        if skill_name in LIVE_DOC_SKILLS:
+            check_live_doc_contract(skill_name, skill_dir, errors)
     return errors
 
 

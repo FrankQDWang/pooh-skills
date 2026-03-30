@@ -32,6 +32,7 @@ shared/
 - `llm-api-freshness-guard`: 面向 Python / TypeScript 仓库的 LLM API 新鲜度审计，先做本地 surface triage，再由 agent 按 `provider-resolved / family-resolved / wrapper-resolved / ambiguous` 归因并借助 Context7 做官方 freshness 验证；wrapper 只产出 triage，不再把未查文档的结果包装成 verified。
 - `error-governance-hardgate`: 面向 Python / TypeScript 仓库的公共错误契约治理审计，检查 Problem Details、structured error code、OpenAPI / AsyncAPI 对齐、outward leakage、SSOT / codegen drift 与 message-text branching。
 - `overdefensive-silent-failure-hardgate`: 面向 Python / TypeScript 仓库的过度防御与静默失败审计，检查 empty catch、swallow / continue、checker suppressions、silent defaults、maybe-value 扩散与 off-camera async loss。
+- `module-shape-hardgate`: 面向 Python / TypeScript 仓库的模块形状审计，检查 giant file、god module、低内聚职责混杂、过宽导出面、超长函数、重复热点与 fan-out hub；默认只检测和报告，不做自动重构。
 - `repo-health-orchestrator`: 面向整仓体检的汇总 skill，每次先清空 `.repo-harness`，先串行 bootstrap 共享锁定工具链，再并行启动 7 个 child audit subagents，维护一个终端实时 control plane，并在结束时先产出机器 rollup，再合成 cross-domain evidence、最终总报告和 agent brief。要求运行环境支持 Codex subagent，以及当前会话模型与推理强度继承语义。
 
 ## 安装
@@ -48,6 +49,7 @@ shared/
 ./scripts/install.sh llm-api-freshness-guard
 ./scripts/install.sh error-governance-hardgate
 ./scripts/install.sh overdefensive-silent-failure-hardgate
+./scripts/install.sh module-shape-hardgate
 ./scripts/install.sh repo-health-orchestrator
 ```
 
@@ -75,6 +77,7 @@ shared/
 ./scripts/install.sh --target codex llm-api-freshness-guard
 ./scripts/install.sh --target codex error-governance-hardgate
 ./scripts/install.sh --target codex overdefensive-silent-failure-hardgate
+./scripts/install.sh --target codex module-shape-hardgate
 ./scripts/install.sh --target codex repo-health-orchestrator
 ```
 
@@ -90,7 +93,7 @@ shared/
 - child skill 自己的 `scripts/run_all.sh` 可以继续作为本地 deterministic helper 独立使用，但不再属于 orchestrator 的公开契约
 - 旧 skill 的 wrapper 现在会先走共享 `.pooh-runtime` 合约；缺依赖时不会再伪装成“保守 baseline 成功”
 - Python 边界工具的唯一标准是 `Tach`；仓库不引入 `import-linter`
-- `error-governance-hardgate` 与 `overdefensive-silent-failure-hardgate` 是 standalone audits：遵守同一套 authoring / runtime contract，但当前不纳入 `repo-health-orchestrator`
+- `error-governance-hardgate`、`overdefensive-silent-failure-hardgate` 与 `module-shape-hardgate` 是 standalone audits：遵守同一套 authoring / runtime contract，但当前不纳入 `repo-health-orchestrator`
 
 ## Skill Authoring Contract
 
@@ -121,12 +124,13 @@ python3 scripts/check_skill_fleet.py --repo . --mode fast --json-out .repo-harne
 python3 scripts/check_skill_fleet.py --repo . --mode strict --json-out .repo-harness/skill-fleet-strictcheck.json
 python3 scripts/sync_shared_skill_refs.py --check
 python3 scripts/sync_shared_skill_refs.py --write
+python3 scripts/run_module_shape_fixture_regressions.py
 python3 scripts/run_repo_health_fixture_regressions.py
 bash scripts/run_skill_fleet_harness.sh . .repo-harness
 ```
 
 - `fast` 用于本地快速元检查：frontmatter、description 规范、行数预算、链接存在性、visible eval surface
-- `strict` 会额外检查 shared refs 同步、live-doc-sensitive skill 的引用入口，以及 orchestrator failure fixtures
+- `strict` 会额外检查 runtime manifest shape、canonical shared refs、打包噪音、live-doc-sensitive skill 的引用入口，以及 orchestrator failure fixtures
 - `shared/` 是仓库维护期的 canonical source，不是 skill 运行时依赖
 - `scripts/install.sh` 不会把根目录 `shared/` 安装到 `~/.codex/skills`
 - skill 真正使用的是各自目录下的 `references/shared-*.md`；这些文件由 `shared/` materialize 出来，安装后仍然自包含可用

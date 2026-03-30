@@ -14,6 +14,7 @@ python3 "$SCRIPT_DIR/check_skill_fleet.py" \
   --json-out "$OUT_DIR/skill-fleet-strictcheck.json"
 
 python3 "$SCRIPT_DIR/sync_shared_skill_refs.py" --check
+python3 "$SCRIPT_DIR/run_module_shape_fixture_regressions.py"
 python3 "$SCRIPT_DIR/run_repo_health_fixture_regressions.py"
 
 echo "Skill fleet harness passed."
