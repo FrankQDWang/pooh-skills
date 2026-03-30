@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0",
+  "skill": "controlled-cleanup-hardgate",
+  "runtime_features": [],
+  "tools": [
+    "ruff",
+    "basedpyright",
+    "tsc",
+    "typescript-eslint-stack",
+    "knip",
+    "ast-grep",
+    "lychee",
+    "vale"
+  ]
+}

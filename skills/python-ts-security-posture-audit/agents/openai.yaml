@@ -1,0 +1,4 @@
+display_name: Security Posture Audit
+short_description: uv + pnpm 依赖审计、Bandit、锁文件纪律与 ignore 治理审计
+default_prompt: Audit this repository's Python and TypeScript baseline security posture and write the standard summary, report, and agent brief.
+allow_implicit_invocation: true

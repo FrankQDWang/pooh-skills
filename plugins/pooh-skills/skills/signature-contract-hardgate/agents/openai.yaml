@@ -1,0 +1,6 @@
+interface:
+  display_name: "Signature Contract Hardgate"
+  short_description: "Python / TS 严格 contract gate 审计"
+  default_prompt: "Use $signature-contract-hardgate to audit this repository for signature-as-contract hard gates."
+policy:
+  allow_implicit_invocation: true

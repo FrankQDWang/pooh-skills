@@ -1,0 +1,4 @@
+display_name: Frontend Regression Audit
+short_description: 浏览器回归、边界 mock、a11y、视觉回归与 CI 工件审计
+default_prompt: Audit this repository's TypeScript frontend regression posture and write the standard summary, report, and agent brief.
+allow_implicit_invocation: true

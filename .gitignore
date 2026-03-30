@@ -11,3 +11,9 @@ skills/.pooh-runtime/node-toolchain/node_modules/
 skills/.pooh-runtime/bin/lychee
 skills/.pooh-runtime/bin/vale
 skills/.pooh-runtime/bin/.downloads/
+plugins/pooh-skills/skills/.pooh-runtime/.install.lock
+plugins/pooh-skills/skills/.pooh-runtime/python-toolchain/.venv/
+plugins/pooh-skills/skills/.pooh-runtime/node-toolchain/node_modules/
+plugins/pooh-skills/skills/.pooh-runtime/bin/lychee
+plugins/pooh-skills/skills/.pooh-runtime/bin/vale
+plugins/pooh-skills/skills/.pooh-runtime/bin/.downloads/

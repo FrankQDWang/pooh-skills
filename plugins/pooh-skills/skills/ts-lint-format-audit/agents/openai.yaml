@@ -1,0 +1,6 @@
+interface:
+  display_name: "TS Lint Format Audit"
+  short_description: "Biome、typed lint、workspace 覆盖与 suppression 治理审计"
+  default_prompt: "Use $ts-lint-format-audit to audit this repository for TypeScript lint and format governance, style-layer consolidation, typed lint coverage, and CI enforcement."
+policy:
+  allow_implicit_invocation: true

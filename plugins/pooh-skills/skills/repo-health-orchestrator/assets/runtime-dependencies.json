@@ -1,0 +1,8 @@
+{
+  "schema_version": "1.0",
+  "skill": "repo-health-orchestrator",
+  "runtime_features": [
+    "codex-subagents"
+  ],
+  "tools": []
+}

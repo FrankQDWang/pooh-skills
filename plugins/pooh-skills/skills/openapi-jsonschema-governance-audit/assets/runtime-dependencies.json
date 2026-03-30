@@ -1,0 +1,11 @@
+{
+  "schema_version": "1.0",
+  "skill": "openapi-jsonschema-governance-audit",
+  "runtime_features": [],
+  "tools": [
+    "redocly-cli",
+    "spectral-cli",
+    "ajv-cli",
+    "check-jsonschema"
+  ]
+}

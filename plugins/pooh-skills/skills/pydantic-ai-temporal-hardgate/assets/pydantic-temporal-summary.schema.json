@@ -1,0 +1,391 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Pydantic AI + Temporal Hardgate Summary",
+  "type": "object",
+  "required": [
+    "repo_profile",
+    "overall_verdict",
+    "doc_verification",
+    "gate_states",
+    "findings",
+    "dependency_status",
+    "bootstrap_actions",
+    "dependency_failures"
+  ],
+  "properties": {
+    "repo_profile": {
+      "type": "object",
+      "required": [
+        "languages",
+        "shape"
+      ],
+      "properties": {
+        "languages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "shape": {
+          "type": "string"
+        },
+        "workflow_surface": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "agent_surface": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "docs_surface": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "overall_verdict": {
+      "type": "string",
+      "enum": [
+        "not-applicable",
+        "scan-blocked",
+        "workflow-time-bomb",
+        "paper-guardrails",
+        "partially-contained",
+        "durable-harness"
+      ]
+    },
+    "doc_verification": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "subject",
+          "library",
+          "library_id",
+          "version_hint",
+          "queries",
+          "status",
+          "checked_at",
+          "source_ref",
+          "notes"
+        ],
+        "properties": {
+          "subject": { "type": "string" },
+          "library": { "type": "string" },
+          "library_id": { "type": "string" },
+          "version_hint": { "type": "string" },
+          "queries": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "status": {
+            "type": "string",
+            "enum": ["verified", "ambiguous", "failed", "skipped"]
+          },
+          "checked_at": { "type": "string" },
+          "source_ref": { "type": "string" },
+          "notes": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "gate_states": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "gate",
+          "state",
+          "severity",
+          "confidence",
+          "summary"
+        ],
+        "properties": {
+          "gate": {
+            "type": "string",
+            "enum": [
+              "workflow-determinism",
+              "sandbox-discipline",
+              "durable-agent-path",
+              "agent-freeze-drift",
+              "tool-contracts",
+              "dependency-contracts",
+              "validation-retry-path",
+              "verification-harness",
+              "doc-grounding",
+              "merge-governance"
+            ]
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "not-applicable",
+              "broken",
+              "unsafe",
+              "fragile",
+              "sound",
+              "hardened",
+              "unverified"
+            ]
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "critical",
+              "high",
+              "medium",
+              "low"
+            ]
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ]
+          },
+          "summary": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "gate",
+          "severity",
+          "confidence",
+          "current_state",
+          "target_state",
+          "locus",
+          "title",
+          "evidence_summary",
+          "decision",
+          "change_shape",
+          "validation",
+          "merge_gate",
+          "autofix_allowed"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "gate": {
+            "type": "string",
+            "enum": [
+              "workflow-determinism",
+              "sandbox-discipline",
+              "durable-agent-path",
+              "agent-freeze-drift",
+              "tool-contracts",
+              "dependency-contracts",
+              "validation-retry-path",
+              "verification-harness",
+              "doc-grounding",
+              "merge-governance"
+            ]
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "critical",
+              "high",
+              "medium",
+              "low"
+            ]
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ]
+          },
+          "current_state": {
+            "type": "string",
+            "enum": [
+              "not-applicable",
+              "broken",
+              "unsafe",
+              "fragile",
+              "sound",
+              "hardened",
+              "unverified"
+            ]
+          },
+          "target_state": {
+            "type": "string",
+            "enum": [
+              "fragile",
+              "sound",
+              "hardened"
+            ]
+          },
+          "locus": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "evidence_summary": {
+            "type": "string"
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "adopt",
+              "harden",
+              "replace",
+              "quarantine",
+              "remove",
+              "defer"
+            ]
+          },
+          "change_shape": {
+            "type": "string"
+          },
+          "validation": {
+            "type": "string"
+          },
+          "merge_gate": {
+            "type": "string",
+            "enum": [
+              "block-now",
+              "block-changed-files",
+              "warn-only",
+              "unverified"
+            ]
+          },
+          "autofix_allowed": {
+            "type": "boolean"
+          },
+          "notes": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "wrong_rules": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "unverified": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "dependency_status": {
+      "type": "string",
+      "enum": [
+        "ready",
+        "auto-installed",
+        "blocked"
+      ]
+    },
+    "bootstrap_actions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/bootstrapAction"
+      }
+    },
+    "dependency_failures": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/dependencyFailure"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "bootstrapAction": {
+      "type": "object",
+      "required": [
+        "name",
+        "kind",
+        "status",
+        "command",
+        "details"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "command": {
+          "type": "string"
+        },
+        "details": {
+          "type": "string"
+        }
+      }
+    },
+    "dependencyFailure": {
+      "type": "object",
+      "required": [
+        "name",
+        "kind",
+        "required_for",
+        "attempted_command",
+        "failure_reason",
+        "blocked_by_security",
+        "blocked_by_permissions",
+        "blocked_by_network"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "required_for": {
+          "type": "string"
+        },
+        "attempted_command": {
+          "type": "string"
+        },
+        "failure_reason": {
+          "type": "string"
+        },
+        "blocked_by_security": {
+          "type": "boolean"
+        },
+        "blocked_by_permissions": {
+          "type": "boolean"
+        },
+        "blocked_by_network": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

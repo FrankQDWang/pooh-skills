@@ -1,0 +1,10 @@
+{
+  "schema_version": "1.0",
+  "skill": "pydantic-ai-temporal-hardgate",
+  "runtime_features": [],
+  "tools": [
+    "ruff",
+    "basedpyright",
+    "semgrep"
+  ]
+}

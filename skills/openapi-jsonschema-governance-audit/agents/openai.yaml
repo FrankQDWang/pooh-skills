@@ -1,0 +1,4 @@
+display_name: Schema Governance Audit
+short_description: OpenAPI / JSON Schema source-of-truth、ruleset、diff gate 与 CI 证据审计
+default_prompt: Audit this repository's OpenAPI / JSON Schema governance surface and write the standard summary, report, and agent brief.
+allow_implicit_invocation: true

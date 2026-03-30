@@ -1,0 +1,384 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Module Shape Hardgate Summary",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "skill",
+    "generated_at",
+    "repo_root",
+    "repo_profile",
+    "threshold_profile",
+    "overall_verdict",
+    "summary_line",
+    "coverage",
+    "severity_counts",
+    "findings",
+    "dependency_status",
+    "bootstrap_actions",
+    "dependency_failures"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string"
+    },
+    "skill": {
+      "const": "module-shape-hardgate"
+    },
+    "generated_at": {
+      "type": "string"
+    },
+    "repo_root": {
+      "type": "string"
+    },
+    "repo_profile": {
+      "type": "object",
+      "required": [
+        "languages",
+        "python_files",
+        "typescript_files",
+        "exempt_files"
+      ],
+      "properties": {
+        "languages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "python_files": {
+          "type": "integer"
+        },
+        "typescript_files": {
+          "type": "integer"
+        },
+        "exempt_files": {
+          "type": "integer"
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "threshold_profile": {
+      "type": "object",
+      "required": [
+        "file_warn_nloc",
+        "file_block_nloc",
+        "function_warn_nloc",
+        "function_block_nloc",
+        "complexity_warn",
+        "complexity_block",
+        "fanout_warn",
+        "fanout_block",
+        "export_warn",
+        "export_block"
+      ],
+      "properties": {
+        "file_warn_nloc": {
+          "type": "integer"
+        },
+        "file_block_nloc": {
+          "type": "integer"
+        },
+        "function_warn_nloc": {
+          "type": "integer"
+        },
+        "function_block_nloc": {
+          "type": "integer"
+        },
+        "complexity_warn": {
+          "type": "integer"
+        },
+        "complexity_block": {
+          "type": "integer"
+        },
+        "fanout_warn": {
+          "type": "integer"
+        },
+        "fanout_block": {
+          "type": "integer"
+        },
+        "export_warn": {
+          "type": "integer"
+        },
+        "export_block": {
+          "type": "integer"
+        }
+      }
+    },
+    "overall_verdict": {
+      "type": "string",
+      "enum": [
+        "scan-blocked",
+        "not-applicable",
+        "split-before-merge",
+        "sprawling",
+        "contained",
+        "disciplined"
+      ]
+    },
+    "summary_line": {
+      "type": "string"
+    },
+    "coverage": {
+      "type": "object",
+      "required": [
+        "files_scanned",
+        "python_files",
+        "typescript_files",
+        "exempt_files"
+      ],
+      "properties": {
+        "files_scanned": {
+          "type": "integer"
+        },
+        "python_files": {
+          "type": "integer"
+        },
+        "typescript_files": {
+          "type": "integer"
+        },
+        "exempt_files": {
+          "type": "integer"
+        }
+      }
+    },
+    "severity_counts": {
+      "type": "object",
+      "required": [
+        "critical",
+        "high",
+        "medium",
+        "low"
+      ],
+      "properties": {
+        "critical": {
+          "type": "integer"
+        },
+        "high": {
+          "type": "integer"
+        },
+        "medium": {
+          "type": "integer"
+        },
+        "low": {
+          "type": "integer"
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "category",
+          "severity",
+          "confidence",
+          "title",
+          "path",
+          "line",
+          "evidence_summary",
+          "recommendation",
+          "merge_gate",
+          "decision",
+          "metrics"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "scan-blocker",
+              "oversized-file",
+              "long-function",
+              "hub-module",
+              "mixed-responsibility",
+              "export-surface-sprawl",
+              "duplication-cluster",
+              "god-module"
+            ]
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "critical",
+              "high",
+              "medium",
+              "low"
+            ]
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "line": {
+            "type": "integer"
+          },
+          "evidence_summary": {
+            "type": "string"
+          },
+          "recommendation": {
+            "type": "string"
+          },
+          "merge_gate": {
+            "type": "string",
+            "enum": [
+              "block-now",
+              "block-changed-files",
+              "warn-only",
+              "unverified"
+            ]
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "fix-scan",
+              "split",
+              "extract",
+              "narrow",
+              "separate",
+              "deduplicate",
+              "baseline",
+              "defer"
+            ]
+          },
+          "metrics": {
+            "type": "object"
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "immediate_actions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "next_actions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "later_actions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "assumptions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "dependency_status": {
+      "type": "string",
+      "enum": [
+        "ready",
+        "auto-installed",
+        "blocked"
+      ]
+    },
+    "bootstrap_actions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/bootstrapAction"
+      }
+    },
+    "dependency_failures": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/dependencyFailure"
+      }
+    }
+  },
+  "$defs": {
+    "bootstrapAction": {
+      "type": "object",
+      "required": [
+        "name",
+        "kind",
+        "status",
+        "command",
+        "details"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "command": {
+          "type": "string"
+        },
+        "details": {
+          "type": "string"
+        }
+      }
+    },
+    "dependencyFailure": {
+      "type": "object",
+      "required": [
+        "name",
+        "kind",
+        "required_for",
+        "attempted_command",
+        "failure_reason",
+        "blocked_by_security",
+        "blocked_by_permissions",
+        "blocked_by_network"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "required_for": {
+          "type": "string"
+        },
+        "attempted_command": {
+          "type": "string"
+        },
+        "failure_reason": {
+          "type": "string"
+        },
+        "blocked_by_security": {
+          "type": "boolean"
+        },
+        "blocked_by_permissions": {
+          "type": "boolean"
+        },
+        "blocked_by_network": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

@@ -7,3 +7,6 @@ python3 "$repo_root/scripts/check_skill_fleet.py" \
   --repo "$repo_root" \
   --mode fast \
   --json-out "$repo_root/.repo-harness/skill-fleet-fastcheck.json"
+python3 "$repo_root/scripts/check_repo_plugin.py" \
+  --repo "$repo_root" \
+  --json-out "$repo_root/.repo-harness/repo-plugin-check.json"

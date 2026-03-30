@@ -1,0 +1,365 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Dependency Audit Summary",
+  "type": "object",
+  "required": [
+    "repo_profile",
+    "tool_coverage",
+    "overall_verdict",
+    "findings",
+    "dependency_status",
+    "bootstrap_actions",
+    "dependency_failures"
+  ],
+  "properties": {
+    "repo_profile": {
+      "type": "object",
+      "required": [
+        "languages",
+        "monorepo_shape",
+        "package_managers"
+      ],
+      "properties": {
+        "languages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "monorepo_shape": {
+          "type": "string"
+        },
+        "package_managers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "source_roots": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "workspace_roots": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "major_blockers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "tool_coverage": {
+      "type": "object",
+      "required": [
+        "chosen_tools",
+        "skipped_tools"
+      ],
+      "properties": {
+        "chosen_tools": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "tool",
+              "rationale"
+            ],
+            "properties": {
+              "tool": {
+                "type": "string",
+                "enum": [
+                  "tach",
+                  "dependency-cruiser",
+                  "knip",
+                  "manual"
+                ]
+              },
+              "rationale": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "skipped_tools": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "tool",
+              "reason"
+            ],
+            "properties": {
+              "tool": {
+                "type": "string",
+                "enum": [
+                  "tach",
+                  "dependency-cruiser",
+                  "knip"
+                ]
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "overall_verdict": {
+      "type": "string",
+      "enum": [
+        "scan-blocked",
+        "baseline-needed",
+        "cleanup-first",
+        "boundary-hardening",
+        "incremental-governance",
+        "well-governed"
+      ]
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "tool",
+          "category",
+          "severity",
+          "confidence",
+          "scope",
+          "title",
+          "evidence_summary",
+          "decision",
+          "recommended_change_shape",
+          "validation_checks",
+          "autofix_allowed"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "tool": {
+            "type": "string",
+            "enum": [
+              "tach",
+              "dependency-cruiser",
+              "knip",
+              "multiple",
+              "manual"
+            ]
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "scan-blocker",
+              "config-gap",
+              "architecture-violation",
+              "cycle",
+              "dependency-declaration-gap",
+              "unused-file",
+              "unused-dependency",
+              "unused-export",
+              "unresolved-import",
+              "orphan-or-isolated-module"
+            ]
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "critical",
+              "high",
+              "medium",
+              "low"
+            ]
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ]
+          },
+          "scope": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "evidence_summary": {
+            "type": "string"
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "fix-config",
+              "create-baseline",
+              "harden",
+              "replace",
+              "remove",
+              "quarantine",
+              "defer"
+            ]
+          },
+          "recommended_change_shape": {
+            "type": "string"
+          },
+          "validation_checks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "autofix_allowed": {
+            "type": "boolean"
+          },
+          "notes": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "immediate_actions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "next_actions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "later_actions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "safe_automation": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "avoid_now": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "assumptions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "dependency_status": {
+      "type": "string",
+      "enum": [
+        "ready",
+        "auto-installed",
+        "blocked"
+      ]
+    },
+    "bootstrap_actions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/bootstrapAction"
+      }
+    },
+    "dependency_failures": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/dependencyFailure"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "bootstrapAction": {
+      "type": "object",
+      "required": [
+        "name",
+        "kind",
+        "status",
+        "command",
+        "details"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "command": {
+          "type": "string"
+        },
+        "details": {
+          "type": "string"
+        }
+      }
+    },
+    "dependencyFailure": {
+      "type": "object",
+      "required": [
+        "name",
+        "kind",
+        "required_for",
+        "attempted_command",
+        "failure_reason",
+        "blocked_by_security",
+        "blocked_by_permissions",
+        "blocked_by_network"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "required_for": {
+          "type": "string"
+        },
+        "attempted_command": {
+          "type": "string"
+        },
+        "failure_reason": {
+          "type": "string"
+        },
+        "blocked_by_security": {
+          "type": "boolean"
+        },
+        "blocked_by_permissions": {
+          "type": "boolean"
+        },
+        "blocked_by_network": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

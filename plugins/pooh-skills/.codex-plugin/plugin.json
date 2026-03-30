@@ -1,0 +1,39 @@
+{
+  "name": "pooh-skills",
+  "version": "0.1.0",
+  "description": "Unified Codex plugin for the Pooh Skills audit fleet.",
+  "author": {
+    "name": "frankqdwang",
+    "email": "wang15850317595@163.com",
+    "url": "https://github.com/FrankQDWang/pooh-skills"
+  },
+  "homepage": "https://github.com/FrankQDWang/pooh-skills",
+  "repository": "https://github.com/FrankQDWang/pooh-skills",
+  "license": "UNLICENSED",
+  "keywords": [
+    "codex",
+    "plugin",
+    "repo-health",
+    "audit",
+    "governance"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Pooh Skills",
+    "shortDescription": "One Codex plugin for full-fleet repository health audits.",
+    "longDescription": "Pooh Skills packages the repo-health orchestrator and its 15 audit workers into one repo-local Codex plugin with a single public entrypoint.",
+    "developerName": "frankqdwang",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/FrankQDWang/pooh-skills",
+    "defaultPrompt": [
+      "Use $repo-health-orchestrator to run one full repository health audit.",
+      "Use $repo-health-orchestrator to produce one prioritized action queue for this repo.",
+      "Use $repo-health-orchestrator to show full-fleet coverage, blockers, and top actions."
+    ],
+    "brandColor": "#1F6F5F"
+  }
+}

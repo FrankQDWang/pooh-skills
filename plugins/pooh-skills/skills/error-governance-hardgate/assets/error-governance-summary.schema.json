@@ -1,0 +1,363 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Error Governance Hardgate Summary",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "skill",
+    "generated_at",
+    "repo_root",
+    "overall_verdict",
+    "summary_line",
+    "coverage",
+    "severity_counts",
+    "gate_states",
+    "findings",
+    "top_actions",
+    "dependency_status",
+    "bootstrap_actions",
+    "dependency_failures"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string"
+    },
+    "skill": {
+      "const": "error-governance-hardgate"
+    },
+    "generated_at": {
+      "type": "string"
+    },
+    "repo_root": {
+      "type": "string"
+    },
+    "overall_verdict": {
+      "type": "string",
+      "enum": [
+        "healthy",
+        "watch",
+        "blocked",
+        "partial",
+        "not-applicable"
+      ]
+    },
+    "summary_line": {
+      "type": "string"
+    },
+    "language_profile": {
+      "type": "object",
+      "properties": {
+        "languages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "frameworks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "protocols": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "coverage": {
+      "type": "object",
+      "required": [
+        "files_scanned",
+        "relevant_files",
+        "openapi_surfaces",
+        "asyncapi_surfaces",
+        "catalogs_found",
+        "generated_type_surfaces"
+      ],
+      "properties": {
+        "files_scanned": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "relevant_files": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "openapi_surfaces": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "asyncapi_surfaces": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "catalogs_found": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "generated_type_surfaces": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "severity_counts": {
+      "type": "object",
+      "required": [
+        "critical",
+        "high",
+        "medium",
+        "low"
+      ],
+      "properties": {
+        "critical": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "high": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "medium": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "low": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "gate_states": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "status",
+          "summary"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "watch",
+              "fail",
+              "not-applicable",
+              "unverified"
+            ]
+          },
+          "severity_bias": {
+            "type": "string",
+            "enum": [
+              "critical",
+              "high",
+              "medium",
+              "low"
+            ]
+          },
+          "summary": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "scan_blockers": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "category",
+          "severity",
+          "confidence",
+          "scope",
+          "title",
+          "path",
+          "line",
+          "evidence_summary",
+          "decision",
+          "recommended_change_shape",
+          "validation_checks",
+          "merge_gate"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "critical",
+              "high",
+              "medium",
+              "low"
+            ]
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ]
+          },
+          "scope": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "line": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "evidence_summary": {
+            "type": "string"
+          },
+          "decision": {
+            "type": "string"
+          },
+          "recommended_change_shape": {
+            "type": "string"
+          },
+          "validation_checks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "merge_gate": {
+            "type": "string",
+            "enum": [
+              "block-now",
+              "fix-before-release",
+              "fix-next",
+              "watch",
+              "document-only"
+            ]
+          },
+          "notes": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "top_actions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "dependency_status": {
+      "type": "string"
+    },
+    "bootstrap_actions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/bootstrapAction"
+      }
+    },
+    "dependency_failures": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/dependencyFailure"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "bootstrapAction": {
+      "type": "object",
+      "required": [
+        "name",
+        "kind",
+        "status",
+        "command",
+        "details"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "command": {
+          "type": "string"
+        },
+        "details": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "dependencyFailure": {
+      "type": "object",
+      "required": [
+        "name",
+        "kind",
+        "required_for",
+        "attempted_command",
+        "failure_reason",
+        "blocked_by_security",
+        "blocked_by_permissions",
+        "blocked_by_network"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "required_for": {
+          "type": "string"
+        },
+        "attempted_command": {
+          "type": "string"
+        },
+        "failure_reason": {
+          "type": "string"
+        },
+        "blocked_by_security": {
+          "type": "boolean"
+        },
+        "blocked_by_permissions": {
+          "type": "boolean"
+        },
+        "blocked_by_network": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,0 +1,192 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OpenAPI JSON Schema Governance Audit Summary",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "skill",
+    "status",
+    "verdict",
+    "repo_scope",
+    "package_managers",
+    "categories",
+    "findings"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "skill": {
+      "type": "string",
+      "const": "openapi-jsonschema-governance-audit"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "complete",
+        "blocked",
+        "not-applicable"
+      ]
+    },
+    "verdict": {
+      "type": "string",
+      "enum": [
+        "missing",
+        "theater",
+        "partial",
+        "enforced",
+        "hardened",
+        "unverified",
+        "blocked",
+        "not-applicable"
+      ]
+    },
+    "repo_scope": {
+      "type": "string"
+    },
+    "package_managers": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "enum": [
+          "uv",
+          "pnpm"
+        ]
+      }
+    },
+    "summary": {
+      "type": "string"
+    },
+    "blocked_reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "categories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "title",
+          "state",
+          "confidence",
+          "evidence"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": [
+              "artifact-health",
+              "ruleset-governance",
+              "source-of-truth-discipline",
+              "breaking-change-detection",
+              "ci-publication-surface"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "missing",
+              "theater",
+              "partial",
+              "enforced",
+              "hardened",
+              "unverified",
+              "blocked",
+              "not-applicable"
+            ]
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ]
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "category",
+          "severity",
+          "confidence",
+          "title",
+          "evidence",
+          "recommended_change_shape"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "artifact-health",
+              "ruleset-governance",
+              "source-of-truth-discipline",
+              "breaking-change-detection",
+              "ci-publication-surface"
+            ]
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "critical",
+              "high",
+              "medium",
+              "low"
+            ]
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "recommended_change_shape": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

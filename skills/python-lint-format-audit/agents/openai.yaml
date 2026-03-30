@@ -1,0 +1,6 @@
+interface:
+  display_name: "Python Lint Format Audit"
+  short_description: "Python lint / format 收敛、Ruff 迁移与 gate 治理审计"
+  default_prompt: "Use $python-lint-format-audit to audit this repository for Python lint and format governance, Ruff migration shape, suppression discipline, and CI enforcement."
+policy:
+  allow_implicit_invocation: true

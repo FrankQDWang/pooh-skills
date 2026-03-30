@@ -1,0 +1,14 @@
+{
+  "schema_version": "1.0",
+  "skill": "signature-contract-hardgate",
+  "runtime_features": [],
+  "tools": [
+    "ruff",
+    "basedpyright",
+    "tach",
+    "tsc",
+    "typescript-eslint-stack",
+    "dependency-cruiser",
+    "semgrep"
+  ]
+}

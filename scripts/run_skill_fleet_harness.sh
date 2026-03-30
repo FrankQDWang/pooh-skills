@@ -15,7 +15,11 @@ python3 "$SCRIPT_DIR/check_skill_fleet.py" \
   --json-out "$OUT_DIR/skill-fleet-strictcheck.json"
 
 python3 "$SCRIPT_DIR/sync_shared_skill_refs.py" --check
+python3 "$SCRIPT_DIR/check_repo_plugin.py" \
+  --repo "$TARGET_REPO" \
+  --json-out "$OUT_DIR/repo-plugin-check.json"
 python3 "$SCRIPT_DIR/run_module_shape_fixture_regressions.py"
+python3 "$SCRIPT_DIR/run_new_audit_fixture_regressions.py"
 python3 "$SCRIPT_DIR/run_repo_health_fixture_regressions.py"
 python3 "$SCRIPT_DIR/run_child_wrapper_smoke_matrix.py"
 python3 "$SCRIPT_DIR/run_control_plane_renderer_regressions.py"

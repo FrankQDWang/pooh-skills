@@ -1,0 +1,10 @@
+{
+  "schema_version": "1.0",
+  "skill": "pythonic-ddd-drift-audit",
+  "runtime_features": [],
+  "tools": [
+    "tach",
+    "ruff",
+    "basedpyright"
+  ]
+}

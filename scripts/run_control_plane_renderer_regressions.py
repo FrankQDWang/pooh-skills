@@ -182,6 +182,7 @@ def main() -> int:
                 "ACTION QUEUE",
                 "CHILD SUBAGENT SKILLS (Workers)",
                 "Audit-Dependencies",
+                "Audit-Python-Lint",
                 "run_id: renderer-regression-run",
             ],
         )
@@ -192,6 +193,7 @@ def main() -> int:
                 "MAIN ORCHESTRATOR",
                 "ACTION QUEUE",
                 "Audit-Contracts",
+                "Audit-Frontend-Regression",
                 "Status:",
             ],
         )
@@ -220,6 +222,7 @@ def main() -> int:
                 "coverage_status: partial",
                 "Missing: controlled-cleanup-hardgate",
                 "Invalid: overdefensive-silent-failure-hardgate",
+                "Audit-Security-Posture",
                 "Fix structure first.",
             ],
         )
@@ -230,6 +233,7 @@ def main() -> int:
                 "COMPLETE (Watch Items Active)",
                 "coverage_status: partial",
                 "Audit-Silent-Failure",
+                "Audit-TS-Lint",
                 "Fix structure first.",
             ],
         )

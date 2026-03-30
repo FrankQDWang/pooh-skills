@@ -1,0 +1,8 @@
+{
+  "schema_version": "1.0",
+  "skill": "python-ts-security-posture-audit",
+  "runtime_features": [],
+  "tools": [
+    "bandit"
+  ]
+}

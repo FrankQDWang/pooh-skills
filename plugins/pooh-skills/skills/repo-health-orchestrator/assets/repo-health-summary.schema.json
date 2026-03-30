@@ -1,0 +1,239 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Repo Health Summary",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "run_id",
+    "skill",
+    "generated_at",
+    "repo_root",
+    "overall_health",
+    "coverage_status",
+    "summary_line",
+    "skill_runs",
+    "dependency_status",
+    "bootstrap_actions",
+    "dependency_failures"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "skill": {
+      "const": "repo-health-orchestrator"
+    },
+    "generated_at": {
+      "type": "string"
+    },
+    "repo_root": {
+      "type": "string"
+    },
+    "overall_health": {
+      "type": "string"
+    },
+    "coverage_status": {
+      "type": "string"
+    },
+    "summary_line": {
+      "type": "string"
+    },
+    "skill_runs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "run_id",
+          "domain",
+          "skill_name",
+          "status",
+          "summary_path",
+          "report_path",
+          "agent_brief_path",
+          "severity_counts",
+          "dependency_status"
+        ],
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "domain": {
+            "type": "string"
+          },
+          "skill_name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "summary_path": {
+            "type": "string"
+          },
+          "report_path": {
+            "type": "string"
+          },
+          "agent_brief_path": {
+            "type": "string"
+          },
+          "dependency_status": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "auto-installed",
+              "blocked"
+            ]
+          },
+          "child_verdict": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "dependency_failures": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/dependencyFailure"
+            }
+          },
+          "severity_counts": {
+            "type": "object",
+            "properties": {
+              "critical": {
+                "type": "integer"
+              },
+              "high": {
+                "type": "integer"
+              },
+              "medium": {
+                "type": "integer"
+              },
+              "low": {
+                "type": "integer"
+              }
+            }
+          },
+          "top_categories": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "top_actions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "missing_skills": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "invalid_summaries": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "dependency_status": {
+      "type": "string",
+      "enum": [
+        "ready",
+        "auto-installed",
+        "blocked"
+      ]
+    },
+    "bootstrap_actions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/bootstrapAction"
+      }
+    },
+    "dependency_failures": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/dependencyFailure"
+      }
+    }
+  },
+  "$defs": {
+    "bootstrapAction": {
+      "type": "object",
+      "required": [
+        "name",
+        "kind",
+        "status",
+        "command",
+        "details"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "command": {
+          "type": "string"
+        },
+        "details": {
+          "type": "string"
+        }
+      }
+    },
+    "dependencyFailure": {
+      "type": "object",
+      "required": [
+        "name",
+        "kind",
+        "required_for",
+        "attempted_command",
+        "failure_reason",
+        "blocked_by_security",
+        "blocked_by_permissions",
+        "blocked_by_network"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "required_for": {
+          "type": "string"
+        },
+        "attempted_command": {
+          "type": "string"
+        },
+        "failure_reason": {
+          "type": "string"
+        },
+        "blocked_by_security": {
+          "type": "boolean"
+        },
+        "blocked_by_permissions": {
+          "type": "boolean"
+        },
+        "blocked_by_network": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

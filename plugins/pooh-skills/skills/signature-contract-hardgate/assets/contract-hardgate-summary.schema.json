@@ -1,0 +1,345 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Signature Contract Hardgate Summary",
+  "type": "object",
+  "required": [
+    "repo_profile",
+    "overall_verdict",
+    "gate_states",
+    "findings",
+    "dependency_status",
+    "bootstrap_actions",
+    "dependency_failures"
+  ],
+  "properties": {
+    "repo_profile": {
+      "type": "object",
+      "required": [
+        "languages",
+        "shape"
+      ],
+      "properties": {
+        "languages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "shape": {
+          "type": "string"
+        },
+        "contract_surface": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "api_schema_sources": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "overall_verdict": {
+      "type": "string",
+      "enum": [
+        "contract-theater",
+        "soft-gates",
+        "real-gates",
+        "hard-harness"
+      ]
+    },
+    "gate_states": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "gate",
+          "state",
+          "severity",
+          "confidence",
+          "summary"
+        ],
+        "properties": {
+          "gate": {
+            "type": "string",
+            "enum": [
+              "contract-surface",
+              "compile-time-gates",
+              "runtime-boundary-validation",
+              "error-contract",
+              "escape-hatch-governance",
+              "architecture-boundaries",
+              "contract-tests",
+              "merge-governance"
+            ]
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "missing",
+              "theater",
+              "partial",
+              "enforced",
+              "hardened",
+              "unverified"
+            ]
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "critical",
+              "high",
+              "medium",
+              "low"
+            ]
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ]
+          },
+          "summary": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "domain",
+          "gate",
+          "severity",
+          "confidence",
+          "current_state",
+          "target_state",
+          "title",
+          "evidence_summary",
+          "decision",
+          "change_shape",
+          "validation",
+          "merge_gate",
+          "autofix_allowed"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "domain": {
+            "type": "string"
+          },
+          "gate": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "critical",
+              "high",
+              "medium",
+              "low"
+            ]
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ]
+          },
+          "current_state": {
+            "type": "string",
+            "enum": [
+              "missing",
+              "theater",
+              "partial",
+              "enforced",
+              "hardened",
+              "unverified"
+            ]
+          },
+          "target_state": {
+            "type": "string",
+            "enum": [
+              "partial",
+              "enforced",
+              "hardened"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "evidence_summary": {
+            "type": "string"
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "adopt",
+              "harden",
+              "quarantine",
+              "replace",
+              "remove",
+              "defer"
+            ]
+          },
+          "change_shape": {
+            "type": "string"
+          },
+          "validation": {
+            "type": "string"
+          },
+          "merge_gate": {
+            "type": "string",
+            "enum": [
+              "block-now",
+              "block-changed-files",
+              "warn-only",
+              "unverified"
+            ]
+          },
+          "autofix_allowed": {
+            "type": "boolean"
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "assumptions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "unverified": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "immediate_actions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "next_actions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "later_actions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "dependency_status": {
+      "type": "string",
+      "enum": [
+        "ready",
+        "auto-installed",
+        "blocked"
+      ]
+    },
+    "bootstrap_actions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/bootstrapAction"
+      }
+    },
+    "dependency_failures": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/dependencyFailure"
+      }
+    }
+  },
+  "$defs": {
+    "bootstrapAction": {
+      "type": "object",
+      "required": [
+        "name",
+        "kind",
+        "status",
+        "command",
+        "details"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "command": {
+          "type": "string"
+        },
+        "details": {
+          "type": "string"
+        }
+      }
+    },
+    "dependencyFailure": {
+      "type": "object",
+      "required": [
+        "name",
+        "kind",
+        "required_for",
+        "attempted_command",
+        "failure_reason",
+        "blocked_by_security",
+        "blocked_by_permissions",
+        "blocked_by_network"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "required_for": {
+          "type": "string"
+        },
+        "attempted_command": {
+          "type": "string"
+        },
+        "failure_reason": {
+          "type": "string"
+        },
+        "blocked_by_security": {
+          "type": "boolean"
+        },
+        "blocked_by_permissions": {
+          "type": "boolean"
+        },
+        "blocked_by_network": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}
