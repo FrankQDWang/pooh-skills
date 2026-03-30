@@ -21,7 +21,7 @@ pooh_runtime_prepare() {
   POOH_RUNTIME_MANIFEST_PATH="$manifest_path"
   POOH_RUNTIME_ROOT="$(CDPATH= cd -- "$script_dir/../../.pooh-runtime" && pwd)"
   POOH_RUNTIME_BIN="$POOH_RUNTIME_ROOT/bin/runtime_contract.py"
-  POOH_RUNTIME_STATE="$out_dir/${skill_id}-runtime.json"
+  POOH_RUNTIME_STATE="$out_dir/runtime.json"
   POOH_RUNTIME_PY_BIN="$POOH_RUNTIME_ROOT/python-toolchain/.venv/bin"
   POOH_RUNTIME_NODE_BIN="$POOH_RUNTIME_ROOT/node-toolchain/node_modules/.bin"
   POOH_RUNTIME_DOCS_BIN="$POOH_RUNTIME_ROOT/bin"

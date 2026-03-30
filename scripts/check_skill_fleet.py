@@ -4,12 +4,15 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
+
+sys.dont_write_bytecode = True
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SKILLS_DIR = REPO_ROOT / "skills"
@@ -47,6 +50,7 @@ TIME_SENSITIVE_PATTERNS = (
 LINK_RE = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
 HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$", re.MULTILINE)
 CASE_LINE_RE = re.compile(r"^\s*(?:[-*]|\d+\.)\s+\S")
+ORCHESTRATOR_EXEMPTIONS_FILE = "orchestrator-exempt-skills.json"
 
 
 @dataclass
@@ -241,7 +245,7 @@ def check_live_doc_contract(skill_name: str, skill_dir: Path, errors: list[Check
     if run_all_path.exists():
         run_all_text = read_text(run_all_path)
         if skill_name == "llm-api-freshness-guard":
-            if "llm-api-surface-evidence.json" not in run_all_text or "triage" not in run_all_text:
+            if "surface-evidence.json" not in run_all_text or "triage" not in run_all_text:
                 errors.append(CheckError(skill_name, str(run_all_path), "llm-api-freshness-guard run_all.sh must clearly operate in triage mode and emit the local evidence bundle."))
         elif "--doc-evidence-json" not in run_all_text:
             errors.append(CheckError(skill_name, str(run_all_path), "run_all.sh must accept --doc-evidence-json for live-doc-sensitive skills."))
@@ -341,6 +345,94 @@ def discover_skills(skills_dir: Path) -> Iterable[Path]:
             yield child
 
 
+def load_catalog_module(repo: Path):
+    catalog_path = repo / "skills" / "repo-health-orchestrator" / "scripts" / "repo_health_catalog.py"
+    spec = importlib.util.spec_from_file_location("repo_health_catalog_contract", catalog_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Could not load orchestrator catalog from {catalog_path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module, catalog_path
+
+
+def load_orchestrator_exemptions(repo: Path) -> tuple[set[str], Path]:
+    exemptions_path = repo / "skills" / "repo-health-orchestrator" / "assets" / ORCHESTRATOR_EXEMPTIONS_FILE
+    if not exemptions_path.exists():
+        return set(), exemptions_path
+    data = json.loads(read_text(exemptions_path))
+    if not isinstance(data, dict) or not isinstance(data.get("exempt_audit_skills"), list):
+        raise RuntimeError(f"{exemptions_path} must contain an `exempt_audit_skills` list.")
+    return {
+        item
+        for item in data.get("exempt_audit_skills", [])
+        if isinstance(item, str) and item
+    }, exemptions_path
+
+
+def audit_skill_names(skills_dir: Path) -> set[str]:
+    names: set[str] = set()
+    for skill_dir in discover_skills(skills_dir):
+        temp_errors: list[CheckError] = []
+        frontmatter, _, _ = parse_frontmatter(skill_dir.name, skill_dir / "SKILL.md", temp_errors)
+        if frontmatter.get("description", "").startswith("Audits "):
+            names.add(skill_dir.name)
+    return names
+
+
+def check_orchestrator_catalog(repo: Path, skills_dir: Path, errors: list[CheckError]) -> None:
+    try:
+        catalog_module, catalog_path = load_catalog_module(repo)
+        exempt_skills, exemptions_path = load_orchestrator_exemptions(repo)
+    except Exception as exc:
+        errors.append(CheckError("repo-health-orchestrator", str(repo / "skills" / "repo-health-orchestrator"), str(exc)))
+        return
+
+    catalog_skills = set(getattr(catalog_module, "SKILL_NAMES", ()))
+    actual_audit_skills = audit_skill_names(skills_dir)
+    unmanaged_skills = sorted(actual_audit_skills - catalog_skills - exempt_skills)
+    unknown_catalog_skills = sorted(catalog_skills - actual_audit_skills)
+    unknown_exemptions = sorted(exempt_skills - actual_audit_skills)
+
+    for skill_name in unmanaged_skills:
+        errors.append(
+            CheckError(
+                "repo-health-orchestrator",
+                str(catalog_path),
+                f"Audit skill `{skill_name}` is not registered in repo_health_catalog.py and is not exempted in {ORCHESTRATOR_EXEMPTIONS_FILE}.",
+            )
+        )
+
+    for skill_name in unknown_catalog_skills:
+        errors.append(
+            CheckError(
+                "repo-health-orchestrator",
+                str(catalog_path),
+                f"Catalog references unknown audit skill `{skill_name}`.",
+            )
+        )
+
+    for skill_name in unknown_exemptions:
+        errors.append(
+            CheckError(
+                "repo-health-orchestrator",
+                str(exemptions_path),
+                f"Exemption references unknown audit skill `{skill_name}`.",
+            )
+        )
+
+    for skill_name in sorted(catalog_skills):
+        run_all = skills_dir / skill_name / "scripts" / "run_all.sh"
+        if not run_all.exists():
+            errors.append(
+                CheckError(
+                    skill_name,
+                    str(run_all),
+                    "Catalog-managed audit skills must provide scripts/run_all.sh.",
+                )
+            )
+
+
 def main() -> int:
     args = parse_args()
     repo = Path(args.repo).resolve()
@@ -354,6 +446,9 @@ def main() -> int:
     for skill_dir in discover_skills(skills_dir):
         skills_checked += 1
         all_errors.extend(check_skill(skill_dir, args.mode))
+
+    if args.mode == "strict":
+        check_orchestrator_catalog(repo, skills_dir, all_errors)
 
     payload = {
         "repo_root": str(repo),

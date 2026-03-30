@@ -33,7 +33,7 @@ shared/
 - `error-governance-hardgate`: 面向 Python / TypeScript 仓库的公共错误契约治理审计，检查 Problem Details、structured error code、OpenAPI / AsyncAPI 对齐、outward leakage、SSOT / codegen drift 与 message-text branching。
 - `overdefensive-silent-failure-hardgate`: 面向 Python / TypeScript 仓库的过度防御与静默失败审计，检查 empty catch、swallow / continue、checker suppressions、silent defaults、maybe-value 扩散与 off-camera async loss。
 - `module-shape-hardgate`: 面向 Python / TypeScript 仓库的模块形状审计，检查 giant file、god module、低内聚职责混杂、过宽导出面、超长函数、重复热点与 fan-out hub；默认只检测和报告，不做自动重构。
-- `repo-health-orchestrator`: 面向整仓体检的汇总 skill，每次先清空 `.repo-harness`，先串行 bootstrap 共享锁定工具链，再并行启动 7 个 child audit subagents，维护一个终端实时 control plane，并在结束时先产出机器 rollup，再合成 cross-domain evidence、最终总报告和 agent brief。要求运行环境支持 Codex subagent，以及当前会话模型与推理强度继承语义。
+- `repo-health-orchestrator`: 面向整仓体检的汇总 skill，每次先清空 `.repo-harness`，先串行 bootstrap 共享锁定工具链，再并行启动 10 个 child audit subagents，维护一个终端实时 control plane，并在结束时先产出机器 rollup，再合成 cross-domain evidence、最终总报告和 agent brief。要求运行环境支持 Codex subagent，以及当前会话模型与推理强度继承语义。
 
 ## 安装
 
@@ -83,17 +83,17 @@ shared/
 
 ## Audit Fleet 约定
 
-- `repo-health-orchestrator` 是 Codex subagent-only：它会先清空并重建 repo-root `.repo-harness`，再启动 7 个 child audit subagents
+- `repo-health-orchestrator` 是 Codex subagent-only：它会先清空并重建 repo-root `.repo-harness`，再启动 10 个 child audit subagents
 - `.repo-harness` 是纯输出目录，只保存当前 run 的 summary / report / brief / linkcheck / control-plane state 等工件，不放默认输入
 - `repo-health-orchestrator` 采用双层汇总：`repo-health-summary.json` 负责机器真相，`repo-health-evidence.json` 负责 cross-domain synthesis，最终 `repo-health-report.md` 与 `repo-health-agent-brief.md` 基于 evidence 生成
 - 所有 child skills 统一遵守 fail-fast bootstrap 合约：先 `preflight`，再尝试自动安装缺失依赖；安装失败时停止主审计，但仍写标准 blocked 工件
 - installable tools 统一由共享 `.pooh-runtime` 锁定管理：Python CLI 只经 `uv` 的 `audit` 依赖组，TS/Node CLI 只经 `pnpm` 的 `devDependencies`；这些都属于宿主侧共享审计工具链，不是应用运行时依赖
 - `lychee` 与 `Vale` 仍是 docs-only 硬依赖例外：由共享 runtime 按官方二进制安装方式统一管理，但不进入 `uv` / `pnpm` 工具链
-- 每个 child skill 运行期间都会写 `.repo-harness/<skill-id>-runtime.json`，供 orchestrator 和终端 control plane 显示 `PREFLIGHT / BOOTSTRAPPING / RUNNING / BLOCKED / COMPLETE / NOT APPLICABLE`
+- 每个 child skill 运行期间都会写 `.repo-harness/skills/<skill-id>/runtime.json`，并把 `summary.json / report.md / agent-brief.md` 放在同一 child namespace 下，供 orchestrator 和终端 control plane 显示 `PREFLIGHT / BOOTSTRAPPING / RUNNING / BLOCKED / COMPLETE / NOT APPLICABLE`
 - child skill 自己的 `scripts/run_all.sh` 可以继续作为本地 deterministic helper 独立使用，但不再属于 orchestrator 的公开契约
 - 旧 skill 的 wrapper 现在会先走共享 `.pooh-runtime` 合约；缺依赖时不会再伪装成“保守 baseline 成功”
 - Python 边界工具的唯一标准是 `Tach`；仓库不引入 `import-linter`
-- `error-governance-hardgate`、`overdefensive-silent-failure-hardgate` 与 `module-shape-hardgate` 是 standalone audits：遵守同一套 authoring / runtime contract，但当前不纳入 `repo-health-orchestrator`
+- `repo-health-orchestrator` 是唯一的 full-fleet 总控，统一覆盖 10 个 audit skills；orchestrator 自身不进入 worker 列表
 
 ## Skill Authoring Contract
 
@@ -126,11 +126,13 @@ python3 scripts/sync_shared_skill_refs.py --check
 python3 scripts/sync_shared_skill_refs.py --write
 python3 scripts/run_module_shape_fixture_regressions.py
 python3 scripts/run_repo_health_fixture_regressions.py
+python3 scripts/run_child_wrapper_smoke_matrix.py
+python3 scripts/run_control_plane_renderer_regressions.py
 bash scripts/run_skill_fleet_harness.sh . .repo-harness
 ```
 
 - `fast` 用于本地快速元检查：frontmatter、description 规范、行数预算、链接存在性、visible eval surface
-- `strict` 会额外检查 runtime manifest shape、canonical shared refs、打包噪音、live-doc-sensitive skill 的引用入口，以及 orchestrator failure fixtures
+- `strict` 会额外检查 runtime manifest shape、canonical shared refs、打包噪音、live-doc-sensitive skill 的引用入口，以及 orchestrator catalog completeness
 - `shared/` 是仓库维护期的 canonical source，不是 skill 运行时依赖
 - `scripts/install.sh` 不会把根目录 `shared/` 安装到 `~/.codex/skills`
 - skill 真正使用的是各自目录下的 `references/shared-*.md`；这些文件由 `shared/` materialize 出来，安装后仍然自包含可用

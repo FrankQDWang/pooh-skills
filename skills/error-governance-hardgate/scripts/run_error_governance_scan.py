@@ -129,6 +129,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Scan a repo for error-governance drift.")
     parser.add_argument("--repo", required=True)
     parser.add_argument("--out", required=True)
+    parser.add_argument("--report-out", default=None)
+    parser.add_argument("--agent-brief-out", default=None)
     return parser.parse_args()
 
 
@@ -973,8 +975,12 @@ def main() -> int:
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(summary, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    out_path.with_name("error-governance-report.md").write_text(report, encoding="utf-8")
-    out_path.with_name("error-governance-agent-brief.md").write_text(brief, encoding="utf-8")
+    report_path = Path(args.report_out).resolve() if args.report_out else out_path.with_name("error-governance-report.md")
+    brief_path = Path(args.agent_brief_out).resolve() if args.agent_brief_out else out_path.with_name("error-governance-agent-brief.md")
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    brief_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(report, encoding="utf-8")
+    brief_path.write_text(brief, encoding="utf-8")
     return 0
 
 

@@ -7,7 +7,7 @@ description: Coordinates installed pooh-skills audits through subagents, gathers
 
 This skill is the coordinator, not the specialist.
 
-Its job is to launch the focused audit skills as parallel subagents, collect their current-run artifacts, and turn them into one executive diagnosis instead of seven unrelated reports.
+Its job is to launch the focused audit skills as parallel subagents, collect their current-run artifacts, and turn them into one executive diagnosis instead of ten unrelated reports.
 
 ## When to use this
 
@@ -16,7 +16,7 @@ Use this skill when the user wants:
 - one combined repo health report
 - a governance rollup across several audit skills
 - an AI-coding state-of-the-repo snapshot
-- a prioritized action queue across structure, contracts, durable agents, LLM API freshness, distributed consistency, cleanup, and Pythonic drift
+- a prioritized action queue across structure, contracts, Pythonic drift, module shape, durable agents, distributed consistency, error governance, silent failure, LLM API freshness, and cleanup
 - a repeatable whole-repo run that ends in one machine summary, one evidence file, one human report, and one agent brief
 
 ## Do not use this
@@ -38,15 +38,18 @@ Write blocked repo-health artifacts when orchestrator preflight itself is blocke
 
 ## Expected child domains
 
-This skill coordinates these seven child audits:
+This skill coordinates these ten child audits:
 
-- `dependency-audit` → `.repo-harness/repo-audit-summary.json`
-- `signature-contract-hardgate` → `.repo-harness/contract-hardgate-summary.json`
-- `pydantic-ai-temporal-hardgate` → `.repo-harness/pydantic-temporal-summary.json`
-- `llm-api-freshness-guard` → `.repo-harness/llm-api-freshness-summary.json`
-- `controlled-cleanup-hardgate` → `.repo-harness/controlled-cleanup-summary.json`
-- `distributed-side-effect-hardgate` → `.repo-harness/distributed-side-effect-summary.json`
-- `pythonic-ddd-drift-audit` → `.repo-harness/pythonic-ddd-drift-summary.json`
+- `dependency-audit` → `.repo-harness/skills/dependency-audit/summary.json`
+- `signature-contract-hardgate` → `.repo-harness/skills/signature-contract-hardgate/summary.json`
+- `pythonic-ddd-drift-audit` → `.repo-harness/skills/pythonic-ddd-drift-audit/summary.json`
+- `module-shape-hardgate` → `.repo-harness/skills/module-shape-hardgate/summary.json`
+- `distributed-side-effect-hardgate` → `.repo-harness/skills/distributed-side-effect-hardgate/summary.json`
+- `pydantic-ai-temporal-hardgate` → `.repo-harness/skills/pydantic-ai-temporal-hardgate/summary.json`
+- `error-governance-hardgate` → `.repo-harness/skills/error-governance-hardgate/summary.json`
+- `overdefensive-silent-failure-hardgate` → `.repo-harness/skills/overdefensive-silent-failure-hardgate/summary.json`
+- `llm-api-freshness-guard` → `.repo-harness/skills/llm-api-freshness-guard/summary.json`
+- `controlled-cleanup-hardgate` → `.repo-harness/skills/controlled-cleanup-hardgate/summary.json`
 
 It is okay if a child domain concludes `not-applicable`.
 It is not okay to hide missing or invalid coverage.
@@ -62,6 +65,7 @@ Read only what is needed.
 - `references/shared-reporting-style.md`
 - `references/shared-runtime-artifact-contract.md`
 - `references/integration-matrix.md`
+- `references/manual-acceptance-checklist.md`
 - `references/synthesis-policy.md`
 - `references/verdict-policy.md`
 - `scripts/aggregate_repo_health.py`
@@ -76,9 +80,10 @@ Read only what is needed.
 
 - Start from an empty `.repo-harness` every run.
 - Treat `.repo-harness` as output-only.
+- Generate one current-run `run_id` during reset and pass it to every child.
 - Maintain `.repo-harness/repo-health-control-plane.json` as the live terminal control-plane state for the current run.
-- Treat `.repo-harness/<skill-id>-runtime.json` as the live sidecar for each child skill's `preflight / bootstrapping / running / blocked / complete` state.
-- Launch all seven child domains before waiting for results.
+- Treat `.repo-harness/skills/<skill-id>/runtime.json` as the live sidecar for each child skill's `preflight / bootstrapping / running / blocked / complete` state.
+- Launch all ten child domains before waiting for results.
 - Keep child prompts narrow: one domain, one output contract, no cross-domain judgment.
 - Preserve the child skill's judgment; do not sand off sharp findings during aggregation.
 - Keep coverage gaps visible.
@@ -123,7 +128,7 @@ Use these helper commands:
 python3 scripts/control_plane_state.py init --state /path/to/repo/.repo-harness/repo-health-control-plane.json
 python3 scripts/control_plane_state.py update-overall --state /path/to/repo/.repo-harness/repo-health-control-plane.json --stage running --auto-progress
 python3 scripts/control_plane_state.py update-worker --state /path/to/repo/.repo-harness/repo-health-control-plane.json --domain structure --runtime-status running --detail "subagent active"
-python3 scripts/control_plane_state.py sync-worker-runtime --state /path/to/repo/.repo-harness/repo-health-control-plane.json --domain structure --runtime /path/to/repo/.repo-harness/dependency-audit-runtime.json
+python3 scripts/control_plane_state.py sync-worker-runtime --state /path/to/repo/.repo-harness/repo-health-control-plane.json --domain structure --runtime /path/to/repo/.repo-harness/skills/dependency-audit/runtime.json
 python3 scripts/control_plane_state.py finalize-from-summary --state /path/to/repo/.repo-harness/repo-health-control-plane.json --summary /path/to/repo/.repo-harness/repo-health-summary.json
 python3 scripts/render_control_plane.py --state /path/to/repo/.repo-harness/repo-health-control-plane.json
 python3 scripts/render_control_plane.py --state /path/to/repo/.repo-harness/repo-health-control-plane.json --final
@@ -155,6 +160,7 @@ Example:
 python3 scripts/control_plane_state.py init \
   --state /path/to/repo/.repo-harness/repo-health-control-plane.json \
   --context repo-health-orchestrator \
+  --run-id "$POOH_RUN_ID" \
   --model-label "Inherited from session" \
   --reasoning-effort "Inherited"
 python3 scripts/render_control_plane.py \
@@ -188,7 +194,7 @@ If this shared bootstrap returns blocked failures:
 
 ### 3) Spawn child audits
 
-Launch the seven child subagents in parallel.
+Launch the ten child subagents in parallel.
 
 Immediately mark the overall stage as `spawning`, then mark each child worker as `running`, and redraw the control plane.
 
@@ -199,8 +205,8 @@ While the child audits are running, keep the terminal control plane current.
 Required progress stages:
 
 - `reset-harness`
-- `spawn-subagents`
-- `running X/7`
+- `spawning`
+- `running X/10`
 - `collecting`
 - `aggregating`
 - `done`
@@ -235,7 +241,7 @@ Use the current run's real information only:
 
 ### 5) Collect and validate child artifacts
 
-After the subagents finish, check the seven expected summary paths.
+After the subagents finish, check the ten expected summary paths.
 
 For each domain, classify the result as:
 
@@ -264,7 +270,9 @@ Use the deterministic helper scripts:
 ```bash
 python3 scripts/aggregate_repo_health.py \
   --repo /path/to/repo \
+  --run-id "$POOH_RUN_ID" \
   --harness-dir /path/to/repo/.repo-harness \
+  --bootstrap-json /path/to/repo/.repo-harness/repo-health-shared-bootstrap.json \
   --out-json /path/to/repo/.repo-harness/repo-health-summary.json \
   --out-md /path/to/repo/.repo-harness/repo-health-report.md
 
@@ -363,7 +371,7 @@ Per domain include:
 - `top_categories`
 - `top_action`
 - `why_now`
-- `notes`
+- `handoff_notes`
 
 ## Safety rules
 

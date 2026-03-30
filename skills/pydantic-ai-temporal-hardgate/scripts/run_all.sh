@@ -7,7 +7,7 @@ source "$SCRIPT_DIR/../../.pooh-runtime/bin/runtime_wrapper.sh"
 print_usage() {
   cat <<'EOF'
 Usage:
-  bash scripts/run_all.sh [--doc-evidence-json path] [repo-root] [out-dir]
+  bash scripts/run_all.sh [--doc-evidence-json path] [repo-root] [harness-dir]
 
 Examples:
   bash scripts/run_all.sh .
@@ -38,10 +38,11 @@ while [[ $# -gt 0 ]]; do
 done
 
 REPO_ROOT="${POSITIONAL[0]:-.}"
-OUT_DIR="${POSITIONAL[1]:-$REPO_ROOT/.repo-harness}"
-SUMMARY_PATH="$OUT_DIR/pydantic-temporal-summary.json"
-REPORT_PATH="$OUT_DIR/pydantic-temporal-human-report.md"
-AGENT_BRIEF_PATH="$OUT_DIR/pydantic-temporal-agent-brief.md"
+HARNESS_DIR="${POSITIONAL[1]:-$REPO_ROOT/.repo-harness}"
+OUT_DIR="$HARNESS_DIR/skills/pydantic-ai-temporal-hardgate"
+SUMMARY_PATH="$OUT_DIR/summary.json"
+REPORT_PATH="$OUT_DIR/report.md"
+AGENT_BRIEF_PATH="$OUT_DIR/agent-brief.md"
 MANIFEST_PATH="$SCRIPT_DIR/../assets/runtime-dependencies.json"
 
 mkdir -p "$OUT_DIR"
@@ -71,6 +72,9 @@ RUN_ARGS=(
   "$SCRIPT_DIR/run_pydantic_temporal_scan.py"
   --repo "$REPO_ROOT"
   --out-dir "$OUT_DIR"
+  --summary-out "$SUMMARY_PATH"
+  --report-out "$REPORT_PATH"
+  --agent-brief-out "$AGENT_BRIEF_PATH"
 )
 if [[ -n "$DOC_EVIDENCE_JSON" ]]; then
   RUN_ARGS+=(--doc-evidence-json "$DOC_EVIDENCE_JSON")

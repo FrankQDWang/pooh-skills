@@ -4,7 +4,7 @@ set -euo pipefail
 print_usage() {
   cat <<'EOF'
 Usage:
-  bash scripts/run_all.sh [repo-root] [out-dir]
+  bash scripts/run_all.sh [repo-root] [harness-dir]
 
 Examples:
   bash scripts/run_all.sh .
@@ -18,15 +18,16 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
 fi
 
 REPO_ROOT="${1:-.}"
-OUT_DIR="${2:-$REPO_ROOT/.repo-harness}"
+HARNESS_DIR="${2:-$REPO_ROOT/.repo-harness}"
+OUT_DIR="$HARNESS_DIR/skills/pythonic-ddd-drift-audit"
 mkdir -p "$OUT_DIR"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../../.pooh-runtime/bin/runtime_wrapper.sh"
 
-SUMMARY_PATH="$OUT_DIR/pythonic-ddd-drift-summary.json"
-REPORT_PATH="$OUT_DIR/pythonic-ddd-drift-report.md"
-AGENT_BRIEF_PATH="$OUT_DIR/pythonic-ddd-drift-agent-brief.md"
+SUMMARY_PATH="$OUT_DIR/summary.json"
+REPORT_PATH="$OUT_DIR/report.md"
+AGENT_BRIEF_PATH="$OUT_DIR/agent-brief.md"
 MANIFEST_PATH="$SCRIPT_DIR/../assets/runtime-dependencies.json"
 
 pooh_runtime_prepare \
@@ -51,7 +52,9 @@ pooh_runtime_update "running" "" "Running pythonic DDD drift scan."
 
 python3 "$SCRIPT_DIR/run_py_drift_scan.py" \
   --repo "$REPO_ROOT" \
-  --out "$SUMMARY_PATH"
+  --out "$SUMMARY_PATH" \
+  --report-out "$REPORT_PATH" \
+  --agent-brief-out "$AGENT_BRIEF_PATH"
 
 pooh_runtime_inject_summary
 

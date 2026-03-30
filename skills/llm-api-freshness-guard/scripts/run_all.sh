@@ -4,7 +4,7 @@ set -euo pipefail
 print_usage() {
   cat <<'EOF'
 Usage:
-  bash scripts/run_all.sh [repo-root] [out-dir]
+  bash scripts/run_all.sh [repo-root] [harness-dir]
 
 Examples:
   bash scripts/run_all.sh .
@@ -21,11 +21,12 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 source "$SCRIPT_DIR/../../.pooh-runtime/bin/runtime_wrapper.sh"
 
 REPO_ROOT="${1:-.}"
-OUT_DIR="${2:-$REPO_ROOT/.repo-harness}"
-EVIDENCE_PATH="$OUT_DIR/llm-api-surface-evidence.json"
-SUMMARY_PATH="$OUT_DIR/llm-api-freshness-summary.json"
-REPORT_PATH="$OUT_DIR/llm-api-freshness-report.md"
-AGENT_BRIEF_PATH="$OUT_DIR/llm-api-freshness-agent-brief.md"
+HARNESS_DIR="${2:-$REPO_ROOT/.repo-harness}"
+OUT_DIR="$HARNESS_DIR/skills/llm-api-freshness-guard"
+EVIDENCE_PATH="$OUT_DIR/surface-evidence.json"
+SUMMARY_PATH="$OUT_DIR/summary.json"
+REPORT_PATH="$OUT_DIR/report.md"
+AGENT_BRIEF_PATH="$OUT_DIR/agent-brief.md"
 MANIFEST_PATH="$SCRIPT_DIR/../assets/runtime-dependencies.json"
 
 mkdir -p "$OUT_DIR"

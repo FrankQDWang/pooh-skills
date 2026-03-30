@@ -568,6 +568,9 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo", required=True)
     parser.add_argument("--out-dir", required=True)
+    parser.add_argument("--summary-out", default=None)
+    parser.add_argument("--report-out", default=None)
+    parser.add_argument("--agent-brief-out", default=None)
     args = parser.parse_args()
 
     repo = Path(args.repo).resolve()
@@ -611,19 +614,27 @@ def main() -> int:
         "tool_runs": [item.to_dict() for item in tool_runs],
     }
 
-    (out_dir / "contract-hardgate-summary.json").write_text(
+    summary_path = Path(args.summary_out).resolve() if args.summary_out else out_dir / "contract-hardgate-summary.json"
+    report_path = Path(args.report_out).resolve() if args.report_out else out_dir / "contract-hardgate-human-report.md"
+    brief_path = Path(args.agent_brief_out).resolve() if args.agent_brief_out else out_dir / "contract-hardgate-agent-brief.md"
+
+    summary_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    brief_path.parent.mkdir(parents=True, exist_ok=True)
+
+    summary_path.write_text(
         json.dumps(summary, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",
     )
-    (out_dir / "contract-hardgate-human-report.md").write_text(
+    report_path.write_text(
         render_human_report(summary) + "\n",
         encoding="utf-8",
     )
-    (out_dir / "contract-hardgate-agent-brief.md").write_text(
+    brief_path.write_text(
         render_agent_brief(summary),
         encoding="utf-8",
     )
-    print(f"Wrote {out_dir / 'contract-hardgate-summary.json'}")
+    print(f"Wrote {summary_path}")
     return 0
 
 

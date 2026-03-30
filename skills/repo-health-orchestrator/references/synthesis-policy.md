@@ -14,13 +14,16 @@ It may only organize evidence, explain cross-domain patterns, and prioritize act
 Do not invent new cluster names per run.
 Use exactly these three clusters:
 
-- `production-correctness`
+- `runtime-correctness-and-failure-handling`
   - `distributed-side-effects`
   - `durable-agents`
+  - `error-governance`
+  - `silent-failure`
 - `governance-and-boundaries`
   - `contracts`
   - `structure`
   - `pythonic-ddd-drift`
+  - `module-shape`
 - `surface-freshness-and-cleanup`
   - `llm-api-freshness`
   - `cleanup`

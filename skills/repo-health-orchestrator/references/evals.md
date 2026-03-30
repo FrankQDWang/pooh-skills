@@ -5,7 +5,7 @@ Use these as the minimum regression set for orchestrator triggering and rollup b
 ## Should trigger
 
 1. "Run the full pooh-skills audit fleet and give me one repository health report."
-2. "I want a multi-skill governance rollup across structure, contracts, durable agents, freshness, cleanup, and distributed correctness."
+2. "I want a multi-skill governance rollup across structure, contracts, module shape, durable agents, error governance, silent failure, freshness, cleanup, and distributed correctness."
 3. "Give me a quarterly repo-health snapshot with one action queue."
 
 ## Should not trigger
@@ -22,6 +22,8 @@ Expected: do not treat them as current coverage.
 Expected: keep it visible without calling the whole rollup incomplete.
 3. One child is blocked on dependency bootstrap.  
 Expected: preserve blocked status instead of silently downgrading it.
+4. One child summary belongs to an older `run_id`.  
+Expected: classify it as `invalid` instead of treating it as current coverage.
 
 ## Failure Scenarios
 
@@ -29,5 +31,7 @@ Expected: preserve blocked status instead of silently downgrading it.
 Expected: coverage becomes partial and the gap stays visible.
 2. Invalid child summary JSON.  
 Expected: coverage becomes partial and the invalid summary stays visible.
-3. No subagent runtime support.  
+3. Missing child human report or child agent brief.  
+Expected: machine rollup stays intact, but synthesis records an evidence gap.
+4. No subagent runtime support.  
 Expected: orchestrator stops plainly and emits blocked repo-health artifacts.

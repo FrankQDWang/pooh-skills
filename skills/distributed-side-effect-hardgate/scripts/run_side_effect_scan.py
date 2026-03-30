@@ -575,6 +575,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo", required=True, help="Repository root to scan")
     parser.add_argument("--out", required=True, help="Path to write summary JSON")
+    parser.add_argument("--report-out", default=None, help="Optional explicit human report output path")
+    parser.add_argument("--agent-brief-out", default=None, help="Optional explicit agent brief output path")
     args = parser.parse_args(argv)
 
     repo = Path(args.repo).resolve()
@@ -587,8 +589,12 @@ def main(argv: list[str] | None = None) -> int:
 
     data = scan(repo)
     out.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    out.with_name("distributed-side-effect-report.md").write_text(render_human_report(data) + "\n", encoding="utf-8")
-    out.with_name("distributed-side-effect-agent-brief.md").write_text(render_agent_brief(data), encoding="utf-8")
+    report_path = Path(args.report_out).resolve() if args.report_out else out.with_name("distributed-side-effect-report.md")
+    brief_path = Path(args.agent_brief_out).resolve() if args.agent_brief_out else out.with_name("distributed-side-effect-agent-brief.md")
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    brief_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(render_human_report(data) + "\n", encoding="utf-8")
+    brief_path.write_text(render_agent_brief(data), encoding="utf-8")
     print(f"Wrote {out}")
     return 0
 

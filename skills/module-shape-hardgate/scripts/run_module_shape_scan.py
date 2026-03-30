@@ -1324,17 +1324,32 @@ def build_summary(repo_root: Path, out_dir: Path) -> dict:
     return summary
 
 
-def write_outputs(summary: dict, out_dir: Path) -> None:
+def write_outputs(
+    summary: dict,
+    out_dir: Path,
+    summary_path: Path | None = None,
+    report_path: Path | None = None,
+    brief_path: Path | None = None,
+) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / SUMMARY_FILENAME).write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8")
-    (out_dir / REPORT_FILENAME).write_text(render_human_report(summary), encoding="utf-8")
-    (out_dir / BRIEF_FILENAME).write_text(render_agent_brief(summary), encoding="utf-8")
+    resolved_summary = summary_path or (out_dir / SUMMARY_FILENAME)
+    resolved_report = report_path or (out_dir / REPORT_FILENAME)
+    resolved_brief = brief_path or (out_dir / BRIEF_FILENAME)
+    resolved_summary.parent.mkdir(parents=True, exist_ok=True)
+    resolved_report.parent.mkdir(parents=True, exist_ok=True)
+    resolved_brief.parent.mkdir(parents=True, exist_ok=True)
+    resolved_summary.write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8")
+    resolved_report.write_text(render_human_report(summary), encoding="utf-8")
+    resolved_brief.write_text(render_agent_brief(summary), encoding="utf-8")
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Run module shape hardgate scan.")
     parser.add_argument("--repo", required=True, help="Repository root to scan.")
     parser.add_argument("--out-dir", required=True, help="Output directory.")
+    parser.add_argument("--summary-out", default=None, help="Optional explicit summary output path.")
+    parser.add_argument("--report-out", default=None, help="Optional explicit human report output path.")
+    parser.add_argument("--agent-brief-out", default=None, help="Optional explicit agent brief output path.")
     args = parser.parse_args(argv)
 
     repo_root = Path(args.repo).resolve()
@@ -1345,8 +1360,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return 2
 
     summary = build_summary(repo_root, out_dir)
-    write_outputs(summary, out_dir)
-    print(f"Wrote {SUMMARY_FILENAME}, {REPORT_FILENAME}, and {BRIEF_FILENAME} to {out_dir}")
+    summary_path = Path(args.summary_out).resolve() if args.summary_out else None
+    report_path = Path(args.report_out).resolve() if args.report_out else None
+    brief_path = Path(args.agent_brief_out).resolve() if args.agent_brief_out else None
+    write_outputs(summary, out_dir, summary_path=summary_path, report_path=report_path, brief_path=brief_path)
+    print(f"Wrote {(summary_path or (out_dir / SUMMARY_FILENAME)).resolve()}")
     return 0
 
 

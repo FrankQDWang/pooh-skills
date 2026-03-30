@@ -7,6 +7,7 @@ TARGET_REPO="${1:-$REPO_ROOT}"
 OUT_DIR="${2:-$TARGET_REPO/.repo-harness}"
 
 mkdir -p "$OUT_DIR"
+export PYTHONDONTWRITEBYTECODE=1
 
 python3 "$SCRIPT_DIR/check_skill_fleet.py" \
   --repo "$TARGET_REPO" \
@@ -16,5 +17,7 @@ python3 "$SCRIPT_DIR/check_skill_fleet.py" \
 python3 "$SCRIPT_DIR/sync_shared_skill_refs.py" --check
 python3 "$SCRIPT_DIR/run_module_shape_fixture_regressions.py"
 python3 "$SCRIPT_DIR/run_repo_health_fixture_regressions.py"
+python3 "$SCRIPT_DIR/run_child_wrapper_smoke_matrix.py"
+python3 "$SCRIPT_DIR/run_control_plane_renderer_regressions.py"
 
 echo "Skill fleet harness passed."

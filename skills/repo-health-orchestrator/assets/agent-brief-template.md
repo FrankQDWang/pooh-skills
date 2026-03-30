@@ -4,6 +4,7 @@ Keep this brief short and action-ordered.
 
 ## Overall
 
+- run_id: `{{run_id}}`
 - overall_health: `{{overall_health}}`
 - coverage_status: `{{coverage_status}}`
 - summary_line: `{{summary_line}}`

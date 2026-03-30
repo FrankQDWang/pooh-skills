@@ -701,6 +701,9 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo", required=True)
     parser.add_argument("--out-dir", required=True)
+    parser.add_argument("--summary-out", default=None)
+    parser.add_argument("--report-out", default=None)
+    parser.add_argument("--agent-brief-out", default=None)
     args = parser.parse_args()
 
     repo = Path(args.repo).resolve()
@@ -756,10 +759,17 @@ def main() -> int:
         ],
     }
 
-    (out_dir / "repo-audit-summary.json").write_text(json.dumps(summary, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    (out_dir / "repo-audit-report.md").write_text(render_human_report(summary) + "\n", encoding="utf-8")
-    (out_dir / "repo-audit-agent-brief.md").write_text(render_agent_brief(summary), encoding="utf-8")
-    print(f"Wrote {out_dir / 'repo-audit-summary.json'}")
+    summary_path = Path(args.summary_out).resolve() if args.summary_out else out_dir / "repo-audit-summary.json"
+    report_path = Path(args.report_out).resolve() if args.report_out else out_dir / "repo-audit-report.md"
+    brief_path = Path(args.agent_brief_out).resolve() if args.agent_brief_out else out_dir / "repo-audit-agent-brief.md"
+
+    summary_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    brief_path.parent.mkdir(parents=True, exist_ok=True)
+    summary_path.write_text(json.dumps(summary, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    report_path.write_text(render_human_report(summary) + "\n", encoding="utf-8")
+    brief_path.write_text(render_agent_brief(summary), encoding="utf-8")
+    print(f"Wrote {summary_path}")
     return 0
 
 

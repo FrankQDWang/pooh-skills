@@ -7,7 +7,7 @@ source "$SCRIPT_DIR/../../.pooh-runtime/bin/runtime_wrapper.sh"
 print_usage() {
   cat <<'EOF'
 Usage:
-  bash scripts/run_all.sh [--strict-removal-targets] [repo-root] [out-dir]
+  bash scripts/run_all.sh [--strict-removal-targets] [repo-root] [harness-dir]
 
 Examples:
   bash scripts/run_all.sh .
@@ -44,11 +44,12 @@ while [[ $# -gt 0 ]]; do
 done
 
 REPO_ROOT="${POSITIONAL[0]:-.}"
-OUT_DIR="${POSITIONAL[1]:-$REPO_ROOT/.repo-harness}"
-SUMMARY_PATH="$OUT_DIR/controlled-cleanup-summary.json"
-LINKCHECK_PATH="$OUT_DIR/controlled-cleanup-linkcheck.json"
-REPORT_PATH="$OUT_DIR/controlled-cleanup-report.md"
-AGENT_BRIEF_PATH="$OUT_DIR/controlled-cleanup-agent-brief.md"
+HARNESS_DIR="${POSITIONAL[1]:-$REPO_ROOT/.repo-harness}"
+OUT_DIR="$HARNESS_DIR/skills/controlled-cleanup-hardgate"
+SUMMARY_PATH="$OUT_DIR/summary.json"
+LINKCHECK_PATH="$OUT_DIR/linkcheck.json"
+REPORT_PATH="$OUT_DIR/report.md"
+AGENT_BRIEF_PATH="$OUT_DIR/agent-brief.md"
 MANIFEST_PATH="$SCRIPT_DIR/../assets/runtime-dependencies.json"
 
 mkdir -p "$OUT_DIR"
@@ -92,7 +93,9 @@ run_step() {
 run_step "cleanup scan" \
   python3 "$SCRIPT_DIR/run_cleanup_scan.py" \
     --repo "$REPO_ROOT" \
-    --out "$SUMMARY_PATH"
+    --out "$SUMMARY_PATH" \
+    --report-out "$REPORT_PATH" \
+    --agent-brief-out "$AGENT_BRIEF_PATH"
 
 if [[ -f "$SUMMARY_PATH" ]]; then
   pooh_runtime_inject_summary

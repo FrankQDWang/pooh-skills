@@ -271,8 +271,9 @@ def format_worker(worker: dict[str, Any], width: int, use_ansi: bool, unicode_mo
 
 def render_header(state: dict[str, Any], width: int, use_ansi: bool, unicode_mode: bool) -> list[str]:
     context = state.get("context") or "repo-health-orchestrator"
+    run_id = str(state.get("run_id") or "-")
     header = truncate_plain(
-        f"ORCHESTRATOR v1.0 | CONTROL PLANE | Context: {context}",
+        f"ORCHESTRATOR v1.0 | CONTROL PLANE | Run: {run_id} | Context: {context}",
         width,
     )
     divider_char = "═" if unicode_mode else "="
@@ -314,6 +315,11 @@ def render_overall_box(state: dict[str, Any], width: int, use_ansi: bool, unicod
             use_ansi,
         ),
         colorize(
+            truncate_plain(f"run_id: {state.get('run_id') or '-'}", inner_width),
+            "text",
+            use_ansi,
+        ),
+        colorize(
             truncate_plain(f"reasoning_effort: {overall.get('reasoning_effort') or 'Inherited'}", inner_width),
             "text",
             use_ansi,
@@ -348,7 +354,7 @@ def render_action_box(state: dict[str, Any], width: int, use_ansi: bool, unicode
     invalid = ", ".join(state.get("invalid_summaries") or [])
     lines.append(colorize(truncate_plain(f"Missing: {missing or '-'}", inner_width), "muted", use_ansi))
     lines.append(colorize(truncate_plain(f"Invalid: {invalid or '-'}", inner_width), "muted", use_ansi))
-    return make_box("ACTION QUEUE", lines[:6], width, use_ansi, unicode_mode)
+    return make_box("ACTION QUEUE", lines, width, use_ansi, unicode_mode)
 
 
 def join_columns(left: list[str], right: list[str], gap: int) -> list[str]:

@@ -165,6 +165,8 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Scan a repository for cleanup signals.")
     parser.add_argument("--repo", default=".", help="Repository root to scan.")
     parser.add_argument("--out", required=True, help="Output JSON path.")
+    parser.add_argument("--report-out", default=None, help="Optional explicit human report output path.")
+    parser.add_argument("--agent-brief-out", default=None, help="Optional explicit agent brief output path.")
     parser.add_argument("--max-file-bytes", type=int, default=1_000_000, help="Skip larger files.")
     return parser.parse_args(argv)
 
@@ -774,8 +776,10 @@ def main(argv: Sequence[str]) -> int:
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(summary, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    report_path = out_path.with_name("controlled-cleanup-report.md")
-    agent_brief_path = out_path.with_name("controlled-cleanup-agent-brief.md")
+    report_path = Path(args.report_out).resolve() if args.report_out else out_path.with_name("controlled-cleanup-report.md")
+    agent_brief_path = Path(args.agent_brief_out).resolve() if args.agent_brief_out else out_path.with_name("controlled-cleanup-agent-brief.md")
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    agent_brief_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(render_human_report(summary) + "\n", encoding="utf-8")
     agent_brief_path.write_text(render_agent_brief(summary), encoding="utf-8")
     return 0

@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -14,6 +15,7 @@ from typing import Any
 from aggregate_repo_health import RED_VERDICTS
 from repo_health_catalog import DOMAIN_BY_NAME
 from repo_health_catalog import EXPECTED
+from repo_health_catalog import summary_path as child_summary_path
 
 STATE_KIND = "repo-health-control-plane"
 STATE_VERSION = "1.0"
@@ -62,6 +64,12 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def resolve_run_id(explicit: str | None = None) -> str:
+    if explicit:
+        return explicit
+    return os.environ.get("POOH_RUN_ID") or os.environ.get("POOH_SKILLS_RUN_ID") or uuid.uuid4().hex
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Manage repo-health control-plane state.")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -75,6 +83,7 @@ def parse_args() -> argparse.Namespace:
     init_parser.add_argument("--stage", default="reset-harness", choices=list(STAGE_LABELS))
     init_parser.add_argument("--state-label", default=None)
     init_parser.add_argument("--state-tone", default=None)
+    init_parser.add_argument("--run-id", default=None)
 
     overall_parser = subparsers.add_parser("update-overall", help="Update overall control-plane fields.")
     add_common_state_args(overall_parser)
@@ -154,8 +163,8 @@ def to_output_label(path_value: str) -> str:
 def default_state_path_values(state_path: Path, model_label: str | None = None) -> list[dict[str, Any]]:
     harness_dir = state_path.resolve().parent
     workers = []
-    for index, (domain, skill_name, filename) in enumerate(EXPECTED, start=1):
-        summary_path = str((harness_dir / filename).resolve())
+    for index, (domain, skill_name) in enumerate(EXPECTED, start=1):
+        summary_path = str(child_summary_path(harness_dir, domain).resolve())
         spec = DOMAIN_BY_NAME[domain]
         workers.append({
             "index": index,
@@ -208,6 +217,8 @@ def clamp(value: float) -> float:
 def ensure_state_shape(state: dict[str, Any]) -> dict[str, Any]:
     if state.get("kind") != STATE_KIND:
         raise ValueError(f"unexpected state kind: {state.get('kind')!r}")
+    if not isinstance(state.get("run_id"), str) or not state.get("run_id"):
+        raise ValueError("state missing run_id")
     if not isinstance(state.get("workers"), list):
         raise ValueError("state missing workers list")
     return state
@@ -218,14 +229,17 @@ def init_state(args: argparse.Namespace) -> dict[str, Any]:
     stage = args.stage
     state_label = args.state_label or STAGE_LABELS[stage]
     state_tone = args.state_tone or STAGE_TONES[stage]
+    run_id = resolve_run_id(args.run_id)
+    workers = default_state_path_values(state_path, args.model_label)
     state: dict[str, Any] = {
         "version": STATE_VERSION,
         "kind": STATE_KIND,
+        "run_id": run_id,
         "generated_at": utc_now(),
         "context": args.context,
         "overall": {
             "stage": stage,
-            "progress_ratio": derive_progress(stage, {"workers": default_state_path_values(state_path, args.model_label)}, None),
+            "progress_ratio": derive_progress(stage, {"workers": workers}, None),
             "state_tone": state_tone,
             "state_label": state_label,
             "model_label": args.model_label,
@@ -234,7 +248,7 @@ def init_state(args: argparse.Namespace) -> dict[str, Any]:
             "overall_health": "",
             "coverage_status": "",
         },
-        "workers": default_state_path_values(state_path, args.model_label),
+        "workers": workers,
         "top_actions": [],
         "missing_skills": [],
         "invalid_summaries": [],
@@ -363,6 +377,11 @@ def finalize_from_summary(args: argparse.Namespace) -> dict[str, Any]:
     state_path = Path(args.state).resolve()
     state = ensure_state_shape(load_json(state_path))
     summary = load_json(Path(args.summary).resolve())
+    summary_run_id = str(summary.get("run_id") or "")
+    if summary_run_id != state["run_id"]:
+        raise ValueError(
+            f"summary run_id mismatch: expected {state['run_id']}, got {summary_run_id or '-'}"
+        )
     workers_by_domain = {worker["domain"]: worker for worker in state["workers"]}
 
     for run in summary.get("skill_runs") or []:
@@ -444,6 +463,24 @@ def sync_worker_runtime(args: argparse.Namespace) -> dict[str, Any]:
             break
     if target is None:
         raise ValueError(f"unknown worker domain: {args.domain}")
+
+    runtime_run_id = str(runtime.get("run_id") or "")
+    runtime_skill = str(runtime.get("skill") or "")
+    expected_skill = str(target.get("skill_name") or "")
+    if runtime_run_id != state["run_id"]:
+        target["runtime_status"] = "invalid"
+        target["status_label"] = STATUS_LABELS["invalid"]
+        target["detail"] = f"run_id mismatch: expected {state['run_id']}, got {runtime_run_id or '-'}"
+        target["notes"] = target["detail"]
+        state["generated_at"] = utc_now()
+        return state
+    if runtime_skill and runtime_skill != expected_skill:
+        target["runtime_status"] = "invalid"
+        target["status_label"] = STATUS_LABELS["invalid"]
+        target["detail"] = f"skill mismatch: expected {expected_skill}, got {runtime_skill}"
+        target["notes"] = target["detail"]
+        state["generated_at"] = utc_now()
+        return state
 
     runtime_status, status_label, detail = runtime_to_worker_status(runtime)
     target["runtime_status"] = runtime_status

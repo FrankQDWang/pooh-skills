@@ -2,6 +2,7 @@
 
 ## 1. Executive summary
 
+- run_id: `{{run_id}}`
 - overall_health: `{{overall_health}}`
 - coverage_status: `{{coverage_status}}`
 - one-line diagnosis: `{{summary_line}}`
@@ -12,10 +13,13 @@
 |---|---|---|---|---|
 | structure | {{status}} | {{dependency_status}} | {{verdict}} | {{evidence_gaps}} |
 | contracts | {{status}} | {{dependency_status}} | {{verdict}} | {{evidence_gaps}} |
-| durable-agents | {{status}} | {{dependency_status}} | {{verdict}} | {{evidence_gaps}} |
-| llm-api-freshness | {{status}} | {{dependency_status}} | {{verdict}} | {{evidence_gaps}} |
-| distributed-side-effects | {{status}} | {{dependency_status}} | {{verdict}} | {{evidence_gaps}} |
 | pythonic-ddd-drift | {{status}} | {{dependency_status}} | {{verdict}} | {{evidence_gaps}} |
+| module-shape | {{status}} | {{dependency_status}} | {{verdict}} | {{evidence_gaps}} |
+| distributed-side-effects | {{status}} | {{dependency_status}} | {{verdict}} | {{evidence_gaps}} |
+| durable-agents | {{status}} | {{dependency_status}} | {{verdict}} | {{evidence_gaps}} |
+| error-governance | {{status}} | {{dependency_status}} | {{verdict}} | {{evidence_gaps}} |
+| silent-failure | {{status}} | {{dependency_status}} | {{verdict}} | {{evidence_gaps}} |
+| llm-api-freshness | {{status}} | {{dependency_status}} | {{verdict}} | {{evidence_gaps}} |
 | cleanup | {{status}} | {{dependency_status}} | {{verdict}} | {{evidence_gaps}} |
 
 ## 3. Root cause clusters

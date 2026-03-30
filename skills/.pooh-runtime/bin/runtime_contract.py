@@ -18,10 +18,14 @@ import tarfile
 import time
 import urllib.error
 import urllib.request
+import uuid
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 from typing import Any
+
+sys.dont_write_bytecode = True
 
 SCHEMA_VERSION = "2.0"
 BOOTSTRAP_BLOCKED_EXIT = 10
@@ -82,6 +86,19 @@ MANIFEST_FILES = {
 }
 
 FEATURE_BLOCKED_BY_NETWORK = {"mcp-context7"}
+SKILL_DOMAIN_MAP = {
+    "dependency-audit": "structure",
+    "signature-contract-hardgate": "contracts",
+    "pydantic-ai-temporal-hardgate": "durable-agents",
+    "llm-api-freshness-guard": "llm-api-freshness",
+    "controlled-cleanup-hardgate": "cleanup",
+    "distributed-side-effect-hardgate": "distributed-side-effects",
+    "pythonic-ddd-drift-audit": "pythonic-ddd-drift",
+    "error-governance-hardgate": "error-governance",
+    "overdefensive-silent-failure-hardgate": "silent-failure",
+    "module-shape-hardgate": "module-shape",
+    "repo-health-orchestrator": "repo-health-orchestrator",
+}
 
 
 def utc_now() -> str:
@@ -206,10 +223,24 @@ def repo_profile(repo: Path) -> dict[str, Any]:
     }
 
 
+def resolve_run_id() -> str:
+    for env_name in ("POOH_RUN_ID", "POOH_SKILLS_RUN_ID"):
+        value = str(os.environ.get(env_name, "")).strip()
+        if value:
+            return value
+    return uuid.uuid4().hex
+
+
+def resolve_domain(skill_id: str) -> str:
+    return SKILL_DOMAIN_MAP.get(skill_id, skill_id)
+
+
 def default_sidecar(skill_id: str, repo: Path, summary_path: Path, report_path: Path, agent_brief_path: Path) -> dict[str, Any]:
     return {
         "schema_version": SCHEMA_VERSION,
+        "run_id": resolve_run_id(),
         "skill": skill_id,
+        "domain": resolve_domain(skill_id),
         "repo_root": str(repo.resolve()),
         "generated_at": utc_now(),
         "stage": "preflight",
@@ -695,6 +726,7 @@ def bootstrap_shared(args: argparse.Namespace) -> int:
     dependency_status, actions, failures = bootstrap_requirement_union(repo, list(dict.fromkeys(tools)), list(dict.fromkeys(runtime_features)))
     payload = {
         "schema_version": SCHEMA_VERSION,
+        "run_id": resolve_run_id(),
         "generated_at": utc_now(),
         "repo_root": str(repo.resolve()),
         "dependency_status": dependency_status,
@@ -732,6 +764,36 @@ def inject_summary(args: argparse.Namespace) -> int:
     state = load_json(Path(args.state).resolve())
     summary_path = Path(args.summary).resolve()
     summary = load_json(summary_path)
+    summary["run_id"] = str(state.get("run_id") or resolve_run_id())
+    summary["skill"] = str(state.get("skill") or summary.get("skill") or "")
+    summary["domain"] = str(state.get("domain") or summary.get("domain") or resolve_domain(str(state.get("skill") or "")))
+    summary["repo_root"] = str(state.get("repo_root") or summary.get("repo_root") or "")
+    summary["generated_at"] = str(summary.get("generated_at") or utc_now())
+    summary["overall_verdict"] = str(
+        summary.get("overall_verdict")
+        or summary.get("overall_health")
+        or summary.get("audit_mode")
+        or summary.get("mode")
+        or summary.get("status")
+        or ""
+    )
+    findings = summary.get("findings")
+    if not isinstance(findings, list):
+        findings = summary.get("issues")
+    if not isinstance(findings, list):
+        findings = []
+    summary["findings"] = [item for item in findings if isinstance(item, dict)]
+    if not isinstance(summary.get("severity_counts"), dict):
+        counter = Counter(str((item.get("severity") or "low")).lower() for item in summary["findings"])
+        summary["severity_counts"] = {
+            "critical": int(counter.get("critical", 0)),
+            "high": int(counter.get("high", 0)),
+            "medium": int(counter.get("medium", 0)),
+            "low": int(counter.get("low", 0)),
+        }
+    summary["summary_path"] = str(summary_path)
+    summary["report_path"] = str(state.get("report_path") or summary.get("report_path") or "")
+    summary["agent_brief_path"] = str(state.get("agent_brief_path") or summary.get("agent_brief_path") or "")
     summary["dependency_status"] = state.get("dependency_status") or "ready"
     summary["bootstrap_actions"] = list(state.get("bootstrap_actions") or [])
     summary["dependency_failures"] = list(state.get("dependency_failures") or [])
@@ -1231,11 +1293,9 @@ def build_blocked_summary(skill_id: str, repo: Path, state: dict[str, Any]) -> d
         failures = state.get("dependency_failures") or []
         return {
             "schema_version": "1.0",
-            "skill": "repo-health-orchestrator",
             "generated_at": utc_now(),
-            "repo_root": str(repo.resolve()),
             "overall_health": "blocked",
-            "coverage_status": "partial",
+            "coverage_status": "partial-coverage",
             "summary_line": "Shared bootstrap blocked repo-health orchestration before child audits could start.",
             "skill_runs": [],
             "top_actions": ["Restore blocked orchestrator runtime features and shared prerequisites before retrying the fleet audit."],
@@ -1253,6 +1313,36 @@ def blocked_artifacts(args: argparse.Namespace) -> int:
     state_path = Path(args.state).resolve()
     state = load_json(state_path)
     summary = build_blocked_summary(args.skill_id, repo, state)
+    summary["run_id"] = str(state.get("run_id") or resolve_run_id())
+    summary["skill"] = str(state.get("skill") or args.skill_id)
+    summary["domain"] = str(state.get("domain") or resolve_domain(args.skill_id))
+    summary["repo_root"] = str(state.get("repo_root") or repo.resolve())
+    summary["generated_at"] = str(summary.get("generated_at") or utc_now())
+    summary["overall_verdict"] = str(
+        summary.get("overall_verdict")
+        or summary.get("overall_health")
+        or summary.get("audit_mode")
+        or summary.get("mode")
+        or summary.get("status")
+        or ""
+    )
+    findings = summary.get("findings")
+    if not isinstance(findings, list):
+        findings = summary.get("issues")
+    if not isinstance(findings, list):
+        findings = []
+    summary["findings"] = [item for item in findings if isinstance(item, dict)]
+    if not isinstance(summary.get("severity_counts"), dict):
+        counter = Counter(str((item.get("severity") or "low")).lower() for item in summary["findings"])
+        summary["severity_counts"] = {
+            "critical": int(counter.get("critical", 0)),
+            "high": int(counter.get("high", 0)),
+            "medium": int(counter.get("medium", 0)),
+            "low": int(counter.get("low", 0)),
+        }
+    summary["summary_path"] = str(Path(args.summary_path).resolve())
+    summary["report_path"] = str(Path(args.report_path).resolve())
+    summary["agent_brief_path"] = str(Path(args.agent_brief_path).resolve())
     summary["dependency_status"] = "blocked"
     summary["bootstrap_actions"] = list(state.get("bootstrap_actions") or [])
     summary["dependency_failures"] = list(state.get("dependency_failures") or [])

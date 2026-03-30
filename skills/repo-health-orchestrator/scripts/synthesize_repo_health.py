@@ -14,8 +14,10 @@ from aggregate_repo_health import RED_VERDICTS
 from aggregate_repo_health import YELLOW_VERDICTS
 from aggregate_repo_health import recommended_domain_action
 from repo_health_catalog import CLUSTER_SPECS
-from repo_health_catalog import DOMAIN_BY_NAME
 from repo_health_catalog import DOMAIN_SPECS
+from repo_health_catalog import agent_brief_path as child_agent_brief_path
+from repo_health_catalog import report_path as child_report_path
+from repo_health_catalog import summary_path as child_summary_path
 
 
 def utc_now() -> str:
@@ -133,8 +135,9 @@ def build_domain_records(summary: dict[str, Any], harness_dir: Path) -> tuple[li
 
     for spec in DOMAIN_SPECS:
         run = runs_by_domain.get(spec.domain, {})
-        report_path = Path(run.get("report_path") or (harness_dir / spec.report_filename))
-        brief_path = Path(run.get("agent_brief_path") or (harness_dir / spec.agent_brief_filename))
+        summary_path = Path(run.get("summary_path") or child_summary_path(harness_dir, spec.domain))
+        report_path = Path(run.get("report_path") or child_report_path(harness_dir, spec.domain))
+        brief_path = Path(run.get("agent_brief_path") or child_agent_brief_path(harness_dir, spec.domain))
         report_text, report_err = load_text(report_path)
         brief_text, brief_err = load_text(brief_path)
         evidence_gaps: list[str] = []
@@ -162,7 +165,7 @@ def build_domain_records(summary: dict[str, Any], harness_dir: Path) -> tuple[li
             "severity_counts": run.get("severity_counts") or {"critical": 0, "high": 0, "medium": 0, "low": 0},
             "top_categories": run.get("top_categories") or [],
             "notes": run.get("notes") or "",
-            "summary_path": run.get("summary_path") or str((harness_dir / spec.summary_filename).resolve()),
+            "summary_path": str(summary_path.resolve()),
             "report_path": str(report_path.resolve()),
             "agent_brief_path": str(brief_path.resolve()),
             "report_excerpt": compact_excerpt(report_text),
@@ -286,7 +289,7 @@ def teaching_line(clusters: list[dict[str, Any]]) -> str:
     watch = [cluster for cluster in clusters if cluster["status"] == "watch"]
     if blocked and blocked[0]["cluster"] == "governance-and-boundaries":
         return "It is teaching AI that local convenience outranks machine-enforced contracts and boundary discipline."
-    if blocked and blocked[0]["cluster"] == "production-correctness":
+    if blocked and blocked[0]["cluster"] == "runtime-correctness-and-failure-handling":
         return "It is teaching AI to let side effects and durable execution outrun proof."
     if blocked and blocked[0]["cluster"] == "surface-freshness-and-cleanup":
         return "It is teaching AI to normalize stale interfaces and defer cleanup until drift becomes ambient."
@@ -302,6 +305,7 @@ def render_report(evidence: dict[str, Any]) -> str:
         "",
         "## 1. Executive summary",
         "",
+        f"- run_id: `{snapshot['run_id']}`",
         f"- overall_health: `{snapshot['overall_health']}`",
         f"- coverage_status: `{snapshot['coverage_status']}`",
         f"- one-line diagnosis: `{snapshot['summary_line']}`",
@@ -391,6 +395,7 @@ def render_agent_brief(evidence: dict[str, Any]) -> str:
         "",
         "## Overall",
         "",
+        f"- run_id: `{snapshot['run_id']}`",
         f"- overall_health: `{snapshot['overall_health']}`",
         f"- coverage_status: `{snapshot['coverage_status']}`",
         f"- summary_line: `{snapshot['summary_line']}`",
@@ -442,10 +447,12 @@ def main() -> int:
         "schema_version": "1.0",
         "skill": "repo-health-orchestrator",
         "kind": "repo-health-evidence",
+        "run_id": str(summary.get("run_id") or ""),
         "generated_at": utc_now(),
         "repo_root": str(repo),
         "overall_snapshot": {
             "summary_path": str(summary_path),
+            "run_id": str(summary.get("run_id") or ""),
             "overall_health": str(summary.get("overall_health") or ""),
             "coverage_status": str(summary.get("coverage_status") or ""),
             "summary_line": str(summary.get("summary_line") or ""),

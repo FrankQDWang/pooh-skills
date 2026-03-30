@@ -13,9 +13,11 @@ from typing import Any
 from repo_health_catalog import EXPECTED
 from repo_health_catalog import agent_brief_path as child_agent_brief_path
 from repo_health_catalog import report_path as child_report_path
+from repo_health_catalog import summary_path as child_summary_path
 
 RED_VERDICTS = {
     "unsafe",
+    "blocked",
     "broken",
     "contract-theater",
     "soft-gates",
@@ -30,7 +32,6 @@ YELLOW_VERDICTS = {
     "partial-coverage",
     "ceremonial",
     "contained",
-    "soft-gates",
     "baseline-needed",
     "cleanup-first",
     "boundary-hardening",
@@ -85,12 +86,18 @@ def recommended_domain_action(run: dict[str, Any], coverage_status: str = "compl
             return "Stop structural debt from spreading: freeze boundary violations and cycles before other cleanup."
         if domain == "pythonic-ddd-drift":
             return "Repair boundary leaks and flatten ceremonial Python layers before adding more abstractions."
+        if domain == "module-shape":
+            return "Break up oversized modules and fan-out hubs before they keep teaching low-cohesion structure."
         if domain == "cleanup":
             return "Delete expired compatibility surfaces that are still distorting the codebase."
         if domain == "durable-agents":
             return "Repair durable-agent path correctness before trusting Temporal / pydantic-ai behavior."
         if domain == "llm-api-freshness":
             return "Verify current provider docs and migrate stale LLM SDK or endpoint usage before the next AI-facing change."
+        if domain == "error-governance":
+            return "Repair outward error contracts before more surfaces learn the wrong failure shape."
+        if domain == "silent-failure":
+            return "Remove swallowed failures and invisible fallback paths before they normalize silent corruption."
     if is_watch:
         if domain == "pythonic-ddd-drift":
             return "Trim abstraction bloat where it adds shape without policy."
@@ -100,6 +107,12 @@ def recommended_domain_action(run: dict[str, Any], coverage_status: str = "compl
             return "Stabilize dependency-audit config and workspace metadata before trying to harden boundaries."
         if domain == "llm-api-freshness":
             return "Run a Context7-backed verification pass to separate real LLM API drift from local suspicion."
+        if domain == "module-shape":
+            return "Use module-shape findings to target the worst hubs first instead of broad mechanical reshuffling."
+        if domain == "silent-failure":
+            return "Make fail-loud rules visible before more catch-and-continue patterns spread."
+        if domain == "error-governance":
+            return "Tighten the public error contract before schema and message text drift farther apart."
     return None
 
 
@@ -166,30 +179,37 @@ def extract_severity_counts(data: dict[str, Any]) -> dict[str, int]:
 def extract_top_categories(data: dict[str, Any], limit: int = 3) -> list[str]:
     counter = Counter()
     for finding in extract_findings(data):
-        category = (
-            finding.get("category")
-            or finding.get("gate")
-            or finding.get("domain")
-            or finding.get("kind")
-        )
+        category = finding.get("category") or finding.get("gate") or finding.get("domain") or finding.get("kind")
         if isinstance(category, str):
             counter[category] += 1
     return [cat for cat, _ in counter.most_common(limit)]
 
 
-def domain_status(data: dict[str, Any] | None, err: str | None) -> str:
+def classify_run(
+    data: dict[str, Any] | None,
+    err: str | None,
+    *,
+    expected_skill: str,
+    expected_run_id: str,
+) -> tuple[str, str]:
     if err == "missing":
-        return "missing"
+        return "missing", "summary file not found"
     if err and err.startswith("invalid"):
-        return "invalid"
+        return "invalid", err
     if not data:
-        return "missing"
+        return "missing", "summary file not found"
+    actual_skill = str(data.get("skill") or "")
+    if actual_skill and actual_skill != expected_skill:
+        return "invalid", f"summary skill mismatch: expected {expected_skill}, got {actual_skill}"
+    actual_run_id = str(data.get("run_id") or "")
+    if expected_run_id and actual_run_id != expected_run_id:
+        return "invalid", f"run_id mismatch: expected {expected_run_id}, got {actual_run_id or '-'}"
     if extract_dependency_status(data) == "blocked":
-        return "blocked"
+        return "blocked", ""
     verdict = extract_verdict(data)
     if verdict == "not-applicable":
-        return "not-applicable"
-    return "present"
+        return "not-applicable", "child skill marked this domain not applicable"
+    return "present", ""
 
 
 def normalize_health(skill_runs: list[dict[str, Any]]) -> tuple[str, str]:
@@ -202,21 +222,18 @@ def normalize_health(skill_runs: list[dict[str, Any]]) -> tuple[str, str]:
         if run["status"] == "blocked" or run.get("dependency_status") == "blocked":
             blocked = True
             continue
-        verdict = (run.get("child_verdict") or "").lower()
+        verdict = str(run.get("child_verdict") or "").lower()
         sev = run.get("severity_counts") or {}
         if int(sev.get("critical", 0)) > 0 or int(sev.get("high", 0)) > 0:
             blocked = True
         elif int(sev.get("medium", 0)) > 0:
             watch = True
-
         if verdict in RED_VERDICTS:
             blocked = True
         elif verdict in YELLOW_VERDICTS:
             watch = True
-        elif verdict in POSITIVE_VERDICTS:
-            pass
 
-    if len(present) == 0:
+    if not present:
         return "not-applicable", "No child summary was available to aggregate."
     if all(run["status"] == "not-applicable" for run in present) and not missing:
         return "not-applicable", "Every available child skill marked the repository not applicable for its domain."
@@ -230,17 +247,19 @@ def normalize_health(skill_runs: list[dict[str, Any]]) -> tuple[str, str]:
 
 
 def write_markdown(report: dict[str, Any], out_path: Path) -> None:
-    lines = []
-    lines.append("# Repo Health Report")
-    lines.append("")
-    lines.append(f"- overall_health: `{report['overall_health']}`")
-    lines.append(f"- coverage_status: `{report['coverage_status']}`")
-    lines.append(f"- summary: {report['summary_line']}")
-    lines.append("")
-    lines.append("## Coverage map")
-    lines.append("")
-    lines.append("| Domain | Skill | Status | Dependency | Child verdict | Top categories | Notes |")
-    lines.append("|---|---|---|---|---|---|---|")
+    lines = [
+        "# Repo Health Report",
+        "",
+        f"- run_id: `{report['run_id']}`",
+        f"- overall_health: `{report['overall_health']}`",
+        f"- coverage_status: `{report['coverage_status']}`",
+        f"- summary: {report['summary_line']}",
+        "",
+        "## Coverage map",
+        "",
+        "| Domain | Skill | Status | Dependency | Child verdict | Top categories | Notes |",
+        "|---|---|---|---|---|---|---|",
+    ]
     for run in report["skill_runs"]:
         lines.append(
             f"| {run['domain']} | {run['skill_name']} | {run['status']} | "
@@ -251,66 +270,85 @@ def write_markdown(report: dict[str, Any], out_path: Path) -> None:
         )
     lines.append("")
     if report.get("top_actions"):
-        lines.append("## Top actions")
-        lines.append("")
+        lines.extend(["## Top actions", ""])
         for action in report["top_actions"]:
             lines.append(f"- {action}")
         lines.append("")
     out_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def load_bootstrap_payload(path: Path | None) -> dict[str, Any]:
+    if not path:
+        return {
+            "dependency_status": "ready",
+            "bootstrap_actions": [],
+            "dependency_failures": [],
+        }
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return {
+        "dependency_status": str(data.get("dependency_status") or "ready"),
+        "bootstrap_actions": [item for item in data.get("bootstrap_actions") or [] if isinstance(item, dict)],
+        "dependency_failures": [item for item in data.get("dependency_failures") or [] if isinstance(item, dict)],
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo", required=True)
+    parser.add_argument("--run-id", required=True)
     parser.add_argument("--harness-dir", required=False)
+    parser.add_argument("--bootstrap-json", required=False)
     parser.add_argument("--out-json", required=True)
     parser.add_argument("--out-md", required=False)
     args = parser.parse_args()
 
     repo = Path(args.repo).resolve()
     harness = Path(args.harness_dir).resolve() if args.harness_dir else repo / ".repo-harness"
+    bootstrap_payload = load_bootstrap_payload(Path(args.bootstrap_json).resolve() if args.bootstrap_json else None)
 
     skill_runs = []
     missing_skills = []
     invalid_summaries = []
 
-    for domain, skill_name, filename in EXPECTED:
-        summary_path = harness / filename
+    for domain, skill_name in EXPECTED:
+        summary_path = child_summary_path(harness, domain)
         report_path = child_report_path(harness, domain)
         agent_brief_path = child_agent_brief_path(harness, domain)
         data, err = load_json(summary_path)
-        status = domain_status(data, err)
+        status, classification_note = classify_run(
+            data,
+            err,
+            expected_skill=skill_name,
+            expected_run_id=args.run_id,
+        )
         child_verdict = extract_verdict(data) if data else None
         dependency_status = extract_dependency_status(data or {})
         dependency_failures = extract_dependency_failures(data or {})
         sev = extract_severity_counts(data or {})
         top_categories = extract_top_categories(data or {})
-        notes = ""
-        if err == "missing":
+        notes = classification_note
+        if status == "missing":
             missing_skills.append(skill_name)
-            notes = "summary file not found"
-        elif err:
-            invalid_summaries.append(filename)
-            notes = err
+        elif status == "invalid":
+            invalid_summaries.append(skill_name)
         elif status == "blocked":
             first_failure = dependency_failures[0] if dependency_failures else {}
             failure_name = str(first_failure.get("name") or "dependency")
             failure_reason = str(first_failure.get("failure_reason") or "dependency bootstrap blocked the child skill")
             notes = f"{failure_name}: {failure_reason}"
-        elif status == "not-applicable":
-            notes = "child skill marked this domain not applicable"
         elif domain == "llm-api-freshness" and child_verdict == "triage":
             notes = "this run only produced local surface triage; current docs were not verified"
         elif domain == "llm-api-freshness" and child_verdict == "verified":
             notes = "current provider docs were verified for the detected surfaces"
 
         skill_runs.append({
+            "run_id": args.run_id,
             "domain": domain,
             "skill_name": skill_name,
             "status": status,
-            "summary_path": str(summary_path),
-            "report_path": str(report_path),
-            "agent_brief_path": str(agent_brief_path),
+            "summary_path": str(summary_path.resolve()),
+            "report_path": str(report_path.resolve()),
+            "agent_brief_path": str(agent_brief_path.resolve()),
             "dependency_status": dependency_status,
             "dependency_failures": dependency_failures,
             "child_verdict": child_verdict,
@@ -322,36 +360,28 @@ def main() -> int:
     overall_health, summary_line = normalize_health(skill_runs)
     coverage_status = "complete" if not missing_skills and not invalid_summaries else "partial"
 
-    # top actions derived from blocker/watch domains
-    top_actions = []
+    top_actions: list[str] = []
     for run in skill_runs:
         action = recommended_domain_action(run, coverage_status=coverage_status)
-        if action:
+        if action and action not in top_actions:
             top_actions.append(action)
-
-    # remove duplicates while keeping order
-    deduped_actions = []
-    seen = set()
-    for action in top_actions:
-        if action not in seen:
-            deduped_actions.append(action)
-            seen.add(action)
 
     report = {
         "schema_version": "1.0",
+        "run_id": args.run_id,
         "skill": "repo-health-orchestrator",
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
         "repo_root": str(repo),
         "overall_health": overall_health,
         "coverage_status": coverage_status,
         "summary_line": summary_line,
         "skill_runs": skill_runs,
-        "top_actions": deduped_actions[:5],
+        "top_actions": top_actions[:5],
         "missing_skills": missing_skills,
         "invalid_summaries": invalid_summaries,
-        "dependency_status": "ready",
-        "bootstrap_actions": [],
-        "dependency_failures": [],
+        "dependency_status": bootstrap_payload["dependency_status"],
+        "bootstrap_actions": bootstrap_payload["bootstrap_actions"],
+        "dependency_failures": bootstrap_payload["dependency_failures"],
     }
 
     out_json = Path(args.out_json).resolve()

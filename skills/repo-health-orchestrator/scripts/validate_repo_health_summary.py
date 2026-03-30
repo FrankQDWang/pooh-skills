@@ -10,6 +10,7 @@ from pathlib import Path
 
 REQUIRED_TOP = {
     "schema_version",
+    "run_id",
     "skill",
     "generated_at",
     "repo_root",
@@ -23,6 +24,7 @@ REQUIRED_TOP = {
 }
 
 REQUIRED_RUN = {
+    "run_id",
     "domain",
     "skill_name",
     "status",
@@ -61,6 +63,9 @@ def main() -> int:
 
     if data.get("skill") != "repo-health-orchestrator":
         print("Unexpected skill field", file=sys.stderr)
+        return 2
+    if not isinstance(data.get("run_id"), str) or not data.get("run_id"):
+        print("run_id must be a non-empty string", file=sys.stderr)
         return 2
 
     dependency_status = data.get("dependency_status")
@@ -112,6 +117,9 @@ def main() -> int:
             if not isinstance(run.get(key), str):
                 print(f"skill_runs[{idx}] field {key!r} must be a string", file=sys.stderr)
                 return 2
+        if run.get("run_id") != data.get("run_id"):
+            print(f"skill_runs[{idx}] run_id must match top-level run_id", file=sys.stderr)
+            return 2
         run_dependency_status = run.get("dependency_status")
         if run_dependency_status not in VALID_DEPENDENCY_STATUS:
             print(f"skill_runs[{idx}] has unsupported dependency_status: {run_dependency_status!r}", file=sys.stderr)
