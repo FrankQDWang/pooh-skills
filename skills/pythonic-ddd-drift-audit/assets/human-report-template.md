@@ -32,7 +32,7 @@ For each strong finding:
 
 {{plain_language}}
 
-## 3. Where Python is being forced to imitate Java
+## 3. Where Python is being forced into non-Pythonic ceremony
 
 - interface inflation:
 - abstract base shells:

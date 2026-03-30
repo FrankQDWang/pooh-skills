@@ -1,6 +1,6 @@
 # Signature Contract Hardgate — Agent Brief
 
-> Use short, patch-oriented statements. No tutorials. No padding.
+> Use short, handoff-oriented statements. No tutorials. No padding.
 
 ## Repo profile
 - `repo_profile`: {{repo_profile}}

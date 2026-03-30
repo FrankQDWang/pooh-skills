@@ -7,9 +7,17 @@ import argparse
 import json
 import os
 import re
+import sys
 from collections import Counter
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Any
+
+RUNTIME_BIN_DIR = Path(__file__).resolve().parents[2] / ".pooh-runtime" / "bin"
+if str(RUNTIME_BIN_DIR) not in sys.path:
+    sys.path.insert(0, str(RUNTIME_BIN_DIR))
+
+from tool_runner import ToolRun, run_locked_tool, run_semgrep_rules  # noqa: E402
 
 SKIP_DIRS = {
     ".git",
@@ -55,6 +63,23 @@ GATE_ORDER = [
     "contract-tests",
     "merge-governance",
 ]
+
+SEMGRP_ESCAPE_HATCH_RULES = """
+rules:
+  - id: python-type-ignore
+    languages: [python]
+    severity: WARNING
+    message: Escape hatch
+    pattern: "# type: ignore"
+  - id: ts-ignore
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: Escape hatch
+    pattern-either:
+      - pattern: "@ts-ignore"
+      - pattern: "@ts-nocheck"
+      - pattern: "eslint-disable"
+"""
 
 
 @dataclass
@@ -210,6 +235,75 @@ def collect_signals(repo: Path, files: list[Path]) -> dict[str, object]:
     }
 
 
+def choose_js_targets(repo: Path, files: list[Path]) -> list[str]:
+    targets: set[str] = set()
+    for path in files:
+        if path.suffix.lower() not in {".ts", ".tsx", ".js", ".jsx"}:
+            continue
+        rel = path.relative_to(repo)
+        targets.add(rel.parts[0] if rel.parts else ".")
+    return sorted(targets) or ["."]
+
+
+def first_matching_file(files: list[Path], name: str) -> Path | None:
+    for path in files:
+        if path.name == name:
+            return path
+    return None
+
+
+def collect_tool_signals(repo: Path, files: list[Path], repo_profile: dict[str, object], signals: dict[str, object]) -> list[ToolRun]:
+    tool_runs: list[ToolRun] = []
+    languages = set(repo_profile["languages"])
+
+    if "python" in languages:
+        for tool, args in (
+            ("ruff", ["check", "--output-format", "json", str(repo)]),
+            ("basedpyright", ["--outputjson", "-p", str(repo)]),
+            ("tach", ["check", "--output", "json"]),
+        ):
+            run, payload = run_locked_tool(tool, args, repo, allow_exit_codes={0, 1})
+            tool_runs.append(run)
+            if tool == "basedpyright" and run.status in {"passed", "issues"}:
+                signals["python_strict"] = True
+            if tool == "tach" and run.status in {"passed", "issues"}:
+                signals["architecture_config"] = True
+
+    if {"typescript", "javascript"} & languages:
+        tsconfig = first_matching_file(files, "tsconfig.json")
+        if tsconfig is not None:
+            tsc_run, _ = run_locked_tool("tsc", ["--noEmit", "--pretty", "false", "-p", str(tsconfig)], repo, allow_exit_codes={0, 1})
+            tool_runs.append(tsc_run)
+            if tsc_run.status in {"passed", "issues"}:
+                signals["ts_strict"] = True
+        js_targets = choose_js_targets(repo, files)
+        eslint_run, _ = run_locked_tool(
+            "typescript-eslint-stack",
+            ["--format", "json", "--ext", ".js,.jsx,.ts,.tsx", *js_targets],
+            repo,
+            allow_exit_codes={0, 1},
+        )
+        tool_runs.append(eslint_run)
+        if eslint_run.status in {"passed", "issues"}:
+            signals["typed_lint"] = True
+
+        dep_run, _ = run_locked_tool("dependency-cruiser", ["--no-config", "-T", "json", *js_targets], repo, allow_exit_codes={0, 1})
+        tool_runs.append(dep_run)
+        if dep_run.status in {"passed", "issues"}:
+            signals["architecture_config"] = True
+
+    semgrep_run, semgrep_payload = run_semgrep_rules(SEMGRP_ESCAPE_HATCH_RULES, repo, [str(repo)])
+    tool_runs.append(semgrep_run)
+    if isinstance(semgrep_payload, dict):
+        signals["escape_hatch_count"] += len(semgrep_payload.get("results") or [])
+
+    signals.setdefault("tool_notes", [])
+    for item in tool_runs:
+        if item.status == "failed":
+            signals["tool_notes"].append(f"{item.tool}: {item.summary}")
+    return tool_runs
+
+
 def gate_state(gate: str, signals: dict[str, object], repo_profile: dict[str, object]) -> GateState:
     langs = set(repo_profile["languages"])
     contract_surface = repo_profile["contract_surface"]
@@ -356,6 +450,7 @@ def render_human_report(summary: dict[str, object]) -> str:
     next_actions = summary.get("next_actions", [])
     later_actions = summary.get("later_actions", [])
     repo_profile = summary["repo_profile"]
+    tool_runs = summary.get("tool_runs", [])
 
     lines = [
         "# 签名即契约硬门控审计报告",
@@ -374,6 +469,9 @@ def render_human_report(summary: dict[str, object]) -> str:
         f"- 契约表面：{', '.join(repo_profile.get('contract_surface', [])[:5]) or '未见明确契约层'}",
         f"- 可见门控：{', '.join(gate['gate'] for gate in summary['gate_states'] if gate['state'] in {'partial', 'enforced', 'hardened'}) or '很弱'}",
         f"- 不可见但关键：{'; '.join(unverified) or '无'}",
+        "",
+        "## 真实工具执行",
+        *(f"- {item['tool']}: {item['status']} — {item['summary']}" for item in tool_runs),
         "",
         "## 关键问题（已确认）",
         "",
@@ -436,6 +534,9 @@ def render_agent_brief(summary: dict[str, object]) -> str:
         f"- `contract_surface`: {', '.join(summary['repo_profile'].get('contract_surface', [])) or 'none'}",
         f"- `overall_verdict`: {summary['overall_verdict']}",
         "",
+        "## Tool runs",
+        *(f"- {item['tool']}: {item['status']} ({item['summary']})" for item in summary.get("tool_runs", [])),
+        "",
         "## Findings",
         "",
     ]
@@ -477,6 +578,8 @@ def main() -> int:
     collected = collect_signals(repo, files)
     repo_profile = collected["repo_profile"]
     signals = collected["signals"]
+    tool_runs = collect_tool_signals(repo, files, repo_profile, signals)
+    repo_profile["notes"].extend(signals.get("tool_notes", []))
     gates = [gate_state(name, signals, repo_profile) for name in GATE_ORDER]
     findings = build_findings(gates, repo_profile)
     overall_verdict = infer_verdict(gates)
@@ -505,6 +608,7 @@ def main() -> int:
             "Raise changed-files strictness only after the legacy surface is mapped and quarantined.",
             "Keep escape hatches exceptional, named, and review-visible.",
         ],
+        "tool_runs": [item.to_dict() for item in tool_runs],
     }
 
     (out_dir / "contract-hardgate-summary.json").write_text(

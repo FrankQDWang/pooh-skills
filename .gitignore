@@ -4,3 +4,10 @@ dist/
 *.zip
 *.pyc
 __pycache__/
+.repo-harness/
+skills/.pooh-runtime/.install.lock
+skills/.pooh-runtime/python-toolchain/.venv/
+skills/.pooh-runtime/node-toolchain/node_modules/
+skills/.pooh-runtime/bin/lychee
+skills/.pooh-runtime/bin/vale
+skills/.pooh-runtime/bin/.downloads/

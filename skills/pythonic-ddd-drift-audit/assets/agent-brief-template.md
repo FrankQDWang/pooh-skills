@@ -28,6 +28,6 @@ Use short, decision-level language.
   change_shape: move framework dependency behind adapter and keep domain package pure
   validation: rerun pythonic-ddd-drift scan; verify domain package no longer imports infra / transport modules
   merge_gate: block-now
-  autofix_allowed: true
-  notes: moving imports is usually mechanical if behavior stays unchanged
+  autofix_allowed: false
+  notes: manual restructuring is required; this repository only reports and hands off the work
 ```

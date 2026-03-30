@@ -22,6 +22,9 @@ pooh_runtime_prepare() {
   POOH_RUNTIME_ROOT="$(CDPATH= cd -- "$script_dir/../../.pooh-runtime" && pwd)"
   POOH_RUNTIME_BIN="$POOH_RUNTIME_ROOT/bin/runtime_contract.py"
   POOH_RUNTIME_STATE="$out_dir/${skill_id}-runtime.json"
+  POOH_RUNTIME_PY_BIN="$POOH_RUNTIME_ROOT/python-toolchain/.venv/bin"
+  POOH_RUNTIME_NODE_BIN="$POOH_RUNTIME_ROOT/node-toolchain/node_modules/.bin"
+  POOH_RUNTIME_DOCS_BIN="$POOH_RUNTIME_ROOT/bin"
 
   [[ -f "$POOH_RUNTIME_BIN" ]] || {
     printf 'Error: shared runtime not found at %s\n' "$POOH_RUNTIME_BIN" >&2
@@ -32,6 +35,16 @@ pooh_runtime_prepare() {
     return 1
   }
   mkdir -p "$POOH_RUNTIME_OUT_DIR"
+}
+
+pooh_runtime_export_path() {
+  local segments=()
+  [[ -d "$POOH_RUNTIME_PY_BIN" ]] && segments+=("$POOH_RUNTIME_PY_BIN")
+  [[ -d "$POOH_RUNTIME_NODE_BIN" ]] && segments+=("$POOH_RUNTIME_NODE_BIN")
+  [[ -d "$POOH_RUNTIME_DOCS_BIN" ]] && segments+=("$POOH_RUNTIME_DOCS_BIN")
+  if [[ "${#segments[@]}" -gt 0 ]]; then
+    export PATH="$(IFS=:; printf '%s' "${segments[*]}"):$PATH"
+  fi
 }
 
 pooh_runtime_bootstrap_or_block() {
@@ -55,6 +68,8 @@ pooh_runtime_bootstrap_or_block() {
       --agent-brief-path "$POOH_RUNTIME_AGENT_BRIEF_PATH"
     return 10
   fi
+
+  pooh_runtime_export_path
 
   return "$exit_code"
 }

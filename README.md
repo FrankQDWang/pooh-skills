@@ -2,6 +2,9 @@
 
 `pooh-skills` 用于集中管理仅安装到 Codex 的 skills。
 
+This repository detects and reports only; it does not perform repository cleanup or automated fixes.
+It only targets Python / TypeScript repositories and their documentation surfaces.
+
 ## 目录结构
 
 ```text
@@ -18,14 +21,14 @@ scripts/
 
 ## 当前 skill
 
-- `dependency-audit`: 面向 Python / TypeScript / mixed monorepo 的依赖方向、架构边界、循环依赖与 dead-code 信号审计；缺失必需工具时先尝试自举安装，失败则产出 blocked 工件而不是伪装成低置信成功。
+- `dependency-audit`: 面向 Python / TypeScript 仓库与 workspace 的依赖方向、架构边界、循环依赖与 dead-code 信号审计；缺失必需工具时先尝试自举安装，失败则产出 blocked 工件而不是伪装成低置信成功。
 - `signature-contract-hardgate`: 面向 Python / TypeScript 仓库的“签名即契约”硬门控审计，检查 compile-time gates、runtime schemas、错误通道、边界规则、逃逸口治理与 merge protections 到底是真门还是摆设。
 - `pydantic-ai-temporal-hardgate`: 面向 `Python + Temporal + pydantic-ai` 仓库的 durable execution 硬门控审计，检查 Workflow determinism、sandbox、durable-agent path、tool / deps 契约、replay / time-skipping harness 和 merge gate 到底是真是假。
-- `controlled-cleanup-hardgate`: 面向大型仓库的可控清理审计，检查 deprecated surfaces、compatibility shims、stale docs、expired removal targets、feature-flag debt 与 cleanup readiness，输出人类报告、agent brief 和机器可消费 summary。
+- `controlled-cleanup-hardgate`: 面向 Python / TypeScript 仓库的 deprecated / removal readiness 审计，检查 deprecated surfaces、compatibility shims、stale docs、expired removal targets 与 feature-flag debt，输出人类报告、agent brief 和机器可消费 summary。
 - `distributed-side-effect-hardgate`: 面向消息、worker、webhook 与事件驱动仓库的分布式副作用审计，检查 dual write、outbox、幂等、unsafe retry、事件契约和补偿/可观测性缺口。
 - `pythonic-ddd-drift-audit`: 面向 Python-heavy 仓库的 Pythonic 形状债与 DDD 漂移审计，检查 domain boundary leak、cross-context bleed、ABC 过度、thin wrapper 与假 CQRS。
 - `llm-api-freshness-guard`: 面向主流 LLM provider / wrapper surface 的 API 新鲜度审计，借助 Context7 检查是否还在使用过时 SDK、旧 endpoint、漂移的 tool calling / structured output / streaming / auth / gateway 配置，并支持通过 provider registry 扩展到其他 surface；Context7 不可用时直接 blocked，不再把缺依赖包装成正式成功结果。
-- `repo-health-orchestrator`: 面向整仓体检的汇总 skill，每次先清空 `.repo-harness`，再并行启动 7 个 child audit subagents，维护一个终端实时 control plane，并在结束时先产出机器 rollup，再合成 cross-domain evidence、最终总报告和 agent brief。要求运行环境支持 Codex subagent，以及当前会话模型与推理强度继承语义。
+- `repo-health-orchestrator`: 面向整仓体检的汇总 skill，每次先清空 `.repo-harness`，先串行 bootstrap 共享锁定工具链，再并行启动 7 个 child audit subagents，维护一个终端实时 control plane，并在结束时先产出机器 rollup，再合成 cross-domain evidence、最终总报告和 agent brief。要求运行环境支持 Codex subagent，以及当前会话模型与推理强度继承语义。
 
 ## 安装
 
@@ -73,9 +76,11 @@ scripts/
 - `.repo-harness` 是纯输出目录，只保存当前 run 的 summary / report / brief / linkcheck / control-plane state 等工件，不放默认输入
 - `repo-health-orchestrator` 采用双层汇总：`repo-health-summary.json` 负责机器真相，`repo-health-evidence.json` 负责 cross-domain synthesis，最终 `repo-health-report.md` 与 `repo-health-agent-brief.md` 基于 evidence 生成
 - 所有 child skills 统一遵守 fail-fast bootstrap 合约：先 `preflight`，再尝试自动安装缺失依赖；安装失败时停止主审计，但仍写标准 blocked 工件
+- installable tools 统一由共享 `.pooh-runtime` 锁定管理：Python CLI 只经 `uv`，TS/Node CLI 只经 `pnpm`；`lychee` 与 `Vale` 是 docs-only 例外，由共享 runtime 统一管理
 - 每个 child skill 运行期间都会写 `.repo-harness/<skill-id>-runtime.json`，供 orchestrator 和终端 control plane 显示 `PREFLIGHT / BOOTSTRAPPING / RUNNING / BLOCKED / COMPLETE / NOT APPLICABLE`
 - child skill 自己的 `scripts/run_all.sh` 可以继续作为本地 deterministic helper 独立使用，但不再属于 orchestrator 的公开契约
 - 旧 skill 的 wrapper 现在会先走共享 `.pooh-runtime` 合约；缺依赖时不会再伪装成“保守 baseline 成功”
+- Python 边界工具的唯一标准是 `Tach`；仓库不引入 `import-linter`
 
 ## 兼容性声明
 

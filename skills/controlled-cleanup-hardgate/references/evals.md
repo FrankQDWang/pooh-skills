@@ -9,7 +9,7 @@ Use these as the minimum manual regression set when changing the skill.
 
 ## Paraphrase cases
 4. "We finished the migration. I need proof about what old routes, wrappers, and flags are still hanging around."
-5. "Look for cleanup readiness before we run codemods and delete the legacy path."
+5. "Look for removal readiness before we delete the legacy path."
 
 ## False-positive regressions
 6. "Read these docs and integration notes. They mention legacy compatibility paths and plugin routing, but do not ask for deletion guidance."  

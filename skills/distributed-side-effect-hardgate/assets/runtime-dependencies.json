@@ -2,5 +2,8 @@
   "schema_version": "1.0",
   "skill": "distributed-side-effect-hardgate",
   "runtime_features": [],
-  "dependencies": []
+  "tools": [
+    "semgrep",
+    "ast-grep"
+  ]
 }

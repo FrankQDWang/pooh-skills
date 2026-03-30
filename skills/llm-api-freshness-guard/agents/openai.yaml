@@ -1,7 +1,7 @@
 interface:
   display_name: "LLM API Freshness Guard"
   short_description: "检查主流 LLM provider / wrapper API 用法是否过时，并可通过 registry 扩展"
-  default_prompt: "Use $llm-api-freshness-guard to audit code, a repository, or a diff for stale LLM API usage across mainstream provider and wrapper surfaces. Resolve the relevant current docs via Context7, compare the code against the current official behavior, and produce a blunt human report, a patch-oriented agent brief, and a machine-readable summary JSON. Default to report-only unless fixes are explicitly requested."
+  default_prompt: "Use $llm-api-freshness-guard to audit code, a repository, or a diff for stale LLM API usage across mainstream provider and wrapper surfaces. Resolve the relevant current docs via Context7, compare the code against the current official behavior, and produce a blunt human report, a handoff-oriented agent brief, and a machine-readable summary JSON. Keep the deliverable report-only."
 policy:
   allow_implicit_invocation: true
 dependencies:

@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
-"""Generate a conservative dependency-audit baseline summary.
-
-This wrapper is intentionally honest about its limits:
-- it produces a stable machine-readable baseline for orchestration
-- it profiles repo shape and tool readiness
-- it does not pretend to replace a full Tach / Dependency Cruiser / Knip run
-"""
+"""Run dependency-audit with the locked shared toolchain."""
 
 from __future__ import annotations
 
 import argparse
 import json
 import os
-import shutil
-from collections import Counter
+import sys
+from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
+
+RUNTIME_BIN_DIR = Path(__file__).resolve().parents[2] / ".pooh-runtime" / "bin"
+if str(RUNTIME_BIN_DIR) not in sys.path:
+    sys.path.insert(0, str(RUNTIME_BIN_DIR))
+
+from tool_runner import ToolRun, run_locked_tool, skipped_tool_run, tool_run_map  # noqa: E402
 
 SKIP_DIRS = {
     ".git",
@@ -65,6 +65,14 @@ MANIFEST_FILES = {
     "pnpm-lock.yaml",
     "yarn.lock",
 }
+
+DEPCRUISE_CONFIGS = (
+    ".dependency-cruiser.js",
+    ".dependency-cruiser.cjs",
+    ".dependency-cruiser.mjs",
+    ".dependency-cruiser.json",
+)
+KNIP_CONFIGS = ("knip.json", "knip.jsonc", "knip.js", "knip.ts", "knip.config.ts", "knip.config.js")
 
 
 @dataclass
@@ -136,12 +144,6 @@ def detect_package_managers(repo: Path) -> list[str]:
     return managers
 
 
-def has_tool_toml_section(pyproject: Path, header: str) -> bool:
-    if not pyproject.exists():
-        return False
-    return header in read_text(pyproject)
-
-
 def bucket_source_root(rel: Path) -> str | None:
     if not rel.parts:
         return None
@@ -153,10 +155,8 @@ def bucket_source_root(rel: Path) -> str | None:
             return "/".join(rel.parts[:2])
     if first == "src":
         return "src"
-    if first in {"tests", "test", "docs", ".github", "scripts", "skills"}:
+    if first in {"tests", "test", "docs", ".github", "scripts"}:
         return None
-    if rel.suffix.lower() in PYTHON_EXTS and rel.name == "__init__.py":
-        return first
     if rel.suffix.lower() in PYTHON_EXTS | TYPESCRIPT_EXTS | JAVASCRIPT_EXTS:
         return first
     return None
@@ -168,6 +168,8 @@ def collect_repo_profile(repo: Path, files: list[Path]) -> dict[str, object]:
     workspace_roots: set[str] = set()
     package_json_dirs: set[str] = set()
     pyproject_dirs: set[str] = set()
+    python_targets: set[str] = set()
+    js_targets: set[str] = set()
     notes: list[str] = []
 
     for path in files:
@@ -177,6 +179,10 @@ def collect_repo_profile(repo: Path, files: list[Path]) -> dict[str, object]:
         root = bucket_source_root(rel)
         if root:
             source_roots.add(root)
+            if path.suffix.lower() in PYTHON_EXTS:
+                python_targets.add(root)
+            elif path.suffix.lower() in TYPESCRIPT_EXTS | JAVASCRIPT_EXTS:
+                js_targets.add(root)
         if path.name == "package.json":
             package_json_dirs.add(str(rel.parent))
         elif path.name == "pyproject.toml":
@@ -184,7 +190,6 @@ def collect_repo_profile(repo: Path, files: list[Path]) -> dict[str, object]:
 
     if (repo / "pnpm-workspace.yaml").exists():
         workspace_roots.add(".")
-
     for candidate in sorted(package_json_dirs | pyproject_dirs):
         if candidate != ".":
             workspace_roots.add(candidate)
@@ -196,8 +201,8 @@ def collect_repo_profile(repo: Path, files: list[Path]) -> dict[str, object]:
     else:
         monorepo_shape = "repo-without-app-surface"
 
-    if "skills" in {root.split("/")[0] for root in source_roots} and len(source_roots) == 1:
-        notes.append("Only skill metadata and helper scripts were detected; no Python or JS/TS app surface is visible.")
+    if not python_targets and not js_targets:
+        notes.append("No Python or JS/TS application surface was detected outside ignored directories.")
 
     return {
         "languages": detect_languages(files),
@@ -210,233 +215,362 @@ def collect_repo_profile(repo: Path, files: list[Path]) -> dict[str, object]:
         "manifests": sorted(manifests),
         "package_json_dirs": sorted(package_json_dirs),
         "pyproject_dirs": sorted(pyproject_dirs),
+        "python_targets": sorted(python_targets),
+        "js_targets": sorted(js_targets),
     }
 
 
-def build_tool_coverage(repo: Path, profile: dict[str, object]) -> dict[str, object]:
-    languages = set(profile["languages"])
-    source_roots = profile["source_roots"]
-    chosen_tools = [{
-        "tool": "manual",
-        "rationale": (
-            "Wrapper emitted a conservative baseline summary from repo profiling and tool readiness checks. "
-            "Use the full skill workflow to run Tach / Dependency Cruiser / Knip interactively."
-        ),
-    }]
-    skipped_tools: list[dict[str, str]] = []
+def detect_depcruise_config(repo: Path) -> str | None:
+    for name in DEPCRUISE_CONFIGS:
+        if (repo / name).exists():
+            return name
+    return None
 
+
+def detect_knip_directory(repo: Path, profile: dict[str, object]) -> str | None:
+    package_json_dirs = [item for item in profile.get("package_json_dirs", []) if item]
+    if (repo / "package.json").exists():
+        return "."
+    if package_json_dirs:
+        return sorted(package_json_dirs)[0]
+    return None
+
+
+def detect_tach_config(repo: Path) -> bool:
     pyproject = repo / "pyproject.toml"
-    package_json = repo / "package.json"
+    if (repo / "tach.toml").exists():
+        return True
+    if pyproject.exists():
+        return "[tool.tach]" in read_text(pyproject)
+    return False
+
+
+def run_tool_suite(repo: Path, profile: dict[str, object]) -> tuple[list[ToolRun], dict[str, Any]]:
+    tool_runs: list[ToolRun] = []
+    payloads: dict[str, Any] = {}
+    languages = set(profile["languages"])
 
     if "python" in languages:
-        if not source_roots:
-            skipped_tools.append({
-                "tool": "tach",
-                "reason": "Python files exist but source_roots are not credible yet; boundary claims would be scanner-confidence only.",
-            })
-        elif shutil.which("tach") is None:
-            skipped_tools.append({
-                "tool": "tach",
-                "reason": "tach binary is not available to the wrapper on this machine.",
-            })
-        elif not ((repo / "tach.toml").exists() or has_tool_toml_section(pyproject, "[tool.tach]")):
-            skipped_tools.append({
-                "tool": "tach",
-                "reason": "Python surface exists, but no tach.toml or [tool.tach] configuration was found.",
-            })
-        else:
-            skipped_tools.append({
-                "tool": "tach",
-                "reason": "Tool appears ready, but baseline mode does not execute external graph tools automatically.",
-            })
+        run, payload = run_locked_tool(
+            "tach",
+            ["check", "--output", "json"],
+            repo,
+            allow_exit_codes={0, 1},
+        )
+        tool_runs.append(run)
+        payloads["tach"] = payload
+    else:
+        tool_runs.append(skipped_tool_run("tach", "No Python application surface was detected."))
 
-    if "typescript" in languages or "javascript" in languages:
-        depcruise_config = any((repo / name).exists() for name in (
-            ".dependency-cruiser.js",
-            ".dependency-cruiser.cjs",
-            ".dependency-cruiser.mjs",
-            ".dependency-cruiser.json",
-        ))
-        if shutil.which("depcruise") is None and shutil.which("dependency-cruiser") is None:
-            skipped_tools.append({
-                "tool": "dependency-cruiser",
-                "reason": "dependency-cruiser / depcruise binary is not available to the wrapper on this machine.",
-            })
-        elif not depcruise_config:
-            skipped_tools.append({
-                "tool": "dependency-cruiser",
-                "reason": "JS/TS surface exists, but no dependency-cruiser config file was found.",
-            })
-        else:
-            skipped_tools.append({
-                "tool": "dependency-cruiser",
-                "reason": "Tool appears ready, but baseline mode does not execute external graph tools automatically.",
-            })
+    if {"typescript", "javascript"} & languages:
+        dep_targets = profile.get("js_targets") or ["."]
+        depcruise_args = ["-T", "json", "--no-config", *dep_targets]
+        depcruise_run, depcruise_payload = run_locked_tool(
+            "dependency-cruiser",
+            depcruise_args,
+            repo,
+            allow_exit_codes={0, 1},
+        )
+        tool_runs.append(depcruise_run)
+        payloads["dependency-cruiser"] = depcruise_payload
 
-        package_json_text = read_text(package_json) if package_json.exists() else ""
-        knip_config = any((repo / name).exists() for name in (
-            "knip.json",
-            "knip.jsonc",
-            "knip.js",
-            "knip.ts",
-        )) or '"knip"' in package_json_text
-        if shutil.which("knip") is None:
-            skipped_tools.append({
-                "tool": "knip",
-                "reason": "knip binary is not available to the wrapper on this machine.",
-            })
-        elif not knip_config:
-            skipped_tools.append({
-                "tool": "knip",
-                "reason": "JS/TS surface exists, but no Knip configuration was found.",
-            })
+        knip_dir = detect_knip_directory(repo, profile)
+        if knip_dir is None:
+            tool_runs.append(skipped_tool_run("knip", "No package.json root was found for a Knip project scan."))
         else:
-            skipped_tools.append({
-                "tool": "knip",
-                "reason": "Tool appears ready, but baseline mode does not execute external dead-code scans automatically.",
-            })
+            knip_run, knip_payload = run_locked_tool(
+                "knip",
+                ["--reporter", "json", "--no-progress", "--directory", str(repo / knip_dir)],
+                repo,
+                allow_exit_codes={0, 1},
+            )
+            tool_runs.append(knip_run)
+            payloads["knip"] = knip_payload
+    else:
+        tool_runs.append(skipped_tool_run("dependency-cruiser", "No JS/TS application surface was detected."))
+        tool_runs.append(skipped_tool_run("knip", "No JS/TS application surface was detected."))
+
+    return tool_runs, payloads
+
+
+def parse_knip_issue_totals(payload: Any) -> dict[str, int]:
+    totals: dict[str, int] = defaultdict(int)
+    if not isinstance(payload, dict):
+        return {}
+    for item in payload.get("issues") or []:
+        if not isinstance(item, dict):
+            continue
+        for key, value in item.items():
+            if key == "file" or not isinstance(value, list):
+                continue
+            totals[key] += len(value)
+    return dict(totals)
+
+
+def build_tool_coverage(repo: Path, profile: dict[str, object], tool_runs: list[ToolRun]) -> dict[str, object]:
+    chosen_tools: list[dict[str, str]] = []
+    skipped_tools: list[dict[str, str]] = []
+    runs = tool_run_map(tool_runs)
+
+    for tool in ("tach", "dependency-cruiser", "knip"):
+        run = runs[tool]
+        if run.status == "skipped":
+            skipped_tools.append({"tool": tool, "reason": run.summary})
+            continue
+        chosen_tools.append({
+            "tool": tool,
+            "rationale": run.summary,
+        })
+
+    if not chosen_tools:
+        chosen_tools.append({
+            "tool": "manual",
+            "rationale": "No relevant Python or JS/TS surface was detected for a real dependency graph audit.",
+        })
 
     return {"chosen_tools": chosen_tools, "skipped_tools": skipped_tools}
 
 
-def build_findings(repo: Path, profile: dict[str, object], tool_coverage: dict[str, object]) -> list[Finding]:
+def make_finding(
+    findings: list[Finding],
+    next_id: int,
+    *,
+    tool: str,
+    category: str,
+    severity: str,
+    confidence: str,
+    scope: str,
+    title: str,
+    evidence_summary: str,
+    decision: str,
+    change_shape: str,
+    validation_checks: list[str],
+    notes: str = "",
+) -> int:
+    findings.append(Finding(
+        id=f"dep-{next_id:03d}",
+        tool=tool,
+        category=category,
+        severity=severity,
+        confidence=confidence,
+        scope=scope,
+        title=title,
+        evidence_summary=evidence_summary,
+        decision=decision,
+        recommended_change_shape=change_shape,
+        validation_checks=validation_checks,
+        autofix_allowed=False,
+        notes=notes,
+    ))
+    return next_id + 1
+
+
+def build_findings(repo: Path, profile: dict[str, object], tool_runs: list[ToolRun], payloads: dict[str, Any]) -> list[Finding]:
     findings: list[Finding] = []
     next_id = 1
     languages = set(profile["languages"])
-    manifests = set(profile["manifests"])
-    source_roots = profile["source_roots"]
-    workspace_roots = profile["workspace_roots"]
-
-    def add(
-        tool: str,
-        category: str,
-        severity: str,
-        confidence: str,
-        scope: str,
-        title: str,
-        evidence_summary: str,
-        decision: str,
-        change_shape: str,
-        validation_checks: list[str],
-        autofix_allowed: bool = False,
-        notes: str = "",
-    ) -> None:
-        nonlocal next_id
-        findings.append(Finding(
-            id=f"dep-{next_id:03d}",
-            tool=tool,
-            category=category,
-            severity=severity,
-            confidence=confidence,
-            scope=scope,
-            title=title,
-            evidence_summary=evidence_summary,
-            decision=decision,
-            recommended_change_shape=change_shape,
-            validation_checks=validation_checks,
-            autofix_allowed=autofix_allowed,
-            notes=notes,
-        ))
-        next_id += 1
+    runs = tool_run_map(tool_runs)
 
     if not ({"python", "typescript", "javascript"} & languages):
         profile["major_blockers"].append("No Python or JS/TS application surface was detected.")
-        add(
+        next_id = make_finding(
+            findings,
+            next_id,
             tool="manual",
             category="scan-blocker",
             severity="medium",
             confidence="high",
             scope="repo",
             title="This repository does not expose a real Python or JS/TS dependency graph target",
-            evidence_summary="The repo only exposes markdown, shell, and skill metadata surfaces, so Tach / Dependency Cruiser / Knip would be theater here.",
+            evidence_summary="No Python or JS/TS application surface was found outside ignored directories, so a dependency graph audit would be theater.",
             decision="defer",
-            change_shape="Do not pretend this repo is a dependency-governance target until it contains real Python or JS/TS application code.",
-            validation_checks=["Confirm whether any application code lives outside ignored directories."],
+            change_shape="Scope this skill to repositories with real Python or JS/TS application code.",
+            validation_checks=["Confirm whether application code exists outside ignored directories."],
         )
         return findings
 
-    if "python" in languages and not source_roots:
-        profile["major_blockers"].append("Python source_roots are not yet credible.")
-        add(
-            tool="manual",
+    tach_run = runs["tach"]
+    if tach_run.status == "failed" or ("configuration file not found" in " ".join(tach_run.details).lower()):
+        profile["major_blockers"].append("Tach could not validate Python boundaries from this checkout.")
+        next_id = make_finding(
+            findings,
+            next_id,
+            tool="tach",
             category="config-gap",
             severity="high",
             confidence="high",
             scope="python",
-            title="Python surface exists, but source_roots are too ambiguous for boundary claims",
-            evidence_summary="The wrapper found Python files but could not derive credible source_roots, so Tach-style boundary conclusions would be guesswork.",
+            title="Python boundary governance is not runnable yet",
+            evidence_summary=tach_run.summary,
             decision="fix-config",
-            change_shape="Define source_roots explicitly before turning Python boundary output into governance.",
-            validation_checks=["Add source_roots to the repo config and rerun the dependency audit."],
+            change_shape="Add a real Tach configuration and source-root model before trusting Python boundary claims.",
+            validation_checks=["Create tach.toml or [tool.tach] and rerun `tach check --output json`."],
+            notes=" | ".join(tach_run.details[:2]),
         )
-
-    if "python" in languages and not any("tach" == item["tool"] and "appears ready" in item["reason"] for item in tool_coverage["skipped_tools"]):
-        add(
-            tool="manual",
-            category="config-gap",
-            severity="medium",
+    elif tach_run.status == "issues":
+        next_id = make_finding(
+            findings,
+            next_id,
+            tool="tach",
+            category="architecture-violation",
+            severity="high",
             confidence="high",
             scope="python",
-            title="Python boundary governance is not runnable yet",
-            evidence_summary="Either Tach is missing, its config is missing, or the repo surface is not mature enough to trust Python boundary checks.",
-            decision="fix-config",
-            change_shape="Install Tach only after source_roots and config are credible, then gate new Python boundary violations instead of inventing manual rules.",
-            validation_checks=["Verify tach.toml or [tool.tach] exists and that `tach check` can run locally."],
+            title="Tach reported Python boundary or interface violations",
+            evidence_summary=tach_run.summary,
+            decision="harden",
+            change_shape="Fix the live Python boundary leaks before claiming the repo has real architectural discipline.",
+            validation_checks=["Inspect Tach output and remove live dependency or interface violations."],
+            notes=" | ".join(tach_run.details[:3]),
         )
 
-    if {"typescript", "javascript"} & languages and not any(item["tool"] == "dependency-cruiser" and "appears ready" in item["reason"] for item in tool_coverage["skipped_tools"]):
-        add(
-            tool="manual",
+    depcruise_run = runs["dependency-cruiser"]
+    if depcruise_run.status == "failed":
+        next_id = make_finding(
+            findings,
+            next_id,
+            tool="dependency-cruiser",
             category="config-gap",
             severity="medium",
             confidence="high",
             scope="js-ts",
-            title="JS/TS structure scanning is not ready for hard claims",
-            evidence_summary="Dependency Cruiser is missing, unconfigured, or intentionally skipped in baseline mode, so cross-layer and cycle enforcement is not machine-backed yet.",
-            decision="create-baseline",
-            change_shape="Add a minimal dependency-cruiser config and baseline historical violations before making JS/TS boundary rules a real gate.",
-            validation_checks=["Check `.dependency-cruiser.*` and prove `depcruise --validate` can run."],
+            title="Dependency Cruiser did not complete successfully",
+            evidence_summary=depcruise_run.summary,
+            decision="fix-config",
+            change_shape="Restore a runnable JS/TS graph scan before using dependency direction claims in governance.",
+            validation_checks=["Rerun Dependency Cruiser and resolve parsing or configuration errors."],
+            notes=" | ".join(depcruise_run.details[:2]),
+        )
+    elif depcruise_run.status == "issues":
+        category = "cycle" if "circular" in json.dumps(payloads.get("dependency-cruiser") or {}, ensure_ascii=False).lower() else "architecture-violation"
+        next_id = make_finding(
+            findings,
+            next_id,
+            tool="dependency-cruiser",
+            category=category,
+            severity="high" if category == "cycle" else "medium",
+            confidence="medium",
+            scope="js-ts",
+            title="Dependency Cruiser reported JS/TS graph violations",
+            evidence_summary=depcruise_run.summary,
+            decision="harden",
+            change_shape="Fix live JS/TS dependency violations before pretending the layering story is enforced.",
+            validation_checks=["Inspect depcruise JSON output and baseline or remove the current violations."],
+            notes=" | ".join(depcruise_run.details[:3]),
         )
 
-    if {"typescript", "javascript"} & languages and not any(item["tool"] == "knip" and "appears ready" in item["reason"] for item in tool_coverage["skipped_tools"]):
-        add(
-            tool="manual",
+    knip_run = runs["knip"]
+    if knip_run.status == "failed":
+        next_id = make_finding(
+            findings,
+            next_id,
+            tool="knip",
             category="config-gap",
-            severity="low",
+            severity="medium",
             confidence="high",
             scope="js-ts",
-            title="Dead-code hygiene is not machine-backed yet",
-            evidence_summary="Knip is missing, unconfigured, or intentionally skipped in baseline mode, so unused-file and unused-export findings are still manual debt.",
-            decision="create-baseline",
-            change_shape="Configure Knip only after entry/workspace coverage is credible; otherwise its output will mostly be noise.",
-            validation_checks=["Confirm Knip config exists and entry/workspace coverage is explicit before trusting unused-export output."],
+            title="Knip did not complete successfully",
+            evidence_summary=knip_run.summary,
+            decision="fix-config",
+            change_shape="Restore a runnable Knip project definition before treating dead-code conclusions as trustworthy.",
+            validation_checks=["Rerun Knip from the correct package root and resolve project detection failures."],
+            notes=" | ".join(knip_run.details[:2]),
         )
+    elif knip_run.status == "issues":
+        knip_totals = parse_knip_issue_totals(payloads.get("knip"))
+        if knip_totals.get("files"):
+            next_id = make_finding(
+                findings,
+                next_id,
+                tool="knip",
+                category="unused-file",
+                severity="medium",
+                confidence="high",
+                scope="js-ts",
+                title="Knip reported unused files",
+                evidence_summary=f"Knip reported {knip_totals['files']} unused file finding(s).",
+                decision="remove",
+                change_shape="Delete or quarantine genuinely unused files once live entrypoints are confirmed.",
+                validation_checks=["Confirm each reported file is not loaded dynamically before deletion."],
+            )
+        if knip_totals.get("dependencies"):
+            next_id = make_finding(
+                findings,
+                next_id,
+                tool="knip",
+                category="unused-dependency",
+                severity="medium",
+                confidence="high",
+                scope="js-ts",
+                title="Knip reported unused dependencies",
+                evidence_summary=f"Knip reported {knip_totals['dependencies']} unused dependency finding(s).",
+                decision="remove",
+                change_shape="Remove genuinely unused dependencies after confirming build and runtime entrypoints are complete.",
+                validation_checks=["Confirm dependency usage is not hidden behind generators or dynamic entrypoints."],
+            )
+        export_total = sum(knip_totals.get(key, 0) for key in ("exports", "nsExports", "types", "nsTypes", "enumMembers", "namespaceMembers"))
+        if export_total:
+            next_id = make_finding(
+                findings,
+                next_id,
+                tool="knip",
+                category="unused-export",
+                severity="low",
+                confidence="medium",
+                scope="js-ts",
+                title="Knip reported unused exports",
+                evidence_summary=f"Knip reported {export_total} unused export finding(s).",
+                decision="quarantine",
+                change_shape="Treat unused-export findings as advisory until entry/workspace coverage is proven complete.",
+                validation_checks=["Confirm barrel exports, CLI entrypoints, and framework entry exports are fully declared before deletion."],
+            )
+        unresolved_total = knip_totals.get("unresolved", 0) + knip_totals.get("unlisted", 0)
+        if unresolved_total:
+            next_id = make_finding(
+                findings,
+                next_id,
+                tool="knip",
+                category="unresolved-import",
+                severity="high",
+                confidence="high",
+                scope="js-ts",
+                title="Knip reported unresolved or unlisted imports",
+                evidence_summary=f"Knip reported {unresolved_total} unresolved / unlisted dependency finding(s).",
+                decision="fix-config",
+                change_shape="Repair package metadata or import paths before trusting dead-code cleanup output.",
+                validation_checks=["Resolve unlisted or unresolved imports and rerun Knip."],
+            )
 
+    manifests = set(profile["manifests"])
     if "package.json" in manifests and not {"package-lock.json", "pnpm-lock.yaml", "yarn.lock"} & manifests:
-        add(
+        next_id = make_finding(
+            findings,
+            next_id,
             tool="manual",
             category="dependency-declaration-gap",
             severity="medium",
             confidence="high",
             scope="package-manager",
             title="JS/TS dependency metadata has no visible lockfile",
-            evidence_summary="A package.json is present but no npm, pnpm, or yarn lockfile was detected, which weakens both reproducibility and dependency scanning confidence.",
+            evidence_summary="A package.json is present but no npm, pnpm, or yarn lockfile was detected.",
             decision="fix-config",
-            change_shape="Add the real lockfile used by this repo before treating dependency findings as stable.",
-            validation_checks=["Regenerate the lockfile with the repo's actual package manager and rerun the baseline audit."],
+            change_shape="Commit the real lockfile before treating dependency findings as reproducible engineering evidence.",
+            validation_checks=["Generate and commit the lockfile used by this repo."],
         )
 
-    if len(workspace_roots) > 1 and not ((repo / "pnpm-workspace.yaml").exists() or (repo / "package.json").exists()):
-        add(
+    if len(profile["workspace_roots"]) > 1 and not ((repo / "pnpm-workspace.yaml").exists() or (repo / "package.json").exists()):
+        next_id = make_finding(
+            findings,
+            next_id,
             tool="manual",
             category="orphan-or-isolated-module",
             severity="medium",
             confidence="medium",
             scope="workspace",
             title="The repo looks multi-root, but workspace ownership is under-specified",
-            evidence_summary="Multiple package or pyproject roots were detected without a clear top-level workspace declaration, which usually leads to fake monorepo governance.",
+            evidence_summary="Multiple package or pyproject roots were detected without a clear top-level workspace declaration.",
             decision="harden",
-            change_shape="Make the workspace root explicit before layering more dependency rules on top of it.",
+            change_shape="Declare the real workspace root before layering stricter dependency governance on top of it.",
             validation_checks=["Confirm the intended workspace root and package graph in repo metadata."],
         )
 
@@ -461,85 +595,52 @@ def infer_verdict(findings: list[Finding]) -> str:
 
 def render_human_report(summary: dict[str, object]) -> str:
     findings = summary["findings"]
-    chosen_tools = summary["tool_coverage"]["chosen_tools"]
-    skipped_tools = summary["tool_coverage"]["skipped_tools"]
+    tool_runs = summary.get("tool_runs", [])
     immediate = summary.get("immediate_actions", [])
     next_actions = summary.get("next_actions", [])
     later = summary.get("later_actions", [])
-    safe_automation = summary.get("safe_automation", [])
-    avoid_now = summary.get("avoid_now", [])
     blockers = summary["repo_profile"].get("major_blockers", [])
 
     lines = [
-        "# 仓库检测与规范化报告",
+        "# 仓库依赖审计报告",
         "",
         "## 1. 摘要",
         f"- 仓库类型：{', '.join(summary['repo_profile']['languages'])} / {summary['repo_profile']['monorepo_shape']}",
-        f"- 本次使用工具：{', '.join(item['tool'] for item in chosen_tools)}",
-        f"- 本次跳过工具：{', '.join(item['tool'] for item in skipped_tools) if skipped_tools else '无'}",
         f"- 核心结论：{summary['overall_verdict']}",
-        f"- 建议总策略：{'; '.join(immediate[:2] or ['先把扫描可信度做实，再谈更硬的依赖门控。'])}",
+        f"- 已执行工具：{', '.join(item['tool'] for item in tool_runs if item['status'] != 'skipped') or '无'}",
         "",
-        "## 2. 为什么用了这些工具",
-        "",
-        "### 2.1 Tach",
-        f"- 是否使用：{'是' if any(item['tool'] == 'tach' for item in chosen_tools) else '否'}",
-        "- 用它看什么：Python 模块边界、方向、公共接口和外部依赖一致性。",
-        f"- 为什么适合当前仓库：{next((item['reason'] for item in skipped_tools if item['tool'] == 'tach'), '当前 wrapper 只输出 baseline，不自动跑 Tach。')}",
-        "",
-        "### 2.2 Dependency Cruiser",
-        f"- 是否使用：{'是' if any(item['tool'] == 'dependency-cruiser' for item in chosen_tools) else '否'}",
-        "- 用它看什么：JS/TS 的依赖方向、跨层导入和循环依赖。",
-        f"- 为什么适合当前仓库：{next((item['reason'] for item in skipped_tools if item['tool'] == 'dependency-cruiser'), '当前 wrapper 只输出 baseline，不自动跑 Dependency Cruiser。')}",
-        "",
-        "### 2.3 Knip",
-        f"- 是否使用：{'是' if any(item['tool'] == 'knip' for item in chosen_tools) else '否'}",
-        "- 用它看什么：unused files、unused dependencies、unused exports。",
-        f"- 为什么适合当前仓库：{next((item['reason'] for item in skipped_tools if item['tool'] == 'knip'), '当前 wrapper 只输出 baseline，不自动跑 Knip。')}",
-        "",
-        "## 3. 最高优先级问题",
+        "## 2. 工具执行证据",
         "",
     ]
 
+    for item in tool_runs:
+        lines.extend([
+            f"### {item['tool']}",
+            f"- 状态：{item['status']}",
+            f"- 命令：{item['command'] or 'n/a'}",
+            f"- 结果：{item['summary']}",
+            *(f"- 细节：{detail}" for detail in item.get("details", [])[:2]),
+            "",
+        ])
+
+    lines.extend(["## 3. 关键问题", ""])
     if not findings:
-        lines.extend(["- 当前 baseline 没抓到高优先级结构问题，但这不等于外部图工具已经跑过。"])
+        lines.append("- 当前真实工具执行没有报出高信号问题。")
     else:
-        for finding in findings[:5]:
+        for finding in findings[:6]:
             lines.extend([
                 f"### {finding['id']} {finding['title']}",
                 f"- 工具：{finding['tool']}",
                 f"- 严重程度：{finding['severity']}",
                 f"- 置信度：{finding['confidence']}",
                 f"- 是什么：{finding['evidence_summary']}",
-                f"- 为什么重要：{finding['recommended_change_shape']}",
-                f"- 建议做什么：{'；'.join(finding['validation_checks'])}",
-                f"- 影响范围：{finding['scope']}",
+                f"- 建议：{'；'.join(finding['validation_checks'])}",
                 f"- 备注：{finding.get('notes') or '无'}",
                 "",
             ])
 
     lines.extend([
-        "## 4. 按工具展开",
-        "",
-        "### 4.1 Tach",
-        f"- 关键发现：{next((item['reason'] for item in skipped_tools if item['tool'] == 'tach'), '已在 full audit 中执行。')}",
-        "- 代表性问题：Python boundary governance 只有在 source_roots 和配置可信时才有意义。",
-        "- 解释：先把扫描可信度修好，再谈硬边界门控。",
-        "- 建议：别拿猜出来的模块图去做治理。",
-        "",
-        "### 4.2 Dependency Cruiser",
-        f"- 关键发现：{next((item['reason'] for item in skipped_tools if item['tool'] == 'dependency-cruiser'), '已在 full audit 中执行。')}",
-        "- 代表性问题：legacy repo 先 baseline，再阻断新增违规。",
-        "- 解释：没有 baseline 的 depcruise 只是把历史债一次性全吼出来。",
-        "- 建议：先把规则变成可信机器门，再谈追债。",
-        "",
-        "### 4.3 Knip",
-        f"- 关键发现：{next((item['reason'] for item in skipped_tools if item['tool'] == 'knip'), '已在 full audit 中执行。')}",
-        "- 代表性问题：entry/workspace coverage 不清时，unused-export 结论非常容易飘。",
-        "- 解释：如果 entry 定义不全，Knip 只是在猜。",
-        "- 建议：先修 entry/workspace coverage，再让 Knip 说狠话。",
-        "",
-        "## 5. 分阶段落地建议",
+        "## 4. 行动顺序",
         "",
         "### 现在",
         *(f"- {item}" for item in immediate),
@@ -550,40 +651,36 @@ def render_human_report(summary: dict[str, object]) -> str:
         "### 之后",
         *(f"- {item}" for item in later),
         "",
-        "## 6. 可以安全自动化的部分",
-        *(f"- {item}" for item in safe_automation),
-        "",
-        "## 7. 暂时不要做的事",
-        *(f"- {item}" for item in avoid_now),
-        "",
-        "## 8. 本次扫描的局限与跳过项",
-        *(f"- {item}" for item in blockers or ["当前 wrapper 只交付 baseline，不代替 Tach / Dependency Cruiser / Knip 的完整输出。"]),
-        *(f"- 跳过 {item['tool']}: {item['reason']}" for item in skipped_tools),
+        "## 5. 局限",
+        *(f"- {item}" for item in blockers or ["本次已经真实执行锁定工具，但远端 CI / ruleset 仍需单独验证。"]),
         "",
     ])
     return "\n".join(lines)
 
 
 def render_agent_brief(summary: dict[str, object]) -> str:
-    findings = summary["findings"]
     lines = [
-        "# Repo Audit Agent Brief",
+        "# Repo Audit Handoff Brief",
         "",
         "## Repo profile",
         f"- languages: {', '.join(summary['repo_profile']['languages'])}",
         f"- monorepo_shape: {summary['repo_profile']['monorepo_shape']}",
         f"- package_managers: {', '.join(summary['repo_profile']['package_managers']) or 'none'}",
-        f"- chosen_tools: {', '.join(item['tool'] for item in summary['tool_coverage']['chosen_tools'])}",
-        f"- skipped_tools: {', '.join(item['tool'] for item in summary['tool_coverage']['skipped_tools']) or 'none'}",
-        f"- major_blockers: {', '.join(summary['repo_profile'].get('major_blockers', [])) or 'none'}",
+        f"- overall_verdict: {summary['overall_verdict']}",
         "",
-        "## Findings",
+        "## Tool runs",
         "",
     ]
-    if not findings:
-        lines.append("- No baseline findings. Do not confuse that with a full external-tool audit.")
+    for item in summary.get("tool_runs", []):
+        lines.extend([
+            f"- {item['tool']}: {item['status']} ({item['summary']})",
+        ])
+
+    lines.extend(["", "## Findings", ""])
+    if not summary["findings"]:
+        lines.append("- No dependency findings were confirmed by the locked toolchain.")
     else:
-        for finding in findings:
+        for finding in summary["findings"]:
             lines.extend([
                 f"### {finding['id']} {finding['title']}",
                 f"- tool: {finding['tool']}",
@@ -594,23 +691,9 @@ def render_agent_brief(summary: dict[str, object]) -> str:
                 f"- decision: {finding['decision']}",
                 f"- recommended_change_shape: {finding['recommended_change_shape']}",
                 f"- validation_checks: {', '.join(finding['validation_checks'])}",
-                f"- autofix_allowed: {str(finding['autofix_allowed']).lower()}",
                 f"- notes: {finding.get('notes') or 'none'}",
                 "",
             ])
-
-    lines.extend([
-        "## Rollout plan",
-        f"1. now: {'; '.join(summary.get('immediate_actions', [])) or 'stabilize scan credibility'}",
-        f"2. next: {'; '.join(summary.get('next_actions', [])) or 'promote one external tool at a time'}",
-        f"3. later: {'; '.join(summary.get('later_actions', [])) or 'raise strictness only after the repo stops lying to the scanners'}",
-        "",
-        "## Guardrails",
-        "- keep destructive changes opt-in",
-        "- do not delete files by default",
-        "- prefer baseline before hard enforcement in legacy repos",
-        "- separate scanner-confidence problems from real repo problems",
-    ])
     return "\n".join(lines) + "\n"
 
 
@@ -626,36 +709,25 @@ def main() -> int:
 
     files = iter_files(repo)
     profile = collect_repo_profile(repo, files)
-    tool_coverage = build_tool_coverage(repo, profile)
-    findings = build_findings(repo, profile, tool_coverage)
+    tool_runs, payloads = run_tool_suite(repo, profile)
+    tool_coverage = build_tool_coverage(repo, profile, tool_runs)
+    findings = build_findings(repo, profile, tool_runs, payloads)
     overall_verdict = infer_verdict(findings)
 
-    immediate_actions = []
-    next_actions = []
-    later_actions = []
-    safe_automation = [
-        "Validate the generated summary in CI before trying to fail merges on dependency rules.",
-        "Keep lockfile and workspace metadata checks deterministic.",
-    ]
-    avoid_now = [
-        "Do not pretend a graph tool ran when the wrapper only produced a baseline summary.",
-        "Do not fail CI on every historical violation before a baseline exists.",
-    ]
-
+    immediate_actions: list[str] = []
+    next_actions: list[str] = []
+    later_actions: list[str] = []
     if overall_verdict == "scan-blocked":
-        immediate_actions.append("Fix repo shape and tool readiness before treating dependency conclusions as real governance.")
+        immediate_actions.append("Fix the blocked or failing dependency tool runs before trusting repo boundary claims.")
     if any(item.category == "config-gap" for item in findings):
-        immediate_actions.append("Repair source_roots, workspace metadata, and tool config before tightening rules.")
-    if any(item.category == "dependency-declaration-gap" for item in findings):
-        next_actions.append("Restore trustworthy dependency metadata and lockfiles.")
+        immediate_actions.append("Repair repo config and rerun the locked tools until they stop failing locally.")
+    if any(item.category in {"architecture-violation", "cycle"} for item in findings):
+        next_actions.append("Remove live boundary leaks and cycles before tightening merge gates.")
+    if any(item.category in {"unused-file", "unused-dependency", "unused-export"} for item in findings):
+        next_actions.append("Quarantine and validate dead-code candidates before deleting them.")
     if not next_actions:
-        next_actions.append("Promote one external graph tool at a time once the baseline stops lying.")
-    later_actions.append("Turn changed-file dependency violations into a merge gate only after the baseline is trusted.")
-
-    assumptions = [
-        "Baseline mode does not execute external graph tools automatically.",
-        "Tool coverage and repo profile are trusted more than speculative architecture findings in this wrapper.",
-    ]
+        next_actions.append("Keep the locked toolchain green before raising merge strictness.")
+    later_actions.append("Promote changed-file dependency violations into CI only after the current repo shape is stable.")
 
     summary = {
         "repo_profile": {
@@ -665,19 +737,26 @@ def main() -> int:
         },
         "tool_coverage": tool_coverage,
         "overall_verdict": overall_verdict,
+        "tool_runs": [item.to_dict() for item in tool_runs],
         "findings": [asdict(item) for item in findings],
         "immediate_actions": immediate_actions,
         "next_actions": next_actions,
         "later_actions": later_actions,
-        "safe_automation": safe_automation,
-        "avoid_now": avoid_now,
-        "assumptions": assumptions,
+        "safe_automation": [
+            "Keep the locked toolchain green in CI before tightening merge rules.",
+            "Baseline historical dependency violations before blocking new ones in legacy repos.",
+        ],
+        "avoid_now": [
+            "Do not treat repo-shape or config failures as architecture proof.",
+            "Do not delete exports just because Knip found them before entry coverage is trusted.",
+        ],
+        "assumptions": [
+            "This summary comes from real locked tool executions where the repo surface was applicable.",
+            "Remote merge enforcement still needs separate platform-side verification.",
+        ],
     }
 
-    (out_dir / "repo-audit-summary.json").write_text(
-        json.dumps(summary, indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
+    (out_dir / "repo-audit-summary.json").write_text(json.dumps(summary, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     (out_dir / "repo-audit-report.md").write_text(render_human_report(summary) + "\n", encoding="utf-8")
     (out_dir / "repo-audit-agent-brief.md").write_text(render_agent_brief(summary), encoding="utf-8")
     print(f"Wrote {out_dir / 'repo-audit-summary.json'}")

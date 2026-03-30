@@ -131,3 +131,7 @@ def report_path(harness_dir: Path, domain: str) -> Path:
 
 def agent_brief_path(harness_dir: Path, domain: str) -> Path:
     return harness_dir / DOMAIN_BY_NAME[domain].agent_brief_filename
+
+
+def manifest_path(skills_dir: Path, domain: str) -> Path:
+    return skills_dir / DOMAIN_BY_NAME[domain].skill_name / "assets" / "runtime-dependencies.json"

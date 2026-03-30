@@ -8,8 +8,16 @@ import ast
 import json
 import os
 import re
+import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Any
+
+RUNTIME_BIN_DIR = Path(__file__).resolve().parents[2] / ".pooh-runtime" / "bin"
+if str(RUNTIME_BIN_DIR) not in sys.path:
+    sys.path.insert(0, str(RUNTIME_BIN_DIR))
+
+from tool_runner import ToolRun, run_locked_tool, run_semgrep_rules  # noqa: E402
 
 SKIP_DIRS = {
     ".git",
@@ -56,6 +64,28 @@ AGENT_MARKERS = (
     "PydanticAIWorkflow",
 )
 DOC_HINTS = ("temporal", "pydantic-ai", "pydantic_ai")
+SEMGRP_TEMPORAL_RULES = """
+rules:
+  - id: workflow-network-call
+    languages: [python]
+    severity: ERROR
+    message: Network or remote side effect inside Python workflow surface
+    patterns:
+      - pattern-either:
+          - pattern: requests.$METHOD(...)
+          - pattern: httpx.$METHOD(...)
+          - pattern: subprocess.$METHOD(...)
+  - id: raw-agent-construction
+    languages: [python]
+    severity: WARNING
+    message: Raw Agent construction
+    pattern: Agent(...)
+  - id: temporal-agent-model-param
+    languages: [python]
+    severity: WARNING
+    message: TemporalAgent receives an explicit model argument
+    pattern: TemporalAgent(..., model=$MODEL, ...)
+"""
 
 
 @dataclass
@@ -284,6 +314,26 @@ def collect_signals(repo: Path, files: list[Path]) -> dict[str, object]:
     }
 
 
+def collect_tool_runs(repo: Path, applicable: bool) -> tuple[list[ToolRun], dict[str, Any]]:
+    tool_runs: list[ToolRun] = []
+    payloads: dict[str, Any] = {}
+    if not applicable:
+        return tool_runs, payloads
+
+    for tool, args in (
+        ("ruff", ["check", "--output-format", "json", str(repo)]),
+        ("basedpyright", ["--outputjson", "-p", str(repo)]),
+    ):
+        run, payload = run_locked_tool(tool, args, repo, allow_exit_codes={0, 1})
+        tool_runs.append(run)
+        payloads[tool] = payload
+
+    semgrep_run, semgrep_payload = run_semgrep_rules(SEMGRP_TEMPORAL_RULES, repo, [str(repo)])
+    tool_runs.append(semgrep_run)
+    payloads["semgrep"] = semgrep_payload
+    return tool_runs, payloads
+
+
 def not_applicable_gate(gate: str) -> GateState:
     return GateState(gate, "not-applicable", "low", "high", "This repository does not expose both Temporal and pydantic-ai durable surfaces.")
 
@@ -357,7 +407,7 @@ def build_gate_state(gate: str, applicable: bool, signals: dict[str, object], re
     raise ValueError(f"Unsupported gate: {gate}")
 
 
-def build_findings(gates: list[GateState], signals: dict[str, object]) -> list[Finding]:
+def build_findings(gates: list[GateState], signals: dict[str, object], tool_runs: list[ToolRun]) -> list[Finding]:
     findings: list[Finding] = []
     next_id = 1
     severity_rank = {"critical": 0, "high": 1, "medium": 2, "low": 3}
@@ -431,7 +481,64 @@ def build_findings(gates: list[GateState], signals: dict[str, object]) -> list[F
         ))
         next_id += 1
 
-    return findings[:6]
+    run_by_tool = {item.tool: item for item in tool_runs}
+    if run_by_tool.get("ruff") and run_by_tool["ruff"].status == "issues":
+        findings.append(Finding(
+            id=f"pta-{next_id:03d}",
+            gate="tool-contracts",
+            severity="medium",
+            confidence="high",
+            current_state="fragile",
+            target_state="sound",
+            locus="locked ruff run",
+            title="Ruff reported Python issues inside the durable surface",
+            evidence_summary=run_by_tool["ruff"].summary,
+            decision="harden",
+            change_shape="Resolve live Ruff findings before relying on higher-level durable guarantees.",
+            validation="Rerun Ruff and the Temporal hardgate after cleanup.",
+            merge_gate="block-changed-files",
+            autofix_allowed=False,
+            notes=" | ".join(run_by_tool["ruff"].details[:2]),
+        ))
+        next_id += 1
+    if run_by_tool.get("basedpyright") and run_by_tool["basedpyright"].status == "issues":
+        findings.append(Finding(
+            id=f"pta-{next_id:03d}",
+            gate="dependency-contracts",
+            severity="medium",
+            confidence="high",
+            current_state="fragile",
+            target_state="sound",
+            locus="locked basedpyright run",
+            title="BasedPyright reported Python type contract issues in the durable surface",
+            evidence_summary=run_by_tool["basedpyright"].summary,
+            decision="harden",
+            change_shape="Treat Python type contract failures as durability evidence, not as optional lint debt.",
+            validation="Rerun BasedPyright and the Temporal hardgate after repair.",
+            merge_gate="block-changed-files",
+            autofix_allowed=False,
+            notes=" | ".join(run_by_tool["basedpyright"].details[:2]),
+        ))
+        next_id += 1
+    if run_by_tool.get("semgrep") and run_by_tool["semgrep"].status == "issues":
+        findings.append(Finding(
+            id=f"pta-{next_id:03d}",
+            gate="workflow-determinism",
+            severity="high",
+            confidence="medium",
+            current_state="unsafe",
+            target_state="sound",
+            locus="locked semgrep rule pack",
+            title="Semgrep matched workflow or raw-agent hazard patterns",
+            evidence_summary=run_by_tool["semgrep"].summary,
+            decision="replace",
+            change_shape="Resolve the Semgrep hazard hits instead of assuming the workflow path is still safe.",
+            validation="Rerun the locked Semgrep rule pack and this hardgate after changes.",
+            merge_gate="block-now",
+            autofix_allowed=False,
+            notes=" | ".join(run_by_tool["semgrep"].details[:3]),
+        ))
+    return findings[:8]
 
 
 def infer_verdict(applicable: bool, gates: list[GateState]) -> str:
@@ -450,6 +557,7 @@ def infer_verdict(applicable: bool, gates: list[GateState]) -> str:
 
 
 def render_human_report(summary: dict[str, object]) -> str:
+    tool_runs = summary.get("tool_runs", [])
     if summary["overall_verdict"] == "not-applicable":
         return "\n".join([
             "# Pydantic AI + Temporal 审计报告",
@@ -457,6 +565,9 @@ def render_human_report(summary: dict[str, object]) -> str:
             "## 一句话判决",
             "- **总体结论**：not-applicable",
             "- **一句狠话**：这个仓库没有同时暴露 Temporal 和 pydantic-ai 的 durable 面，硬判只会制造假问题。",
+            "",
+            "## 真实工具执行",
+            *(f"- {item['tool']}: {item['status']} — {item['summary']}" for item in tool_runs),
             "",
             "## 仓库画像",
             f"- Workflow 面：{', '.join(summary['repo_profile']['workflow_surface']) or 'none'}",
@@ -486,6 +597,9 @@ def render_human_report(summary: dict[str, object]) -> str:
         f"- Agent 面：{', '.join(summary['repo_profile']['agent_surface']) or 'none'}",
         f"- 已见门控：{', '.join(gate['gate'] for gate in summary['gate_states'] if gate['state'] in {'sound', 'hardened'}) or 'weak'}",
         f"- 看不到但关键：{'; '.join(summary.get('unverified', [])) or 'none'}",
+        "",
+        "## 真实工具执行",
+        *(f"- {item['tool']}: {item['status']} — {item['summary']}" for item in tool_runs),
         "",
         "## 关键问题（已确认）",
         "",
@@ -553,6 +667,9 @@ def render_agent_brief(summary: dict[str, object]) -> str:
         f"- `agent_surface`: {', '.join(summary['repo_profile']['agent_surface']) or 'none'}",
         f"- `overall_verdict`: {summary['overall_verdict']}",
         "",
+        "## Tool runs",
+        *(f"- {item['tool']}: {item['status']} ({item['summary']})" for item in summary.get('tool_runs', [])),
+        "",
         "## Findings",
         "",
     ]
@@ -596,7 +713,8 @@ def main() -> int:
     signals = collected["signals"]
     applicable = bool(collected["applicable"])
     gates = [build_gate_state(name, applicable, signals, repo_profile) for name in GATE_ORDER]
-    findings = build_findings(gates, signals) if applicable else []
+    tool_runs, _ = collect_tool_runs(repo, applicable)
+    findings = build_findings(gates, signals, tool_runs) if applicable else []
     overall_verdict = infer_verdict(applicable, gates)
 
     summary = {
@@ -608,6 +726,7 @@ def main() -> int:
             "Do not treat `asyncio.sleep()` as a universal workflow violation without looking at the actual Temporal usage.",
             "Do not confuse local CI files with remote merge enforcement.",
         ],
+        "tool_runs": [item.to_dict() for item in tool_runs],
         "unverified": [
             "Local workflow files and CODEOWNERS do not prove remote required checks, rulesets, or code-owner enforcement."
         ] if applicable else [],

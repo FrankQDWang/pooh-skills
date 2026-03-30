@@ -2,21 +2,7 @@
   "schema_version": "1.0",
   "skill": "llm-api-freshness-guard",
   "runtime_features": [
-    {
-      "name": "mcp-context7",
-      "kind": "runtime-feature",
-      "required_for": "verified-doc-verification",
-      "required_when": {
-        "always": true
-      },
-      "detect": {
-        "type": "env_or_http",
-        "env": "POOH_RUNTIME_FEATURE_MCP_CONTEXT7",
-        "url": "https://mcp.context7.com/mcp",
-        "timeout_seconds": 5
-      },
-      "failure_reason": "Context7 MCP is unavailable or unreachable from this host."
-    }
+    "mcp-context7"
   ],
-  "dependencies": []
+  "tools": []
 }

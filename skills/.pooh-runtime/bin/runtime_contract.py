@@ -1,32 +1,40 @@
 #!/usr/bin/env python3
-"""Shared runtime contract helpers for pooh-skills.
-
-This module owns three cross-skill guarantees:
-
-1. A skill may declare installable dependencies and runtime features in a
-   machine-readable manifest.
-2. Missing installable dependencies are bootstrapped before the main audit.
-3. Any blocked bootstrap still produces standard machine-readable artifacts.
-"""
+"""Shared runtime contract helpers for pooh-skills."""
 
 from __future__ import annotations
 
 import argparse
+import contextlib
+import fcntl
 import json
 import os
+import platform
+import re
 import shlex
 import shutil
 import subprocess
 import sys
+import tarfile
+import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
-from tempfile import NamedTemporaryFile
+from tempfile import NamedTemporaryFile, TemporaryDirectory
 from typing import Any
 
-SCHEMA_VERSION = "1.0"
+SCHEMA_VERSION = "2.0"
 BOOTSTRAP_BLOCKED_EXIT = 10
+RUNTIME_ROOT = Path(__file__).resolve().parents[1]
+REGISTRY_PATH = RUNTIME_ROOT / "assets" / "tool-registry.json"
+PY_TOOLCHAIN_DIR = RUNTIME_ROOT / "python-toolchain"
+NODE_TOOLCHAIN_DIR = RUNTIME_ROOT / "node-toolchain"
+PY_BIN_DIR = PY_TOOLCHAIN_DIR / ".venv" / "bin"
+NODE_BIN_DIR = NODE_TOOLCHAIN_DIR / "node_modules" / ".bin"
+DOCS_BIN_DIR = RUNTIME_ROOT / "bin"
+DOWNLOAD_DIR = DOCS_BIN_DIR / ".downloads"
+INSTALL_LOCK_PATH = RUNTIME_ROOT / ".install.lock"
+
 SKIP_DIRS = {
     ".git",
     ".hg",
@@ -53,39 +61,27 @@ SKIP_DIRS = {
     ".idea",
     ".vscode",
 }
+
 LANGUAGE_BY_SUFFIX = {
     ".py": "python",
+    ".pyi": "python",
     ".js": "javascript",
     ".jsx": "javascript",
     ".ts": "typescript",
     ".tsx": "typescript",
     ".mjs": "javascript",
     ".cjs": "javascript",
-    ".java": "java",
-    ".kt": "kotlin",
-    ".go": "go",
-    ".rb": "ruby",
-    ".php": "php",
-    ".rs": "rust",
-    ".swift": "swift",
 }
+
 MANIFEST_FILES = {
     "package.json",
-    "package-lock.json",
     "pnpm-lock.yaml",
-    "yarn.lock",
     "pyproject.toml",
-    "poetry.lock",
-    "requirements.txt",
-    "requirements-dev.txt",
-    "requirements-test.txt",
     "uv.lock",
-    "Pipfile",
-    "Pipfile.lock",
-    "Dockerfile",
-    "docker-compose.yml",
-    "docker-compose.yaml",
+    "README.md",
 }
+
+FEATURE_BLOCKED_BY_NETWORK = {"mcp-context7"}
 
 
 def utc_now() -> str:
@@ -96,7 +92,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Shared runtime contract helpers for pooh-skills.")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    bootstrap = subparsers.add_parser("bootstrap", help="Run preflight and bootstrap dependencies.")
+    bootstrap = subparsers.add_parser("bootstrap", help="Run preflight and bootstrap one skill manifest.")
     bootstrap.add_argument("--skill-id", required=True)
     bootstrap.add_argument("--manifest", required=True)
     bootstrap.add_argument("--repo", required=True)
@@ -104,6 +100,11 @@ def parse_args() -> argparse.Namespace:
     bootstrap.add_argument("--summary-path", required=True)
     bootstrap.add_argument("--report-path", required=True)
     bootstrap.add_argument("--agent-brief-path", required=True)
+
+    bootstrap_shared = subparsers.add_parser("bootstrap-shared", help="Bootstrap a shared tool/runtime union.")
+    bootstrap_shared.add_argument("--repo", required=True)
+    bootstrap_shared.add_argument("--out-json", required=True)
+    bootstrap_shared.add_argument("--manifest", action="append", default=[])
 
     update = subparsers.add_parser("update-sidecar", help="Update a runtime sidecar.")
     update.add_argument("--state", required=True)
@@ -176,27 +177,20 @@ def repo_profile(repo: Path) -> dict[str, Any]:
                 except ValueError:
                     docs_roots.add(str(path.parent))
 
-    manifests_list = sorted(manifests)
     package_managers: list[str] = []
     if "pnpm-lock.yaml" in manifests:
         package_managers.append("pnpm")
-    if "package-lock.json" in manifests:
-        package_managers.append("npm")
-    if "yarn.lock" in manifests:
-        package_managers.append("yarn")
-    if "poetry.lock" in manifests:
-        package_managers.append("poetry")
-    if "Pipfile.lock" in manifests:
-        package_managers.append("pipenv")
-    if "requirements.txt" in manifests or "pyproject.toml" in manifests or "uv.lock" in manifests:
-        package_managers.append("pip")
+    if "package.json" in manifests:
+        package_managers.append("node")
     if "uv.lock" in manifests:
         package_managers.append("uv")
+    if "pyproject.toml" in manifests:
+        package_managers.append("python")
 
     return {
         "repo_root": str(repo.resolve()),
         "languages": sorted(languages),
-        "manifests": manifests_list,
+        "manifests": sorted(manifests),
         "package_managers": package_managers,
         "files_scanned": files_scanned,
         "python_files": python_files,
@@ -221,52 +215,25 @@ def default_sidecar(skill_id: str, repo: Path, summary_path: Path, report_path: 
     }
 
 
-def required_when_matches(requirement: dict[str, Any], profile: dict[str, Any]) -> bool:
-    if not requirement:
-        return True
-    if requirement.get("always") is True:
-        return True
-    languages = set(profile["languages"])
-    manifests = set(profile["manifests"])
-    if requirement.get("languages_any"):
-        if not languages.intersection(requirement["languages_any"]):
-            return False
-    if requirement.get("manifests_any"):
-        if not manifests.intersection(requirement["manifests_any"]):
-            return False
-    if requirement.get("python_min_files") is not None:
-        if int(profile.get("python_files", 0) or 0) < int(requirement["python_min_files"]):
-            return False
-    return True
+def load_manifest(path: Path) -> dict[str, Any]:
+    payload = load_json(path)
+    if not isinstance(payload.get("runtime_features"), list):
+        raise ValueError(f"{path} missing runtime_features list")
+    if not isinstance(payload.get("tools"), list):
+        raise ValueError(f"{path} missing tools list")
+    return {
+        "skill": str(payload.get("skill") or path.parent.parent.name),
+        "runtime_features": [str(item) for item in payload.get("runtime_features") or []],
+        "tools": [str(item) for item in payload.get("tools") or []],
+    }
+
+
+def load_registry() -> dict[str, Any]:
+    return load_json(REGISTRY_PATH)
 
 
 def command_exists(name: str) -> bool:
     return shutil.which(name) is not None
-
-
-def detect_target(spec: dict[str, Any]) -> bool:
-    detect_type = spec.get("type")
-    if detect_type == "any_command":
-        return any(command_exists(command) for command in spec.get("commands") or [])
-    if detect_type == "env_flag":
-        return str(os.environ.get(str(spec.get("env") or ""), "")).lower() in {"1", "true", "yes", "on"}
-    if detect_type == "http_reachable":
-        url = str(spec.get("url") or "")
-        if not url:
-            return False
-        request = urllib.request.Request(url, method="GET")
-        try:
-            with urllib.request.urlopen(request, timeout=float(spec.get("timeout_seconds", 5))) as response:
-                return response.status < 500
-        except (urllib.error.URLError, TimeoutError, ValueError):
-            return False
-    if detect_type == "env_or_http":
-        env_spec = {"type": "env_flag", "env": spec.get("env")}
-        if detect_target(env_spec):
-            return True
-        http_spec = {"type": "http_reachable", "url": spec.get("url"), "timeout_seconds": spec.get("timeout_seconds", 5)}
-        return detect_target(http_spec)
-    return False
 
 
 def classify_failure(text: str) -> tuple[bool, bool, bool]:
@@ -291,148 +258,445 @@ def classify_failure(text: str) -> tuple[bool, bool, bool]:
     return blocked_by_security, blocked_by_permissions, blocked_by_network
 
 
-def run_install_attempt(command: list[str], repo: Path) -> tuple[bool, str]:
+def detect_target(spec: dict[str, Any]) -> bool:
+    detect_type = spec.get("type")
+    if detect_type == "env_flag":
+        return str(os.environ.get(str(spec.get("env") or ""), "")).lower() in {"1", "true", "yes", "on"}
+    if detect_type == "http_reachable":
+        url = str(spec.get("url") or "")
+        if not url:
+            return False
+        request = urllib.request.Request(url, method="GET")
+        try:
+            with urllib.request.urlopen(request, timeout=float(spec.get("timeout_seconds", 5))) as response:
+                return response.status < 500
+        except (urllib.error.URLError, TimeoutError, ValueError):
+            return False
+    if detect_type == "env_or_http":
+        return detect_target({"type": "env_flag", "env": spec.get("env")}) or detect_target({
+            "type": "http_reachable",
+            "url": spec.get("url"),
+            "timeout_seconds": spec.get("timeout_seconds", 5),
+        })
+    return False
+
+
+def run_command(command: list[str], cwd: Path, env: dict[str, str] | None = None) -> tuple[bool, str]:
     try:
         completed = subprocess.run(
             command,
-            cwd=repo,
+            cwd=cwd,
             capture_output=True,
             text=True,
-            env=os.environ.copy(),
+            env=env or os.environ.copy(),
         )
     except FileNotFoundError as exc:
         return False, str(exc)
     output = "\n".join(part for part in (completed.stdout.strip(), completed.stderr.strip()) if part).strip()
     if completed.returncode == 0:
-        return True, output or "installation command completed successfully"
+        return True, output or "command completed successfully"
     return False, output or f"command exited with code {completed.returncode}"
 
 
-def current_platform_tags() -> set[str]:
-    tags = {sys.platform}
+@contextlib.contextmanager
+def install_lock() -> Any:
+    INSTALL_LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(INSTALL_LOCK_PATH, "a+", encoding="utf-8") as handle:
+        acquired = False
+        while not acquired:
+            try:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+                acquired = True
+            except BlockingIOError:
+                time.sleep(0.1)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
+def platform_key() -> str | None:
+    machine = platform.machine().lower()
+    if machine in {"arm64", "aarch64"}:
+        arch = "arm64"
+    elif machine in {"x86_64", "amd64"}:
+        arch = "x64"
+    else:
+        return None
     if sys.platform.startswith("darwin"):
-        tags.add("darwin")
-        tags.add("macos")
-    elif sys.platform.startswith("linux"):
-        tags.add("linux")
-    elif sys.platform.startswith(("win32", "cygwin", "msys")):
-        tags.add("windows")
-    return tags
+        return f"darwin-{arch}"
+    if sys.platform.startswith("linux"):
+        return f"linux-{arch}"
+    return None
 
 
-def install_attempt_matches(attempt: dict[str, Any]) -> bool:
-    platforms = attempt.get("platforms")
-    if not platforms:
-        return True
-    platform_tags = current_platform_tags()
-    return bool(platform_tags.intersection(str(item).lower() for item in platforms))
+def resolve_tool_path(tool_id: str, registry: dict[str, Any]) -> Path:
+    entry = registry["tools"][tool_id]
+    binary = entry["binary_names"][0]
+    ecosystem = entry["ecosystem"]
+    if ecosystem == "python":
+        return PY_BIN_DIR / binary
+    if ecosystem == "node":
+        return NODE_BIN_DIR / binary
+    if ecosystem == "docs":
+        return DOCS_BIN_DIR / binary
+    raise ValueError(f"unsupported ecosystem for {tool_id}: {ecosystem}")
+
+
+def command_output(command: list[str], cwd: Path) -> tuple[bool, str]:
+    return run_command(command, cwd)
+
+
+def tool_version_matches(tool_id: str, registry: dict[str, Any]) -> tuple[bool, str]:
+    entry = registry["tools"][tool_id]
+    tool_path = resolve_tool_path(tool_id, registry)
+    if not tool_path.exists():
+        return False, "tool binary does not exist in shared runtime"
+    command = [str(tool_path), *[str(item) for item in entry.get("version_args") or ["--version"]]]
+    success, output = command_output(command, RUNTIME_ROOT)
+    if not success:
+        return False, output
+    expected = str(entry.get("version_match") or "").strip()
+    if expected and expected not in output:
+        return False, f"expected version marker {expected!r} but saw {output!r}"
+    return True, output
+
+
+def bootstrap_actions_entry(name: str, kind: str, status: str, command: list[str], details: str) -> dict[str, Any]:
+    return {
+        "name": name,
+        "kind": kind,
+        "status": status,
+        "command": shlex.join(command),
+        "details": details,
+    }
+
+
+def ensure_base_prerequisites(required_ecosystems: set[str]) -> tuple[set[str], list[dict[str, Any]]]:
+    registry = load_registry()
+    failures: list[dict[str, Any]] = []
+    ready: set[str] = set()
+    for ecosystem in sorted(required_ecosystems):
+        if ecosystem not in {"python", "node"}:
+            ready.add(ecosystem)
+            continue
+        missing = []
+        for command in registry.get("base_prerequisites", {}).get(ecosystem, []):
+            if not command_exists(command):
+                missing.append(command)
+        if missing:
+            for command in missing:
+                failures.append({
+                    "name": command,
+                    "kind": "host-prerequisite",
+                    "required_for": f"{ecosystem}-toolchain",
+                    "attempted_command": "",
+                    "failure_reason": f"Required host prerequisite `{command}` is unavailable.",
+                    "blocked_by_security": False,
+                    "blocked_by_permissions": False,
+                    "blocked_by_network": False,
+                })
+            continue
+        ready.add(ecosystem)
+    return ready, failures
+
+
+def ensure_python_toolchain(actions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    PY_TOOLCHAIN_DIR.mkdir(parents=True, exist_ok=True)
+    command = ["uv", "sync", "--project", str(PY_TOOLCHAIN_DIR), "--locked"]
+    success, output = run_command(command, PY_TOOLCHAIN_DIR)
+    actions.append(bootstrap_actions_entry("python-toolchain", "toolchain", "installed" if success else "failed", command, output))
+    if success:
+        return []
+    blocked_by_security, blocked_by_permissions, blocked_by_network = classify_failure(output)
+    return [{
+        "name": "python-toolchain",
+        "kind": "toolchain",
+        "required_for": "python-audits",
+        "attempted_command": shlex.join(command),
+        "failure_reason": output,
+        "blocked_by_security": blocked_by_security,
+        "blocked_by_permissions": blocked_by_permissions,
+        "blocked_by_network": blocked_by_network,
+    }]
+
+
+def ensure_node_toolchain(actions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    NODE_TOOLCHAIN_DIR.mkdir(parents=True, exist_ok=True)
+    command = ["pnpm", "install", "--dir", str(NODE_TOOLCHAIN_DIR), "--frozen-lockfile"]
+    success, output = run_command(command, NODE_TOOLCHAIN_DIR)
+    actions.append(bootstrap_actions_entry("node-toolchain", "toolchain", "installed" if success else "failed", command, output))
+    if success:
+        return []
+    blocked_by_security, blocked_by_permissions, blocked_by_network = classify_failure(output)
+    return [{
+        "name": "node-toolchain",
+        "kind": "toolchain",
+        "required_for": "typescript-audits",
+        "attempted_command": shlex.join(command),
+        "failure_reason": output,
+        "blocked_by_security": blocked_by_security,
+        "blocked_by_permissions": blocked_by_permissions,
+        "blocked_by_network": blocked_by_network,
+    }]
+
+
+def install_docs_tool(tool_id: str, registry: dict[str, Any], actions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    entry = registry["tools"][tool_id]
+    tool_path = resolve_tool_path(tool_id, registry)
+    version_ok, version_output = tool_version_matches(tool_id, registry)
+    if version_ok:
+        actions.append(bootstrap_actions_entry(tool_id, "docs-binary", "ready", [str(tool_path), "--version"], version_output))
+        return []
+
+    spec = entry["download"]
+    key = platform_key()
+    asset_name = (spec.get("assets") or {}).get(key or "")
+    if not asset_name:
+        return [{
+            "name": tool_id,
+            "kind": "docs-binary",
+            "required_for": tool_id,
+            "attempted_command": "",
+            "failure_reason": f"No official release asset is defined for platform {platform.system()} {platform.machine()}",
+            "blocked_by_security": False,
+            "blocked_by_permissions": False,
+            "blocked_by_network": False,
+        }]
+
+    DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    url = f"https://github.com/{spec['owner']}/{spec['repo']}/releases/download/{spec['tag']}/{asset_name}"
+    archive_path = DOWNLOAD_DIR / asset_name
+    request = urllib.request.Request(url, headers={"User-Agent": "pooh-skills-runtime"})
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            archive_path.write_bytes(response.read())
+    except Exception as exc:
+        message = str(exc)
+        blocked_by_security, blocked_by_permissions, blocked_by_network = classify_failure(message)
+        actions.append(bootstrap_actions_entry(tool_id, "docs-binary", "failed", ["download", url], message))
+        return [{
+            "name": tool_id,
+            "kind": "docs-binary",
+            "required_for": tool_id,
+            "attempted_command": f"download {url}",
+            "failure_reason": message,
+            "blocked_by_security": blocked_by_security,
+            "blocked_by_permissions": blocked_by_permissions,
+            "blocked_by_network": blocked_by_network or True,
+        }]
+
+    try:
+        with TemporaryDirectory(prefix=f"{tool_id}-extract-") as temp_dir:
+            temp_root = Path(temp_dir)
+            with tarfile.open(archive_path, "r:gz") as archive:
+                archive.extractall(temp_root)
+            extracted = temp_root / str(spec["binary_path"])
+            if not extracted.exists():
+                candidates = list(temp_root.rglob(str(spec["binary_path"])))
+                if candidates:
+                    extracted = candidates[0]
+            if not extracted.exists():
+                raise FileNotFoundError(f"Could not locate {spec['binary_path']} inside {asset_name}")
+            DOCS_BIN_DIR.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(extracted, tool_path)
+            tool_path.chmod(0o755)
+    except Exception as exc:
+        message = str(exc)
+        blocked_by_security, blocked_by_permissions, blocked_by_network = classify_failure(message)
+        actions.append(bootstrap_actions_entry(tool_id, "docs-binary", "failed", ["extract", str(archive_path)], message))
+        return [{
+            "name": tool_id,
+            "kind": "docs-binary",
+            "required_for": tool_id,
+            "attempted_command": f"extract {archive_path}",
+            "failure_reason": message,
+            "blocked_by_security": blocked_by_security,
+            "blocked_by_permissions": blocked_by_permissions,
+            "blocked_by_network": blocked_by_network,
+        }]
+
+    ok, output = tool_version_matches(tool_id, registry)
+    actions.append(bootstrap_actions_entry(tool_id, "docs-binary", "installed" if ok else "failed", [str(tool_path), "--version"], output))
+    if ok:
+        return []
+    blocked_by_security, blocked_by_permissions, blocked_by_network = classify_failure(output)
+    return [{
+        "name": tool_id,
+        "kind": "docs-binary",
+        "required_for": tool_id,
+        "attempted_command": f"{tool_path} --version",
+        "failure_reason": output,
+        "blocked_by_security": blocked_by_security,
+        "blocked_by_permissions": blocked_by_permissions,
+        "blocked_by_network": blocked_by_network,
+    }]
+
+
+def verify_required_tools(required_tools: list[str], registry: dict[str, Any]) -> list[dict[str, Any]]:
+    failures: list[dict[str, Any]] = []
+    for tool_id in required_tools:
+        ok, output = tool_version_matches(tool_id, registry)
+        if ok:
+            continue
+        failures.append({
+            "name": tool_id,
+            "kind": "tool",
+            "required_for": tool_id,
+            "attempted_command": f"{resolve_tool_path(tool_id, registry)} --version",
+            "failure_reason": output,
+            "blocked_by_security": False,
+            "blocked_by_permissions": False,
+            "blocked_by_network": False,
+        })
+    return failures
+
+
+def bootstrap_requirement_union(repo: Path, required_tools: list[str], runtime_features: list[str]) -> tuple[str, list[dict[str, Any]], list[dict[str, Any]]]:
+    registry = load_registry()
+    tool_registry = registry.get("tools") or {}
+    feature_registry = registry.get("runtime_features") or {}
+    actions: list[dict[str, Any]] = []
+    failures: list[dict[str, Any]] = []
+
+    for feature_name in runtime_features:
+        feature = feature_registry.get(feature_name)
+        if not feature:
+            failures.append({
+                "name": feature_name,
+                "kind": "runtime-feature",
+                "required_for": feature_name,
+                "attempted_command": "",
+                "failure_reason": f"Runtime feature `{feature_name}` is not defined in the shared registry.",
+                "blocked_by_security": False,
+                "blocked_by_permissions": False,
+                "blocked_by_network": False,
+            })
+            continue
+        if detect_target(feature.get("detect") or {}):
+            continue
+        failures.append({
+            "name": feature_name,
+            "kind": feature.get("kind") or "runtime-feature",
+            "required_for": feature.get("required_for") or feature_name,
+            "attempted_command": "",
+            "failure_reason": feature.get("failure_reason") or "required runtime capability is unavailable on this host",
+            "blocked_by_security": False,
+            "blocked_by_permissions": False,
+            "blocked_by_network": feature_name in FEATURE_BLOCKED_BY_NETWORK,
+        })
+
+    valid_tools: list[str] = []
+    for tool_id in required_tools:
+        if tool_id not in tool_registry:
+            failures.append({
+                "name": tool_id,
+                "kind": "tool",
+                "required_for": tool_id,
+                "attempted_command": "",
+                "failure_reason": f"Tool `{tool_id}` is not defined in the shared tool registry.",
+                "blocked_by_security": False,
+                "blocked_by_permissions": False,
+                "blocked_by_network": False,
+            })
+            continue
+        valid_tools.append(tool_id)
+
+    required_ecosystems = {tool_registry[tool_id]["ecosystem"] for tool_id in valid_tools}
+    ready_ecosystems, prerequisite_failures = ensure_base_prerequisites(required_ecosystems)
+    failures.extend(prerequisite_failures)
+
+    with install_lock():
+        verifiable_tools: list[str] = []
+
+        if "python" in ready_ecosystems:
+            python_failures = ensure_python_toolchain(actions)
+            failures.extend(python_failures)
+            if python_failures:
+                ready_ecosystems.discard("python")
+            else:
+                verifiable_tools.extend([tool_id for tool_id in valid_tools if tool_registry[tool_id]["ecosystem"] == "python"])
+
+        if "node" in ready_ecosystems:
+            node_failures = ensure_node_toolchain(actions)
+            failures.extend(node_failures)
+            if node_failures:
+                ready_ecosystems.discard("node")
+            else:
+                verifiable_tools.extend([tool_id for tool_id in valid_tools if tool_registry[tool_id]["ecosystem"] == "node"])
+
+        for tool_id in valid_tools:
+            if tool_registry[tool_id]["ecosystem"] == "docs":
+                docs_failures = install_docs_tool(tool_id, registry, actions)
+                failures.extend(docs_failures)
+                if not docs_failures:
+                    verifiable_tools.append(tool_id)
+
+        failures.extend(verify_required_tools(verifiable_tools, registry))
+
+    dependency_status = "auto-installed" if any(action["status"] == "installed" for action in actions) else "ready"
+    if failures:
+        return "blocked", actions, failures
+    return dependency_status, actions, failures
 
 
 def bootstrap(args: argparse.Namespace) -> int:
-    manifest = load_json(Path(args.manifest).resolve())
+    manifest = load_manifest(Path(args.manifest).resolve())
     repo = Path(args.repo).resolve()
     state_path = Path(args.state).resolve()
     summary_path = Path(args.summary_path).resolve()
     report_path = Path(args.report_path).resolve()
     brief_path = Path(args.agent_brief_path).resolve()
-    profile = repo_profile(repo)
     sidecar = default_sidecar(args.skill_id, repo, summary_path, report_path, brief_path)
     write_json_atomic(state_path, sidecar)
 
-    bootstrap_actions: list[dict[str, Any]] = []
-    dependency_failures: list[dict[str, Any]] = []
-    installed_any = False
+    sidecar["stage"] = "preflight"
+    sidecar["current_action"] = "Checking runtime features and shared toolchain prerequisites."
+    write_json_atomic(state_path, sidecar)
 
-    for feature in manifest.get("runtime_features") or []:
-        if not required_when_matches(feature.get("required_when") or {}, profile):
-            continue
-        detect = feature.get("detect") or {}
-        sidecar["stage"] = "preflight"
-        sidecar["current_action"] = f"Checking runtime feature: {feature['name']}"
-        write_json_atomic(state_path, sidecar)
-        if detect_target(detect):
-            continue
-        dependency_failures.append({
-            "name": feature["name"],
-            "kind": feature.get("kind") or "runtime-feature",
-            "required_for": feature.get("required_for") or args.skill_id,
-            "attempted_command": "",
-            "failure_reason": feature.get("failure_reason") or "required runtime capability is unavailable on this host",
-            "blocked_by_security": False,
-            "blocked_by_permissions": False,
-            "blocked_by_network": detect.get("type") in {"http_reachable", "env_or_http"},
-        })
+    dependency_status, actions, failures = bootstrap_requirement_union(
+        repo,
+        list(dict.fromkeys(manifest["tools"])),
+        list(dict.fromkeys(manifest["runtime_features"])),
+    )
 
-    for dependency in manifest.get("dependencies") or []:
-        if not required_when_matches(dependency.get("required_when") or {}, profile):
-            continue
-        detect = dependency.get("detect") or {}
-        if detect_target(detect):
-            continue
-
-        attempts = dependency.get("install_attempts") or []
-        sidecar["stage"] = "bootstrapping"
-        sidecar["current_action"] = f"Installing dependency: {dependency['name']}"
-        write_json_atomic(state_path, sidecar)
-
-        attempt_failures: list[tuple[str, str]] = []
-        installed = False
-        for attempt in attempts:
-            if not install_attempt_matches(attempt):
-                continue
-            command = [str(item) for item in attempt.get("command") or []]
-            if not command:
-                continue
-            success, output = run_install_attempt(command, repo)
-            bootstrap_actions.append({
-                "name": dependency["name"],
-                "kind": dependency.get("kind") or "dependency",
-                "status": "installed" if success else "failed",
-                "command": shlex.join(command),
-                "details": output,
-            })
-            sidecar["bootstrap_actions"] = bootstrap_actions
-            write_json_atomic(state_path, sidecar)
-            if success and detect_target(detect):
-                installed = True
-                installed_any = True
-                break
-            attempt_failures.append((shlex.join(command), output))
-
-        if installed:
-            continue
-
-        attempted_command = attempt_failures[-1][0] if attempt_failures else ""
-        failure_reason = attempt_failures[-1][1] if attempt_failures else "no install attempts were declared"
-        blocked_by_security, blocked_by_permissions, blocked_by_network = classify_failure(failure_reason)
-        dependency_failures.append({
-            "name": dependency["name"],
-            "kind": dependency.get("kind") or "dependency",
-            "required_for": dependency.get("required_for") or args.skill_id,
-            "attempted_command": attempted_command,
-            "failure_reason": failure_reason,
-            "blocked_by_security": blocked_by_security,
-            "blocked_by_permissions": blocked_by_permissions,
-            "blocked_by_network": blocked_by_network,
-        })
-
-    if dependency_failures:
+    sidecar["bootstrap_actions"] = actions
+    sidecar["dependency_failures"] = failures
+    sidecar["dependency_status"] = dependency_status
+    sidecar["generated_at"] = utc_now()
+    if failures:
         sidecar["stage"] = "blocked"
-        sidecar["dependency_status"] = "blocked"
-        sidecar["current_action"] = "Dependency bootstrap blocked this skill before the main audit could start."
-        sidecar["bootstrap_actions"] = bootstrap_actions
-        sidecar["dependency_failures"] = dependency_failures
-        sidecar["generated_at"] = utc_now()
+        sidecar["current_action"] = "Shared toolchain bootstrap blocked this skill before the main audit could start."
         write_json_atomic(state_path, sidecar)
         return BOOTSTRAP_BLOCKED_EXIT
 
-    sidecar["dependency_status"] = "auto-installed" if installed_any else "ready"
-    sidecar["bootstrap_actions"] = bootstrap_actions
-    sidecar["dependency_failures"] = dependency_failures
-    sidecar["current_action"] = "Preflight complete. Main audit may start."
-    sidecar["generated_at"] = utc_now()
+    sidecar["stage"] = "running"
+    sidecar["current_action"] = "Preflight complete. Shared toolchain is ready."
     write_json_atomic(state_path, sidecar)
     return 0
+
+
+def bootstrap_shared(args: argparse.Namespace) -> int:
+    repo = Path(args.repo).resolve()
+    manifests = [load_manifest(Path(item).resolve()) for item in args.manifest]
+    tools: list[str] = []
+    runtime_features: list[str] = []
+    for manifest in manifests:
+        tools.extend(manifest["tools"])
+        runtime_features.extend(manifest["runtime_features"])
+    dependency_status, actions, failures = bootstrap_requirement_union(repo, list(dict.fromkeys(tools)), list(dict.fromkeys(runtime_features)))
+    payload = {
+        "schema_version": SCHEMA_VERSION,
+        "generated_at": utc_now(),
+        "repo_root": str(repo.resolve()),
+        "dependency_status": dependency_status,
+        "tools": list(dict.fromkeys(tools)),
+        "runtime_features": list(dict.fromkeys(runtime_features)),
+        "bootstrap_actions": actions,
+        "dependency_failures": failures,
+    }
+    write_json_atomic(Path(args.out_json).resolve(), payload)
+    return BOOTSTRAP_BLOCKED_EXIT if failures else 0
 
 
 def update_sidecar(args: argparse.Namespace) -> int:
@@ -512,7 +776,7 @@ def blocked_report_markdown(skill_id: str, repo: Path, state: dict[str, Any]) ->
             "",
             "## What happened",
             "",
-            "The skill did not enter its main audit because a required runtime feature or installable dependency was unavailable after bootstrap attempts.",
+            "The skill did not enter its main audit because a required runtime feature or locked shared tool was unavailable after bootstrap attempts.",
         ]
     )
     return "\n".join(lines)
@@ -555,11 +819,11 @@ def dependency_audit_blocked_summary(repo: Path, state: dict[str, Any], profile:
         "severity": "high",
         "confidence": "high",
         "scope": "repo",
-        "title": "Dependency bootstrap blocked the audit before graph tooling could run",
-        "evidence_summary": "Required dependency tooling was unavailable and automatic installation attempts did not succeed.",
+        "title": "Shared toolchain bootstrap blocked the audit before graph tooling could run",
+        "evidence_summary": "Required audit tooling or a runtime prerequisite was unavailable and shared bootstrap did not succeed.",
         "decision": "fix-config",
-        "recommended_change_shape": "Restore the blocked dependencies and rerun the dependency audit before trusting any boundary verdict.",
-        "validation_checks": ["Make sure the blocked dependency installs cleanly on the host."],
+        "recommended_change_shape": "Restore the blocked prerequisites and rerun the dependency audit before trusting any boundary verdict.",
+        "validation_checks": ["Make sure the blocked toolchain and prerequisites bootstrap cleanly on the host."],
         "autofix_allowed": False,
         "notes": ", ".join(failure_names) or "dependency bootstrap blocked the scan",
     }]
@@ -571,22 +835,22 @@ def dependency_audit_blocked_summary(repo: Path, state: dict[str, Any], profile:
             "source_roots": [],
             "workspace_roots": [],
             "major_blockers": [item["failure_reason"] for item in state.get("dependency_failures") or []],
-            "notes": ["Dependency bootstrap blocked before the main audit could start."],
+            "notes": ["Shared toolchain bootstrap blocked before the main audit could start."],
         },
         "tool_coverage": {
             "chosen_tools": [{
                 "tool": "manual",
-                "rationale": "Dependency bootstrap blocked the skill before any graph tool could run.",
+                "rationale": "Shared bootstrap blocked the skill before any graph tool could run.",
             }],
             "skipped_tools": [
                 {"tool": item["name"], "reason": item["failure_reason"]}
                 for item in state.get("dependency_failures") or []
-                if item["name"] in {"tach", "dependency-cruiser", "knip"}
+                if item["name"] in {"tach", "dependency-cruiser", "knip", "python-toolchain", "node-toolchain"}
             ],
         },
         "overall_verdict": "scan-blocked",
         "findings": findings,
-        "immediate_actions": ["Fix blocked dependency bootstrap before running dependency governance."],
+        "immediate_actions": ["Fix blocked prerequisites before running dependency governance."],
         "next_actions": [],
         "later_actions": [],
         "safe_automation": [],
@@ -603,7 +867,7 @@ def contract_blocked_summary(skill: str, repo: Path, state: dict[str, Any], prof
             "state": "unverified",
             "severity": "high",
             "confidence": "high",
-            "summary": "Dependency bootstrap blocked the skill before this gate could be audited.",
+            "summary": "Shared toolchain bootstrap blocked the skill before this gate could be audited.",
         }
         for gate in gate_names
     ]
@@ -615,11 +879,11 @@ def contract_blocked_summary(skill: str, repo: Path, state: dict[str, Any], prof
         "confidence": "high",
         "current_state": "unverified",
         "target_state": "enforced" if skill == "signature-contract-hardgate" else "sound",
-        "title": "Dependency bootstrap blocked the audit before gate evidence could be collected",
-        "evidence_summary": "A required dependency or runtime feature was unavailable after bootstrap attempts.",
+        "title": "Shared toolchain bootstrap blocked the audit before gate evidence could be collected",
+        "evidence_summary": "A required tool or runtime feature was unavailable after bootstrap attempts.",
         "decision": "defer",
-        "change_shape": "Restore the blocked dependency, rerun the audit, then judge domain gates from fresh evidence.",
-        "validation": "Prove the dependency bootstrap succeeds and rerun the skill.",
+        "change_shape": "Restore the blocked prerequisite, rerun the audit, then judge domain gates from fresh evidence.",
+        "validation": "Prove the shared bootstrap succeeds and rerun the skill.",
         "merge_gate": "warn-only",
         "autofix_allowed": False,
         "notes": ", ".join(item["name"] for item in failures) or "bootstrap blocked the run",
@@ -627,7 +891,7 @@ def contract_blocked_summary(skill: str, repo: Path, state: dict[str, Any], prof
     repo_profile = {
         "languages": list(profile["languages"]),
         "shape": "unknown",
-        "notes": ["Dependency bootstrap blocked before the main audit could start."],
+        "notes": ["Shared toolchain bootstrap blocked before the main audit could start."],
     }
     if skill == "signature-contract-hardgate":
         repo_profile["contract_surface"] = []
@@ -639,7 +903,7 @@ def contract_blocked_summary(skill: str, repo: Path, state: dict[str, Any], prof
             "findings": findings,
             "assumptions": [],
             "unverified": [item["failure_reason"] for item in failures],
-            "immediate_actions": ["Restore blocked dependencies before trusting contract gates."],
+            "immediate_actions": ["Restore blocked prerequisites before trusting contract gates."],
             "next_actions": [],
             "later_actions": [],
         }
@@ -682,11 +946,11 @@ def simple_findings_blocked_summary(skill: str, repo: Path, state: dict[str, Any
             "category": "scan-blocker",
             "severity": "high",
             "confidence": "high",
-            "title": "Dependency bootstrap blocked the audit before runtime evidence could be collected",
+            "title": "Shared toolchain bootstrap blocked the audit before runtime evidence could be collected",
             "path": ".",
             "line": 1,
             "evidence": [item["failure_reason"] for item in failures] or ["dependency bootstrap blocked the run"],
-            "recommendation": "Restore the blocked dependency and rerun this audit before trusting any verdict.",
+            "recommendation": "Restore the blocked prerequisite and rerun this audit before trusting any verdict.",
             "merge_gate": "block-now",
             "notes": ", ".join(item["name"] for item in failures),
         }],
@@ -701,7 +965,7 @@ def pythonic_blocked_summary(repo: Path, state: dict[str, Any], profile: dict[st
         "generated_at": utc_now(),
         "repo_root": str(repo.resolve()),
         "overall_verdict": "watch",
-        "summary_line": "Dependency bootstrap blocked the Pythonic drift audit before it could inspect the repo.",
+        "summary_line": "Shared toolchain bootstrap blocked the Pythonic drift audit before it could inspect the repo.",
         "coverage": {
             "files_scanned": int(profile["files_scanned"]),
             "python_files": int(profile["python_files"]),
@@ -719,11 +983,11 @@ def pythonic_blocked_summary(repo: Path, state: dict[str, Any], profile: dict[st
             "category": "scan-blocker",
             "severity": "high",
             "confidence": "high",
-            "title": "Dependency bootstrap blocked the Pythonic DDD drift audit",
+            "title": "Shared toolchain bootstrap blocked the Pythonic DDD drift audit",
             "path": ".",
             "line": 1,
             "evidence": [item["failure_reason"] for item in failures] or ["dependency bootstrap blocked the run"],
-            "recommendation": "Restore the blocked dependency and rerun the audit.",
+            "recommendation": "Restore the blocked prerequisite and rerun the audit.",
             "merge_gate": "block-now",
             "notes": ", ".join(item["name"] for item in failures),
         }],
@@ -752,7 +1016,7 @@ def cleanup_blocked_summary(repo: Path, state: dict[str, Any], profile: dict[str
             "path": ".",
             "line": 1,
             "language": None,
-            "summary": "Dependency bootstrap blocked the cleanup audit before any evidence could be collected.",
+            "summary": "Shared toolchain bootstrap blocked the removal-readiness audit before any evidence could be collected.",
             "cue": None,
             "replacement": None,
             "removal_target": None,
@@ -790,10 +1054,10 @@ def llm_blocked_summary(repo: Path, state: dict[str, Any], profile: dict[str, An
             "status": "present",
             "scope": [],
             "title": "Runtime bootstrap blocked live LLM API freshness verification",
-            "stale_usage": "The skill could not verify current docs because a required runtime feature or dependency was unavailable.",
+            "stale_usage": "The skill could not verify current docs because a required runtime feature or shared prerequisite was unavailable.",
             "current_expectation": "Restore the blocked dependency or runtime feature before treating this skill as a source of truth.",
             "evidence": [{"path": ".", "line": 1, "snippet": item["failure_reason"]} for item in failures] or [{"path": ".", "line": 1, "snippet": "dependency bootstrap blocked the run"}],
-            "recommended_change_shape": "Restore the blocked dependency, then rerun the Context7-backed verification flow.",
+            "recommended_change_shape": "Restore the blocked prerequisite, then rerun the Context7-backed verification flow.",
             "docs_verified": False,
             "autofix_allowed": False,
             "notes": ", ".join(item["name"] for item in failures),
@@ -855,7 +1119,7 @@ def build_blocked_summary(skill_id: str, repo: Path, state: dict[str, Any]) -> d
             repo,
             state,
             profile,
-            summary_line="Dependency bootstrap blocked the distributed side-effect audit before it could inspect event paths.",
+            summary_line="Shared toolchain bootstrap blocked the distributed side-effect audit before it could inspect event paths.",
             overall_verdict="watch",
         )
     if skill_id == "pythonic-ddd-drift-audit":
@@ -873,9 +1137,9 @@ def build_blocked_summary(skill_id: str, repo: Path, state: dict[str, Any]) -> d
             "repo_root": str(repo.resolve()),
             "overall_health": "blocked",
             "coverage_status": "partial",
-            "summary_line": "Runtime bootstrap blocked repo-health orchestration before child audits could start.",
+            "summary_line": "Shared bootstrap blocked repo-health orchestration before child audits could start.",
             "skill_runs": [],
-            "top_actions": ["Restore blocked orchestrator runtime features before retrying the fleet audit."],
+            "top_actions": ["Restore blocked orchestrator runtime features and shared prerequisites before retrying the fleet audit."],
             "missing_skills": [],
             "invalid_summaries": [],
             "dependency_status": "blocked",
@@ -944,6 +1208,8 @@ def main() -> int:
     args = parse_args()
     if args.command == "bootstrap":
         return bootstrap(args)
+    if args.command == "bootstrap-shared":
+        return bootstrap_shared(args)
     if args.command == "update-sidecar":
         return update_sidecar(args)
     if args.command == "inject-summary":

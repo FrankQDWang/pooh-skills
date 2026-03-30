@@ -1,27 +1,19 @@
 # Tool selection
 
-Use the bundled scripts first. Reach for stronger language-aware tools only when the repo needs them.
+Use the bundled scripts first. Then validate findings with the fixed Python / TypeScript / docs tool stack that this repository standardizes on.
 
 ## Python
-- Ruff / mypy / pyright for fast validation
-- Vulture for unused-code hints
-- LibCST for safe codemods
+- Ruff for fast validation
+- basedpyright for Python type / contract checks
+- Tach for Python boundary direction when structural leaks are part of the removal story
 
 ## JavaScript / TypeScript
-- TypeScript compiler and ESLint for validation
+- TypeScript compiler and typed ESLint for validation
 - Knip for unused-file and export signals
-- jscodeshift, ts-morph, or ast-grep for codemods
-
-## Java
-- OpenRewrite for large-scale source transforms
-- Error Prone / SpotBugs for validation
-
-## Go
-- golangci-lint / Staticcheck
-- `go test -coverprofile` for coverage-backed confidence
+- ast-grep for structural search and migration evidence
 
 ## Docs
-- markdownlint, Vale, link checkers, and docs-site broken-link checks
+- built-in link checks, Lychee, and Vale
 
 ## Rule of thumb
-If deletion depends on syntax-aware rewrites, type graphs, or framework metadata, the heuristic scanner should identify the target set and the language-aware tool should perform the change.
+If a finding is strong enough to justify removal, the heuristic scanner should identify the target set and the locked validation stack should prove the repo is ready. This repository does not perform codemods or automatic rewrites.

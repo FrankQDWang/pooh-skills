@@ -1,0 +1,183 @@
+{
+  "schema_version": "1.0",
+  "base_prerequisites": {
+    "python": [
+      "python3",
+      "uv"
+    ],
+    "node": [
+      "node",
+      "pnpm"
+    ]
+  },
+  "runtime_features": {
+    "mcp-context7": {
+      "kind": "runtime-feature",
+      "required_for": "verified-doc-verification",
+      "detect": {
+        "type": "env_or_http",
+        "env": "POOH_RUNTIME_FEATURE_MCP_CONTEXT7",
+        "url": "https://mcp.context7.com/mcp",
+        "timeout_seconds": 5
+      },
+      "failure_reason": "Context7 MCP is unavailable or unreachable from this host."
+    },
+    "codex-subagents": {
+      "kind": "runtime-feature",
+      "required_for": "repo-health-orchestration",
+      "detect": {
+        "type": "env_flag",
+        "env": "POOH_RUNTIME_FEATURE_CODEX_SUBAGENTS"
+      },
+      "failure_reason": "Codex subagent capability is unavailable in the current runtime."
+    }
+  },
+  "tools": {
+    "tach": {
+      "ecosystem": "python",
+      "version": "0.34.0",
+      "binary_names": [
+        "tach"
+      ],
+      "version_args": [
+        "--version"
+      ],
+      "version_match": "0.34.0"
+    },
+    "ruff": {
+      "ecosystem": "python",
+      "version": "0.15.8",
+      "binary_names": [
+        "ruff"
+      ],
+      "version_args": [
+        "--version"
+      ],
+      "version_match": "0.15.8"
+    },
+    "semgrep": {
+      "ecosystem": "python",
+      "version": "1.156.0",
+      "binary_names": [
+        "semgrep"
+      ],
+      "version_args": [
+        "--version"
+      ],
+      "version_match": "1.156.0"
+    },
+    "typescript-eslint-stack": {
+      "ecosystem": "node",
+      "version": "eslint 9.39.4 / @typescript-eslint 8.57.2",
+      "binary_names": [
+        "eslint"
+      ],
+      "version_args": [
+        "--version"
+      ],
+      "version_match": "9.39.4"
+    },
+    "tsc": {
+      "ecosystem": "node",
+      "version": "5.9.3",
+      "binary_names": [
+        "tsc"
+      ],
+      "version_args": [
+        "--version"
+      ],
+      "version_match": "5.9.3"
+    },
+    "basedpyright": {
+      "ecosystem": "node",
+      "version": "1.38.4",
+      "binary_names": [
+        "basedpyright"
+      ],
+      "version_args": [
+        "--version"
+      ],
+      "version_match": "1.38.4"
+    },
+    "dependency-cruiser": {
+      "ecosystem": "node",
+      "version": "17.3.10",
+      "binary_names": [
+        "depcruise"
+      ],
+      "version_args": [
+        "--version"
+      ],
+      "version_match": "17.3.10"
+    },
+    "knip": {
+      "ecosystem": "node",
+      "version": "6.1.0",
+      "binary_names": [
+        "knip"
+      ],
+      "version_args": [
+        "--version"
+      ],
+      "version_match": "6.1.0"
+    },
+    "ast-grep": {
+      "ecosystem": "node",
+      "version": "0.42.0",
+      "binary_names": [
+        "ast-grep"
+      ],
+      "version_args": [
+        "--version"
+      ],
+      "version_match": "0.42.0"
+    },
+    "lychee": {
+      "ecosystem": "docs",
+      "version": "0.23.0",
+      "binary_names": [
+        "lychee"
+      ],
+      "version_args": [
+        "--version"
+      ],
+      "version_match": "0.23.0",
+      "download": {
+        "owner": "lycheeverse",
+        "repo": "lychee",
+        "tag": "lychee-v0.23.0",
+        "assets": {
+          "darwin-arm64": "lychee-arm64-macos.tar.gz",
+          "linux-x64": "lychee-x86_64-unknown-linux-gnu.tar.gz",
+          "linux-arm64": "lychee-aarch64-unknown-linux-gnu.tar.gz"
+        },
+        "archive_type": "tar.gz",
+        "binary_path": "lychee"
+      }
+    },
+    "vale": {
+      "ecosystem": "docs",
+      "version": "3.14.1",
+      "binary_names": [
+        "vale"
+      ],
+      "version_args": [
+        "--version"
+      ],
+      "version_match": "3.14.1",
+      "download": {
+        "owner": "errata-ai",
+        "repo": "vale",
+        "tag": "v3.14.1",
+        "assets": {
+          "darwin-arm64": "vale_3.14.1_macOS_arm64.tar.gz",
+          "darwin-x64": "vale_3.14.1_macOS_64-bit.tar.gz",
+          "linux-x64": "vale_3.14.1_Linux_64-bit.tar.gz",
+          "linux-arm64": "vale_3.14.1_Linux_arm64.tar.gz"
+        },
+        "archive_type": "tar.gz",
+        "binary_path": "vale"
+      }
+    }
+  }
+}

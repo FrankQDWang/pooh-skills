@@ -1,6 +1,6 @@
 ---
 name: llm-api-freshness-guard
-description: "Audit code, repos, diffs, or snippets for stale LLM API usage and documentation drift across mainstream provider and wrapper surfaces. Use for LLM API 过时检查、老 SDK / 老 endpoint 核验、OpenAI Responses vs Chat Completions migration review, Anthropic Messages API migration, Gemini SDK drift, Azure OpenAI compatibility checks, model deprecation checks, tool/function-calling drift, streaming schema drift, structured-output drift, base_url/auth config drift, wrapper pass-through risk, and Context7-backed latest-doc verification. Produce a blunt human report, a patch-oriented agent brief, and a machine-readable summary JSON. Default to report-only unless fixes are explicitly requested."
+description: "Audit code, repos, diffs, or snippets for stale LLM API usage and documentation drift across mainstream provider and wrapper surfaces. Use for LLM API 过时检查、老 SDK / 老 endpoint 核验、OpenAI Responses vs Chat Completions migration review, Anthropic Messages API migration, Gemini SDK drift, Azure OpenAI compatibility checks, model deprecation checks, tool/function-calling drift, streaming schema drift, structured-output drift, base_url/auth config drift, wrapper pass-through risk, and Context7-backed latest-doc verification. Produce a blunt human report, a handoff-oriented agent brief, and a machine-readable summary JSON."
 ---
 
 # LLM API Freshness Guard
@@ -67,7 +67,7 @@ If Context7 is unavailable:
 ## Operating stance
 
 - Default to **verify + report**.
-- Default to **report-only** unless fixes are explicitly requested.
+- Keep the deliverable report-only.
 - Keep the report **decision-rich and command-light**.
 - Write in the **user's language**. Keep provider names, method names, JSON keys, and SDK symbols in their native technical form.
 - Treat the built-in registry as the supported detection boundary. It covers mainstream providers and wrappers, and can be extended for other surfaces. Do not pretend zero-config support for every unknown provider.
@@ -183,10 +183,10 @@ If Context7 is unavailable:
    - an agent remediation brief
    - a machine-readable summary JSON
 
-8. **Only if explicitly requested: propose or apply conservative fixes**
-   - prefer low-risk, mechanical updates first
-   - preserve current behavior where possible
-   - do not silently rewrite a whole provider integration when the user only asked for diagnosis
+8. **Keep the deliverable report-only**
+   - prefer precise findings and a clean handoff brief
+   - preserve current behavior in any suggested migration path
+   - do not silently rewrite a whole provider integration
    - do not "upgrade everything" just because one field is stale
 
 ## Provider handling rules
@@ -277,7 +277,7 @@ Agent guidance should be:
 
 - short
 - unambiguous
-- patch-oriented
+- handoff-oriented
 - free of long tutorials unless the repo is genuinely ambiguous
 - conservative about behavioral change
 
@@ -347,7 +347,7 @@ A strong result from this skill has all of the following:
 - Context7 verification is explicit and version-aware when possible
 - removed / deprecated / legacy / ambiguous states are kept separate
 - the human report is blunt but readable
-- the agent brief is patch-oriented, not tutorial sludge
+- the agent brief is handoff-oriented, not tutorial sludge
 - the summary JSON is useful to CI, orchestration, or later remediation
 - the result is honest about uncertainty instead of bluffing
 

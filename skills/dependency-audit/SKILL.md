@@ -1,6 +1,6 @@
 ---
 name: dependency-audit
-description: "Audit Python / TypeScript / mixed monorepos for dependency direction, boundary leaks, cycles, and dead-code signals with Tach, Dependency Cruiser, and Knip. Use for 仓库依赖巡检、架构边界审计、repo audit、monorepo diagnosis、cleanup planning. Produce a sharp, plain-language human report plus a concise remediation brief for Codex. Default to report-only unless fixes are explicitly requested."
+description: "Audit Python / TypeScript repositories and workspaces for dependency direction, boundary leaks, cycles, and dead-code signals with Tach, Dependency Cruiser, and Knip. Use for 仓库依赖巡检、架构边界审计、repo audit、workspace diagnosis、cleanup planning. Produce a sharp, plain-language human report plus a concise remediation brief for Codex."
 ---
 
 # Dependency Audit Skill
@@ -90,9 +90,9 @@ The output has **two readers**:
    - Agent-first remediation brief
    - Summary JSON for machine consumption
 
-7. **Only if explicitly requested: propose or apply low-risk fixes**
-   - Low-risk and mechanical only.
-   - Risky or destructive actions stay opt-in.
+7. **Keep the deliverable report-only**
+   - This skill detects and reports.
+   - It does not perform repository cleanup or automated fixes.
 
 ## Fleet baseline mode
 
@@ -162,7 +162,7 @@ Guidance:
 - Treat **unused files** as earlier cleanup than unused dependencies or exports because they often explain follow-on noise.
 - Results can be noisy if entry/project/workspace coverage is weak. Say so when confidence is only moderate.
 - Treat `includeEntryExports` as an explicit opt-in: if it is enabled, verify entry barrels, CLI entrypoints, and framework entry files before treating unused-export output as high confidence.
-- If the user explicitly asks for autofix, keep it conservative by default: exports, types, dependencies.
+- Use Knip to identify low-risk cleanup candidates, but keep the deliverable report-only.
 - **Never assume file deletion is safe by default.** File removal is opt-in and high caution.
 - Explain cascade effects: cleaning unused files can eliminate many secondary warnings.
 
@@ -268,7 +268,7 @@ Agent guidance should be:
 
 - short
 - unambiguous
-- patch-oriented
+- handoff-oriented
 - free of long tutorials unless absolutely necessary
 
 Prefer recommendation shapes like:
@@ -317,7 +317,7 @@ Never present a low-confidence scanner guess as a hard fact.
 - Default mode is **report-only**.
 - Do not delete files unless the user explicitly asks for it.
 - Do not recommend wide auto-fixes as the first move in a large repo.
-- If proposing autofix, clearly mark what is safe, what is risky, and what should stay manual.
+- Keep the brief handoff-oriented: say what is safe, what is risky, and what should stay manual.
 - Prefer incremental CI guardrails over sudden full enforcement.
 - If the repo is dirty or unstable, say so and recommend report-first.
 

@@ -5,13 +5,13 @@
 - Verdict: `not ready` | `partially ready` | `ready for controlled deletion`
 - Main reason:
 
-## 2. Delete-now candidates
-| target | type | why it looks safe | remaining checks |
+## 2. Highest-confidence cleanup candidates
+| target | type | why it looks ready | remaining checks |
 |---|---|---|---|
 |  |  |  |  |
 
 ## 3. Blockers
-| blocker | severity | impact | what must be true before deletion |
+| blocker | severity | impact | what must be true before manual cleanup |
 |---|---|---|---|
 |  |  |  |  |
 
@@ -37,7 +37,7 @@
 
 ## 7. What must not happen
 - Do not keep compatibility shims by default.
-- Do not delete before references and docs are updated.
+- Do not approve manual cleanup before references and docs are updated.
 - Do not treat heuristic findings as proof when runtime indirection exists.
 
 ## 8. Machine-readable artifacts

@@ -1,6 +1,6 @@
 ---
 name: pythonic-ddd-drift-audit
-description: Audits Python-heavy repositories for Pythonic abstraction bloat, domain-boundary leaks, fake DDD, ceremony-heavy CQRS signals, cross-context model bleed, and composition-root drift. Use for Pythonic architecture drift、DDD 边界巡检、假 CQRS 诊断、反 Java 味 Python 审计、AI 快速编码后的代码膨胀控制. Produces a blunt human report, a concise agent brief, and machine-readable findings. Default to report-first; treat blockers conservatively and use strong evidence for hard gates.
+description: Audits Python-heavy repositories for Pythonic abstraction bloat, domain-boundary leaks, fake DDD, ceremony-heavy CQRS signals, cross-context model bleed, and composition-root drift. Use for Pythonic architecture drift、DDD 边界巡检、假 CQRS 诊断、反非 Pythonic 仪式化审计、AI 快速编码后的代码膨胀控制. Produces a blunt human report, a concise agent brief, and machine-readable findings. Default to report-first; treat blockers conservatively and use strong evidence for hard gates.
 ---
 # Pythonic DDD Drift Audit
 
@@ -16,7 +16,7 @@ Use this skill when the user wants to:
 
 - audit a Python-heavy repo for **abstraction bloat**
 - detect whether `domain/` is actually independent, or just a folder name
-- find **cross-context imports**, fake repositories, thin wrappers, or Java-style interface inflation
+- find **cross-context imports**, fake repositories, thin wrappers, or interface inflation
 - check whether CQRS is a useful local pattern or empty ceremony
 - produce a report that helps a coding agent **remove shape debt** instead of adding more layers
 
@@ -129,16 +129,10 @@ Always produce:
 - an agent remediation brief
 - a machine-readable summary JSON
 
-### 5) Only propose mechanical cleanup when explicitly asked
+### 5) Keep the deliverable report-only
 
-Low-risk work includes:
-
-- collapsing obvious pass-through wrappers
-- replacing structural ABC shells with `Protocol` or lighter call shapes
-- moving framework imports out of domain packages
-- reducing boilerplate DTO passthroughs
-
-Do **not** silently redesign core modeling or split contexts from heuristics alone.
+This skill identifies where the repo is paying abstraction tax and where boundaries are leaking.
+It does not redesign core modeling or split contexts automatically.
 
 ## Finding taxonomy
 
@@ -193,7 +187,7 @@ Required sections:
 
 1. Executive summary
 2. Where the repo is lying about boundaries
-3. Where Python is being forced to imitate Java
+3. Where Python is being forced into non-Pythonic ceremony
 4. What is safe to flatten now
 5. What still requires modeling decisions
 6. Ordered action plan: now / next / later

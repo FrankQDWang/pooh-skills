@@ -15,11 +15,13 @@ The orchestrator expects the following current-run artifacts in the repo-root `.
 ## Current-run contract
 
 - The orchestrator deletes and recreates `.repo-harness` before spawning child audits.
+- The orchestrator bootstraps the shared `.pooh-runtime` toolchain before spawning child audits.
 - The orchestrator maintains `.repo-harness/repo-health-control-plane.json` as the live terminal view for the current run.
 - Every child subagent must write fresh artifacts for the current run.
 - The orchestrator may aggregate only files produced during the current run.
 - The richer synthesis layer may read child human reports and agent briefs, but it must still treat the machine summary as the source of truth for state.
 - Child skills may use their own local scripts or wrappers internally, but that is not the orchestrator contract.
+- Shared tool versions come only from `.pooh-runtime/python-toolchain/uv.lock` and `.pooh-runtime/node-toolchain/pnpm-lock.yaml`.
 
 ## Coverage statuses
 

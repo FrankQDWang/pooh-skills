@@ -1,10 +1,10 @@
 # Controlled Cleanup Agent Brief
 
 ## Objective
-Finish cleanup by deleting deprecated or legacy surfaces when evidence is strong enough. Do not preserve wrappers, aliases, or compatibility shims unless explicitly requested.
+Describe cleanup readiness, blockers, and handoff guidance. Do not delete code or perform automatic edits from this brief.
 
 ## Targets
-- Remove:
+- Highest-confidence cleanup candidates:
 - Migrate first:
 - Hold for human confirmation:
 
@@ -20,14 +20,13 @@ bash scripts/run_all.sh --strict-removal-targets /path/to/repo
 ```
 
 ## Guardrails
-- Old code/docs should be physically removed when replacement and migration are complete.
-- Update docs, examples, and navigation together with code.
+- Update docs, examples, and navigation together with any manual cleanup work.
 - Treat reflection, runtime imports, plugin systems, and string-based dispatch as high-risk.
-- Return a deletion list, migration list, verification commands, risks, and rollback notes.
+- Return a cleanup candidate list, migration list, verification commands, risks, and rollback notes.
 
 ## Expected output
 1. concise summary
-2. exact files/symbols to delete
-3. exact files/symbols still blocking deletion
+2. exact files/symbols that look ready for manual cleanup review
+3. exact files/symbols still blocking cleanup
 4. verification commands and results
 5. residual risks

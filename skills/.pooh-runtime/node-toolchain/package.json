@@ -1,0 +1,22 @@
+{
+  "name": "pooh-runtime-node-toolchain",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Shared locked Node/TypeScript CLI toolchain for pooh-skills",
+  "packageManager": "pnpm@10.33.0",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@ast-grep/cli"
+    ]
+  },
+  "dependencies": {
+    "@ast-grep/cli": "0.42.0",
+    "@typescript-eslint/eslint-plugin": "8.57.2",
+    "@typescript-eslint/parser": "8.57.2",
+    "basedpyright": "1.38.4",
+    "dependency-cruiser": "17.3.10",
+    "eslint": "9.39.4",
+    "knip": "6.1.0",
+    "typescript": "5.9.3"
+  }
+}

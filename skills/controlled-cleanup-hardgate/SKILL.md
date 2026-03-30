@@ -1,11 +1,11 @@
 ---
 name: controlled-cleanup-hardgate
-description: Audits repositories for deprecated APIs, compatibility shims, legacy aliases, stale docs, expired removal targets, and cleanup readiness gaps. Use for 可控清理、deprecated removal、legacy API migration closure、compat layer deletion、feature-flag cleanup、stale docs cleanup、cleanup readiness review. Produces a blunt human report, a concise agent remediation brief, and machine-readable cleanup findings. Defaults to report-only unless the user explicitly asks for low-risk mechanical cleanup.
+description: Audits Python / TypeScript repositories for deprecated APIs, compatibility shims, legacy aliases, stale docs, expired removal targets, and removal-readiness gaps. Use for deprecated removal readiness、legacy API migration closure、compat layer retirement review、feature-flag debt、stale docs cleanup readiness. Produces a blunt human report, a concise agent handoff brief, and machine-readable cleanup findings.
 ---
 
 # Controlled Cleanup Hardgate
 
-This skill is for evidence-based cleanup of large codebases.
+This skill is for evidence-based deprecated / removal readiness auditing in Python / TypeScript codebases.
 
 It is not a generic dependency audit, not a contract-hardening skill, and not a Temporal / pydantic-ai hard gate. It focuses on one thing: closing deprecated or legacy surfaces all the way to deletion, without hiding behind compatibility wrappers.
 
@@ -15,10 +15,10 @@ Use this skill when the user wants any of the following:
 
 - delete deprecated APIs, aliases, wrappers, shims, adapters, or old entrypoints
 - finish a migration instead of preserving backward compatibility forever
-- audit a repo for cleanup readiness before large refactors or codemods
+- audit a repo for deprecated / removal readiness before risky deletions
 - find expired deprecations, stale docs, or old references that should already be gone
-- tighten a cleanup workflow with evidence, validation, and rollback thinking
-- produce a sharp cleanup report for humans and a concise remediation brief for another coding agent
+- tighten a removal-readiness workflow with evidence, validation, and rollback thinking
+- produce a sharp removal-readiness report for humans and a concise handoff brief for another coding agent
 
 ## Do not use this
 
@@ -49,12 +49,12 @@ Read only what is needed.
 - `references/playbook.md` - full cleanup playbook from scope to deletion to rollout
 - `references/failure-modes.md` - common cleanup mistakes and how to avoid them
 - `references/marker-policy.md` - recommended deprecation marker format
-- `references/tool-selection.md` - ecosystem-specific follow-up tools when stronger AST or language-aware cleanup is needed
+- `references/tool-selection.md` - fixed Python / TypeScript / docs validation stack used by this skill
 - `references/evals.md` - trigger, non-trigger, and false-positive regression cases for manual skill testing
 
 ## Operating stance
 
-- Default to report-only.
+- Report only. This skill does not perform cleanup, codemods, or automatic deletion.
 - Treat `.repo-harness` as output-only. Never put default inputs there.
 - Prefer replacement complete -> block new refs by migration discipline -> delete old -> validate -> rollout.
 - Do not preserve compatibility wrappers unless the user explicitly asks for that trade-off.
@@ -121,15 +121,10 @@ Always produce:
 
 When useful, also write machine-readable outputs under `.repo-harness/`.
 
-### 5) Only propose or apply mechanical cleanup when explicitly asked
+### 5) Keep the deliverable report-only
 
-Low-risk mechanical work includes:
-
-- deleting obviously expired docs or examples that point to already-removed paths
-- pruning files or symbols that are proven unused by deterministic checks and are outside dynamic / high-risk surfaces
-- removing thin compatibility shims only when replacement, callers, and docs are already aligned
-
-Do not perform broad destructive edits from heuristic scanner output alone.
+This skill can identify delete-ready surfaces and the validation chain they require.
+It must not perform codemods, automatic cleanup, or broad destructive edits from scanner output.
 
 ### 6) Close the loop
 
@@ -219,7 +214,7 @@ Preferred files:
 
 ## Strong default language for cleanup work
 
-Use wording like this in the agent brief when the user wants actual cleanup:
+Use wording like this in the handoff brief:
 
 - The goal is to remove deprecated or legacy surfaces, not preserve compatibility by default.
 - Breaking backward compatibility is acceptable only after replacement and migration are complete.

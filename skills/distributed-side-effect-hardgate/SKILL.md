@@ -1,6 +1,6 @@
 ---
 name: distributed-side-effect-hardgate
-description: Audits repositories for distributed side-effect hazards: dual writes, pre-commit external effects, outbox gaps, idempotency gaps, unsafe retries, event contract drift, and message-handling reliability holes. Use for 分布式一致性巡检、event-driven reliability audit、outbox / idempotency review、dual-write diagnosis、message consumer hardening、AI 快速编码后的生产级错法排查. Produces a blunt human report, a concise agent remediation brief, and machine-readable findings. Default to scan + report unless the user explicitly asks for low-risk mechanical fixes.
+description: Audits Python / TypeScript repositories for distributed side-effect hazards: dual writes, pre-commit external effects, outbox gaps, idempotency gaps, unsafe retries, event contract drift, and message-handling reliability holes. Use for 分布式一致性巡检、event-driven reliability audit、outbox / idempotency review、dual-write diagnosis、message consumer hardening、AI 快速编码后的生产级错法排查. Produces a blunt human report, a concise agent handoff brief, and machine-readable findings.
 ---
 # Distributed Side-Effect Hardgate
 
@@ -56,7 +56,7 @@ Read only what is needed.
 
 ## Operating stance
 
-- Default to **scan + report**.
+- Report only.
 - Prefer **evidence over doctrine**.
 - Prefer **small hardening moves** over fantasy rewrites.
 - Do **not** recommend broad distributed redesign unless the evidence forces it.
@@ -115,16 +115,10 @@ Always produce:
 
 If the user did **not** ask for code changes, stop there.
 
-### 5) Only propose mechanical changes when explicitly asked
+### 5) Keep the deliverable report-only
 
-Allowed low-risk mechanical work includes:
-
-- adding obvious idempotency guard placeholders
-- adding event version fields to clearly centralized event DTOs
-- adding TODO-marked outbox relay stubs or config scaffolding only when explicitly requested
-- tightening logging / correlation identifiers in clearly isolated handlers
-
-Do **not** silently refactor transaction boundaries, retry semantics, or consumer flow control from heuristic evidence alone.
+This skill identifies correctness hazards and the lowest-risk hardening sequence.
+It does not rewrite transaction boundaries, retry semantics, or consumer flow control.
 
 ## Finding taxonomy
 

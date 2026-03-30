@@ -2,19 +2,7 @@
   "schema_version": "1.0",
   "skill": "repo-health-orchestrator",
   "runtime_features": [
-    {
-      "name": "codex-subagents",
-      "kind": "runtime-feature",
-      "required_for": "repo-health-orchestration",
-      "required_when": {
-        "always": true
-      },
-      "detect": {
-        "type": "env_flag",
-        "env": "POOH_RUNTIME_FEATURE_CODEX_SUBAGENTS"
-      },
-      "failure_reason": "Codex subagent capability is unavailable in the current runtime."
-    }
+    "codex-subagents"
   ],
-  "dependencies": []
+  "tools": []
 }

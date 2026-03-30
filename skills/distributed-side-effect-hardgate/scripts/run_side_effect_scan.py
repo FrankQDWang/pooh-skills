@@ -21,11 +21,16 @@ from collections import Counter
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable, List
+from typing import Any, Iterable, List
+
+RUNTIME_BIN_DIR = Path(__file__).resolve().parents[2] / ".pooh-runtime" / "bin"
+if str(RUNTIME_BIN_DIR) not in sys.path:
+    sys.path.insert(0, str(RUNTIME_BIN_DIR))
+
+from tool_runner import ToolRun, run_astgrep_pattern, run_semgrep_rules  # noqa: E402
 
 TEXT_EXTS = {
-    ".py", ".pyi", ".ts", ".tsx", ".js", ".jsx", ".go", ".java", ".kt", ".kts",
-    ".rb", ".php", ".cs", ".rs", ".json", ".yaml", ".yml", ".md", ".toml", ".ini",
+    ".py", ".pyi", ".ts", ".tsx", ".js", ".jsx", ".json", ".yaml", ".yml", ".toml", ".ini",
 }
 
 SKIP_DIRS = {
@@ -128,6 +133,24 @@ STATE_MUTATION_PATTERNS = [
     for p in [r"\b(commit|save|insert|update|delete|upsert|write)\b"]
 ]
 
+SEMGRP_SIDE_EFFECT_RULES = """
+rules:
+  - id: distributed-network-side-effect
+    languages: [python]
+    severity: WARNING
+    message: Remote side effect
+    pattern-either:
+      - pattern: requests.$METHOD(...)
+      - pattern: httpx.$METHOD(...)
+  - id: distributed-retry-signal
+    languages: [python]
+    severity: WARNING
+    message: Retry wrapper
+    pattern-either:
+      - pattern: "@retry"
+      - pattern: retry(...)
+"""
+
 
 @dataclass
 class Finding:
@@ -181,6 +204,58 @@ def severity_counts(findings: list[Finding]) -> dict[str, int]:
     return {k: int(counter.get(k, 0)) for k in ("critical", "high", "medium", "low")}
 
 
+def build_tool_runs(repo: Path, files: list[Path]) -> list[ToolRun]:
+    tool_runs: list[ToolRun] = []
+    py_targets = any(path.suffix.lower() in {".py", ".pyi"} for path in files)
+    js_targets = any(path.suffix.lower() in {".ts", ".tsx", ".js", ".jsx"} for path in files)
+
+    if py_targets:
+        semgrep_run, _ = run_semgrep_rules(SEMGRP_SIDE_EFFECT_RULES, repo, [str(repo)])
+        tool_runs.append(semgrep_run)
+    if js_targets:
+        ast_lang = "typescript" if any(path.suffix.lower() in {".ts", ".tsx"} for path in files) else "javascript"
+        ast_run, _ = run_astgrep_pattern("fetch($$$ARGS)", ast_lang, repo, [str(repo)])
+        tool_runs.append(ast_run)
+    return tool_runs
+
+
+def add_tool_findings(findings: list[Finding], tool_runs: list[ToolRun]) -> None:
+    seen = {(item.category, item.path, item.line, item.title) for item in findings}
+    for run in tool_runs:
+        if run.status == "failed":
+            candidate = Finding(
+                id=f"dsh-{len(findings)+1:03d}",
+                category="scan-blocker",
+                severity="medium",
+                confidence="high",
+                title=f"{run.tool} did not complete cleanly",
+                path=".",
+                line=1,
+                evidence=[run.summary, *run.details[:2]],
+                recommendation="Fix the locked structural tool execution before trusting the distributed-side-effect report.",
+                merge_gate="warn-only",
+            )
+        elif run.status == "issues":
+            candidate = Finding(
+                id=f"dsh-{len(findings)+1:03d}",
+                category="dynamic-dispatch-signal" if run.tool == "ast-grep" else "side-effect-pattern-signal",
+                severity="medium",
+                confidence="medium",
+                title=f"{run.tool} reported additional distributed side-effect evidence",
+                path=".",
+                line=1,
+                evidence=[run.summary, *run.details[:3]],
+                recommendation="Review the structural matches together with the heuristic findings before calling the flow safe.",
+                merge_gate="warn-only",
+            )
+        else:
+            continue
+        key = (candidate.category, candidate.path, candidate.line, candidate.title)
+        if key not in seen:
+            findings.append(candidate)
+            seen.add(key)
+
+
 def infer_verdict(findings: list[Finding], repo_flags: dict[str, bool], relevant_signals: int) -> tuple[str, str]:
     if relevant_signals == 0:
         return "not-applicable", "No meaningful broker / webhook / worker / distributed side-effect surface was detected."
@@ -197,8 +272,95 @@ def infer_verdict(findings: list[Finding], repo_flags: dict[str, bool], relevant
     return "sound", "No high-signal distributed side-effect hazards were found by the heuristic scan."
 
 
+def render_human_report(summary: dict[str, Any]) -> str:
+    findings = summary["findings"]
+    tool_runs = summary.get("tool_runs", [])
+    lines = [
+        "# Distributed Side-Effect Hardgate Report",
+        "",
+        "## 1. Executive summary",
+        f"- overall_verdict: `{summary.get('overall_verdict')}`",
+        f"- summary_line: {summary.get('summary_line')}",
+        f"- dependency_status: `{summary.get('dependency_status')}`",
+        "",
+        "## 2. Locked tool runs",
+        "",
+    ]
+    if not tool_runs:
+        lines.append("- No locked tool runs were recorded for this repository surface.")
+    else:
+        for item in tool_runs:
+            lines.extend([
+                f"### {item['tool']}",
+                f"- status: `{item['status']}`",
+                f"- summary: {item['summary']}",
+                *(f"- detail: {detail}" for detail in item.get("details", [])[:3]),
+                "",
+            ])
+
+    lines.extend(["## 3. Highest-risk findings", ""])
+    if not findings:
+        lines.append("- No distributed side-effect findings were detected.")
+    else:
+        for finding in findings[:8]:
+            lines.extend([
+                f"### {finding['title']}",
+                f"- category: `{finding['category']}`",
+                f"- severity: `{finding['severity']}`",
+                f"- confidence: `{finding['confidence']}`",
+                f"- locus: {finding['path']}:{finding['line']}",
+                *(f"- evidence: {item}" for item in finding.get('evidence', [])[:3]),
+                f"- recommendation: {finding['recommendation']}",
+                "",
+            ])
+
+    lines.extend([
+        "## 4. Handoff guidance",
+        "- Treat this audit as production-correctness evidence, not as permission for automatic edits.",
+        "- Resolve dual-write, retry, and idempotency risks before shipping more side effects.",
+        "- Re-run the locked audit stack after manual hardening work.",
+        "",
+    ])
+    return "\n".join(lines)
+
+
+def render_agent_brief(summary: dict[str, Any]) -> str:
+    findings = summary["findings"]
+    lines = [
+        "# Distributed Side-Effect Handoff Brief",
+        "",
+        "## Context",
+        f"- overall_verdict: `{summary.get('overall_verdict')}`",
+        f"- dependency_status: `{summary.get('dependency_status')}`",
+        f"- summary_line: {summary.get('summary_line')}",
+        "",
+        "## Ordered actions",
+        "1. Remove blocker-level dual-write, retry, or idempotency risks before tuning anything cosmetic.",
+        "2. Treat missing DLQ, event versioning, and observability signals as production-readiness debt.",
+        "3. Re-run the locked audit stack after manual hardening changes.",
+        "",
+        "## Findings",
+        "",
+    ]
+    if not findings:
+        lines.append("- No distributed side-effect findings were detected by the locked stack.")
+    else:
+        for finding in findings[:8]:
+            lines.extend([
+                f"### {finding['id']} {finding['title']}",
+                f"- category: {finding['category']}",
+                f"- severity: {finding['severity']}",
+                f"- confidence: {finding['confidence']}",
+                f"- evidence_summary: {('; '.join(finding.get('evidence', [])[:2])) or 'none'}",
+                f"- validation: {finding['recommendation']}",
+                "",
+            ])
+    return "\n".join(lines) + "\n"
+
+
 def scan(repo: Path) -> dict:
     files = list(iter_files(repo))
+    tool_runs = build_tool_runs(repo, files)
     repo_text = []
     for path in files:
         text = read_text(path)
@@ -384,7 +546,9 @@ def scan(repo: Path) -> dict:
             merge_gate="warn-only",
         ))
 
+    add_tool_findings(findings, tool_runs)
     verdict, summary_line = infer_verdict(findings, repo_flags, relevant_signals)
+    scan_blockers = [run.summary for run in tool_runs if run.status == "failed"]
     output = {
         "schema_version": "1.0",
         "skill": "distributed-side-effect-hardgate",
@@ -399,8 +563,9 @@ def scan(repo: Path) -> dict:
             "relevant_signals": relevant_signals,
         },
         "severity_counts": severity_counts(findings),
-        "scan_blockers": [],
+        "scan_blockers": scan_blockers,
         "repo_flags": repo_flags,
+        "tool_runs": [asdict(item) for item in tool_runs],
         "findings": [asdict(f) for f in findings],
     }
     return output
@@ -422,6 +587,8 @@ def main(argv: list[str] | None = None) -> int:
 
     data = scan(repo)
     out.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    out.with_name("distributed-side-effect-report.md").write_text(render_human_report(data) + "\n", encoding="utf-8")
+    out.with_name("distributed-side-effect-agent-brief.md").write_text(render_agent_brief(data), encoding="utf-8")
     print(f"Wrote {out}")
     return 0
 

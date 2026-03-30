@@ -94,13 +94,9 @@ run_step "cleanup scan" \
     --repo "$REPO_ROOT" \
     --out "$SUMMARY_PATH"
 
-run_step "summary validation" \
-  python3 "$SCRIPT_DIR/validate_cleanup_summary.py" \
-    --summary "$SUMMARY_PATH"
-
 if [[ -f "$SUMMARY_PATH" ]]; then
   pooh_runtime_inject_summary
-  run_step "dependency contract reinjection" \
+  run_step "summary validation" \
     python3 "$SCRIPT_DIR/validate_cleanup_summary.py" \
       --summary "$SUMMARY_PATH"
 fi

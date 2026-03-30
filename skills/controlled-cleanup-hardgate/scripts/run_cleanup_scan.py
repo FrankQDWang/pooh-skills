@@ -17,13 +17,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Iterator, Sequence
 
+RUNTIME_BIN_DIR = Path(__file__).resolve().parents[2] / ".pooh-runtime" / "bin"
+if str(RUNTIME_BIN_DIR) not in sys.path:
+    sys.path.insert(0, str(RUNTIME_BIN_DIR))
+
+from tool_runner import ToolRun, run_astgrep_pattern, run_locked_tool  # noqa: E402
+
 TEXT_EXTENSIONS = {
     ".py", ".pyi", ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs",
-    ".java", ".kt", ".kts", ".go", ".rb", ".php", ".cs", ".cpp",
-    ".cc", ".cxx", ".c", ".h", ".hpp", ".scala", ".rs", ".swift",
     ".md", ".mdx", ".rst", ".txt", ".adoc", ".yaml", ".yml", ".json",
-    ".toml", ".ini", ".cfg", ".properties", ".gradle", ".sh", ".bash",
-    ".zsh", ".sql",
+    ".toml", ".ini", ".cfg", ".sh", ".bash", ".zsh",
 }
 
 DOC_EXTENSIONS = {".md", ".mdx", ".rst", ".txt", ".adoc"}
@@ -46,11 +49,6 @@ MANIFESTS = {
     "setup.py": "python",
     "poetry.lock": "python",
     "Pipfile": "python",
-    "pom.xml": "java",
-    "build.gradle": "java",
-    "build.gradle.kts": "java",
-    "go.mod": "go",
-    "Cargo.toml": "rust",
     "mkdocs.yml": "docs",
     "docusaurus.config.js": "docs",
     "docusaurus.config.ts": "docs",
@@ -62,13 +60,9 @@ MANIFESTS = {
 LANGUAGE_BY_EXT = {
     ".py": "Python", ".pyi": "Python", ".js": "JavaScript", ".jsx": "JavaScript",
     ".ts": "TypeScript", ".tsx": "TypeScript", ".mjs": "JavaScript", ".cjs": "JavaScript",
-    ".java": "Java", ".kt": "Kotlin", ".kts": "Kotlin", ".go": "Go", ".rb": "Ruby",
-    ".php": "PHP", ".cs": "C#", ".cpp": "C/C++", ".cc": "C/C++", ".cxx": "C/C++",
-    ".c": "C/C++", ".h": "C/C++", ".hpp": "C/C++", ".scala": "Scala", ".rs": "Rust",
-    ".swift": "Swift", ".md": "Markdown", ".mdx": "Markdown", ".rst": "RST", ".adoc": "AsciiDoc",
+    ".md": "Markdown", ".mdx": "Markdown", ".rst": "RST", ".adoc": "AsciiDoc",
     ".yaml": "YAML", ".yml": "YAML", ".json": "JSON", ".toml": "TOML",
-    ".ini": "Config", ".cfg": "Config", ".properties": "Config", ".gradle": "Gradle",
-    ".sh": "Shell", ".bash": "Shell", ".zsh": "Shell", ".sql": "SQL",
+    ".ini": "Config", ".cfg": "Config", ".sh": "Shell", ".bash": "Shell", ".zsh": "Shell",
 }
 
 NON_SOURCE_LANGUAGES = {
@@ -129,8 +123,7 @@ REMOVAL_TARGET_PATTERNS = [
 ]
 
 TEST_HINTS = [
-    "pytest.ini", "tox.ini", "noxfile.py", "jest.config.js", "vitest.config.ts", "go.mod",
-    "pom.xml", "build.gradle", "build.gradle.kts", ".github/workflows",
+    "pytest.ini", "tox.ini", "noxfile.py", "jest.config.js", "vitest.config.ts", ".github/workflows",
 ]
 
 CI_HINTS = [
@@ -263,15 +256,11 @@ def infer_repo_profile(repo: Path) -> tuple[list[str], list[str], list[str], lis
 
     recommended_tools = set()
     if any(m.endswith(("package.json", "tsconfig.json")) for m in manifests):
-        recommended_tools.update(["tsc", "eslint", "knip", "jscodeshift/ast-grep"])
+        recommended_tools.update(["tsc", "eslint", "knip", "ast-grep"])
     if any(m.endswith(("pyproject.toml", "requirements.txt", "setup.py", "Pipfile")) for m in manifests):
-        recommended_tools.update(["ruff", "mypy/pyright", "vulture", "LibCST"])
-    if any(m.endswith(("pom.xml", "build.gradle", "build.gradle.kts")) for m in manifests):
-        recommended_tools.update(["OpenRewrite", "Error Prone", "SpotBugs", "JaCoCo"])
-    if any(m.endswith("go.mod") for m in manifests):
-        recommended_tools.update(["golangci-lint", "Staticcheck", "go test -coverprofile"])
+        recommended_tools.update(["ruff", "basedpyright", "tach"])
     if docs_roots or any("docusaurus" in m or m.endswith("mkdocs.yml") for m in manifests):
-        recommended_tools.update(["markdownlint", "link-checker", "Vale"])
+        recommended_tools.update(["lychee", "vale", "built-in-link-check"])
 
     tool_hints.update(recommended_tools)
     return (
@@ -530,6 +519,210 @@ def detect_evidence_gaps(repo: Path, manifests: list[str]) -> list[Finding]:
     return findings
 
 
+def build_tool_runs(repo: Path, manifests: list[str], docs_roots: list[str], languages: list[str]) -> list[ToolRun]:
+    tool_runs: list[ToolRun] = []
+    language_set = set(languages)
+
+    if "Python" in language_set:
+        for tool, args in (
+            ("ruff", ["check", "--output-format", "json", str(repo)]),
+            ("basedpyright", ["--outputjson", "-p", str(repo)]),
+        ):
+            run, _ = run_locked_tool(tool, args, repo, allow_exit_codes={0, 1})
+            tool_runs.append(run)
+
+    if {"TypeScript", "JavaScript"} & language_set:
+        tsconfig = repo / "tsconfig.json"
+        if tsconfig.exists():
+            tsc_run, _ = run_locked_tool("tsc", ["--noEmit", "--pretty", "false", "-p", str(tsconfig)], repo, allow_exit_codes={0, 1})
+            tool_runs.append(tsc_run)
+        eslint_run, _ = run_locked_tool(
+            "typescript-eslint-stack",
+            ["--format", "json", "--ext", ".js,.jsx,.ts,.tsx", str(repo)],
+            repo,
+            allow_exit_codes={0, 1},
+        )
+        tool_runs.append(eslint_run)
+        if any(item.endswith("package.json") for item in manifests):
+            knip_run, _ = run_locked_tool("knip", ["--reporter", "json", "--no-progress", "--directory", str(repo)], repo, allow_exit_codes={0, 1})
+            tool_runs.append(knip_run)
+        ast_lang = "typescript" if "TypeScript" in language_set else "javascript"
+        ast_run, _ = run_astgrep_pattern("import($MODULE)", ast_lang, repo, [str(repo)])
+        tool_runs.append(ast_run)
+
+    doc_targets = [str(repo / root) for root in docs_roots if root] or [str(repo / "README.md")]
+    lychee_run, _ = run_locked_tool("lychee", ["--format", "json", *doc_targets], repo, allow_exit_codes={0, 1})
+    tool_runs.append(lychee_run)
+    vale_run, _ = run_locked_tool("vale", ["--output=JSON", "--no-global", *doc_targets], repo, allow_exit_codes={0, 1})
+    tool_runs.append(vale_run)
+    return tool_runs
+
+
+def inject_tool_findings(findings: list[Finding], tool_runs: list[ToolRun]) -> list[Finding]:
+    out = list(findings)
+    for run in tool_runs:
+        if run.status == "failed":
+            out.append(Finding(
+                category="evidence-gap",
+                severity="medium",
+                confidence="high",
+                path=".",
+                line=1,
+                language=None,
+                summary=f"{run.tool} did not complete cleanly, so cleanup confidence is reduced until the locked tool run is fixed.",
+                cue=None,
+                replacement=None,
+                removal_target=None,
+                evidence=[run.summary, *run.details[:2]],
+            ))
+        elif run.status == "issues":
+            category = "cleanup-opportunity"
+            severity = "medium"
+            if run.tool == "ast-grep":
+                category = "dynamic-entrypoint-risk"
+                severity = "high"
+            elif run.tool == "lychee":
+                category = "stale-doc-reference"
+                severity = "high"
+            out.append(Finding(
+                category=category,
+                severity=severity,
+                confidence="medium",
+                path=".",
+                line=1,
+                language=None,
+                summary=f"{run.tool} reported machine-detected cleanup evidence that should be reviewed alongside the heuristic scan.",
+                cue=None,
+                replacement=None,
+                removal_target=None,
+                evidence=[run.summary, *run.details[:3]],
+            ))
+    return dedupe_findings(out)
+
+
+def severity_counts(findings: list[Finding]) -> dict[str, int]:
+    counter = Counter(f.severity for f in findings)
+    return {
+        "critical": int(counter.get("critical", 0)),
+        "high": int(counter.get("high", 0)),
+        "medium": int(counter.get("medium", 0)),
+        "low": int(counter.get("low", 0)),
+    }
+
+
+def infer_verdict(findings: list[Finding]) -> tuple[str, str]:
+    sev = severity_counts(findings)
+    if sev["critical"] > 0 or sev["high"] >= 2:
+        return (
+            "cleanup-first",
+            "The repository still contains high-signal cleanup blockers or stale references that should be resolved before calling removal work safe.",
+        )
+    if sev["high"] == 1 or sev["medium"] > 0:
+        return (
+            "watch",
+            "The repository shows cleanup debt and validation gaps, but not enough evidence for a top-level removal blocker.",
+        )
+    if findings:
+        return (
+            "sound",
+            "The repository shows only low-signal cleanup noise after locked validation.",
+        )
+    return (
+        "sound",
+        "No cleanup blockers or stale-surface signals were detected by the locked audit stack.",
+    )
+
+
+def render_human_report(summary: dict[str, object]) -> str:
+    findings = summary["findings"]
+    tool_runs = summary.get("tool_runs", [])
+    severity = summary.get("severity_counts", {})
+    repo_profile = summary.get("repo_profile", {})
+    counts = summary.get("counts", {})
+    lines = [
+        "# Controlled Cleanup Report",
+        "",
+        "## 1. Executive summary",
+        f"- overall_verdict: `{summary.get('overall_verdict')}`",
+        f"- summary_line: {summary.get('summary_line')}",
+        f"- languages: {', '.join(repo_profile.get('languages', [])) or 'none'}",
+        f"- manifests: {', '.join(repo_profile.get('manifests', [])) or 'none'}",
+        f"- dependency_status: `{summary.get('dependency_status')}`",
+        f"- total_findings: {counts.get('total', 0)}",
+        f"- severity_counts: critical={severity.get('critical', 0)} high={severity.get('high', 0)} medium={severity.get('medium', 0)} low={severity.get('low', 0)}",
+        "",
+        "## 2. Locked tool runs",
+        "",
+    ]
+    if not tool_runs:
+        lines.append("- No locked tool runs were recorded.")
+    else:
+        for item in tool_runs:
+            lines.extend([
+                f"### {item['tool']}",
+                f"- status: `{item['status']}`",
+                f"- summary: {item['summary']}",
+                *(f"- detail: {detail}" for detail in item.get("details", [])[:3]),
+                "",
+            ])
+
+    lines.extend(["## 3. Highest-signal cleanup findings", ""])
+    if not findings:
+        lines.append("- No cleanup findings were detected.")
+    else:
+        for finding in findings[:8]:
+            lines.extend([
+                f"### {finding['category']} :: {finding['path']}",
+                f"- severity: `{finding['severity']}`",
+                f"- confidence: `{finding['confidence']}`",
+                f"- summary: {finding['summary']}",
+                *(f"- evidence: {item}" for item in finding.get("evidence", [])[:3]),
+                "",
+            ])
+
+    lines.extend([
+        "## 4. Handoff guidance",
+        "- Treat this as cleanup readiness evidence, not permission to delete automatically.",
+        "- Resolve stale docs, expired markers, and validation gaps before scheduling removals.",
+        "- Re-run the locked audit stack after manual changes to confirm the surface actually shrank.",
+        "",
+    ])
+    return "\n".join(lines)
+
+
+def render_agent_brief(summary: dict[str, object]) -> str:
+    findings = summary["findings"]
+    lines = [
+        "# Controlled Cleanup Handoff Brief",
+        "",
+        "## Context",
+        f"- overall_verdict: `{summary.get('overall_verdict')}`",
+        f"- dependency_status: `{summary.get('dependency_status')}`",
+        f"- summary_line: {summary.get('summary_line')}",
+        "",
+        "## Ordered next moves",
+        "1. Fix blocked or failing validation tools before trusting any removal recommendation.",
+        "2. Update stale docs and machine-readable deprecation metadata before planning deletions.",
+        "3. Review dynamic-entrypoint and compatibility-shim findings manually before approving cleanup work.",
+        "",
+        "## Findings",
+        "",
+    ]
+    if not findings:
+        lines.append("- No cleanup findings were detected by the locked stack.")
+    else:
+        for finding in findings[:8]:
+            lines.extend([
+                f"### {finding['category']} :: {finding['path']}",
+                f"- severity: {finding['severity']}",
+                f"- confidence: {finding['confidence']}",
+                f"- summary: {finding['summary']}",
+                f"- handoff_notes: {('; '.join(finding.get('evidence', [])[:2])) or 'none'}",
+                "",
+            ])
+    return "\n".join(lines) + "\n"
+
+
 def main(argv: Sequence[str]) -> int:
     args = parse_args(argv)
     repo = Path(args.repo).resolve()
@@ -549,31 +742,42 @@ def main(argv: Sequence[str]) -> int:
         findings.extend(scan_file(repo, path, text))
 
     findings.extend(detect_evidence_gaps(repo, manifests))
-    findings = dedupe_findings(findings)
+    tool_runs = build_tool_runs(repo, manifests, docs_roots, languages)
+    findings = inject_tool_findings(findings, tool_runs)
 
     counts = Counter(f.category for f in findings)
+    sev = severity_counts(findings)
+    verdict, summary_line = infer_verdict(findings)
     summary = {
         "repo_root": repo.as_posix(),
         "generated_at": dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "overall_verdict": verdict,
+        "summary_line": summary_line,
         "repo_profile": {
             "languages": languages,
             "manifests": manifests,
             "docs_roots": docs_roots,
             "tool_hints": tool_hints,
         },
+        "severity_counts": sev,
         "counts": {
             "total": len(findings),
             "by_category": dict(sorted(counts.items())),
         },
+        "tool_runs": [item.to_dict() for item in tool_runs],
         "findings": [f.to_dict() for f in findings],
         "notes": [
-            "This scanner is heuristic. High-confidence deletion decisions still need validation and, for risky paths, rollout thinking.",
+            "This scanner combines heuristics with locked-tool executions. High-confidence deletion decisions still need rollout thinking.",
             f"today={iso_today()}",
         ],
     }
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(summary, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    report_path = out_path.with_name("controlled-cleanup-report.md")
+    agent_brief_path = out_path.with_name("controlled-cleanup-agent-brief.md")
+    report_path.write_text(render_human_report(summary) + "\n", encoding="utf-8")
+    agent_brief_path.write_text(render_agent_brief(summary), encoding="utf-8")
     return 0
 
 

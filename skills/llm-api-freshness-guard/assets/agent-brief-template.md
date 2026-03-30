@@ -1,7 +1,7 @@
 # LLM API Freshness Agent Brief
 
 ## Execution mode
-- `report-only` | `propose-fix` | `apply-low-risk-fix`
+- `report-only`
 
 ## Scope summary
 - Providers:
@@ -54,3 +54,4 @@
 - Do not change runtime semantics unless the finding requires it.
 - Preserve behavior when replacing deprecated syntax with current syntax.
 - If a wrapper and provider disagree, fix the code only after the source of truth is clear.
+- Treat this brief as handoff guidance, not as permission for automatic fixes.

@@ -30,17 +30,6 @@ Make cleanup machine-readable enough that tooling can tell:
  */
 ```
 
-### Java
-```java
-@Deprecated // replace-with: createOrderV2, remove-after: 2026-06-30
-```
-
-### Go
-```go
-// DEPRECATED: use CreateOrderV2
-// REMOVE-AFTER: 2026-06-30
-```
-
 ### Markdown / docs
 ```md
 > Deprecated. Replace with `/api/v2/orders`.

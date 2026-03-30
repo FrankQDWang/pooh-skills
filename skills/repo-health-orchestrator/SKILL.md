@@ -62,6 +62,7 @@ Read only what is needed.
 - `references/synthesis-policy.md`
 - `references/verdict-policy.md`
 - `scripts/aggregate_repo_health.py`
+- `scripts/bootstrap_shared_toolchain.py`
 - `scripts/control_plane_state.py`
 - `scripts/render_control_plane.py`
 - `scripts/repo_health_catalog.py`
@@ -157,13 +158,32 @@ python3 scripts/render_control_plane.py \
   --state /path/to/repo/.repo-harness/repo-health-control-plane.json
 ```
 
-### 2) Spawn child audits
+### 2) Bootstrap the shared toolchain first
+
+Before spawning any child subagents, bootstrap the union of all child `tools[]` and `runtime_features[]`.
+
+Use:
+
+```bash
+python3 scripts/bootstrap_shared_toolchain.py \
+  --repo /path/to/repo \
+  --out-json /path/to/repo/.repo-harness/repo-health-shared-bootstrap.json
+```
+
+If this shared bootstrap returns blocked failures:
+
+- do not pretend the child domains are missing
+- mark the affected domains `blocked`
+- surface the failed tool or runtime feature in the control plane
+- only spawn child subagents that still have a runnable tool/runtime surface
+
+### 3) Spawn child audits
 
 Launch the seven child subagents in parallel.
 
 Immediately mark the overall stage as `spawning`, then mark each child worker as `running`, and redraw the control plane.
 
-### 3) Track progress live
+### 4) Track progress live
 
 While the child audits are running, keep the terminal control plane current.
 
@@ -204,7 +224,7 @@ Use the current run's real information only:
 - do not mark a worker complete before its artifact exists
 - do not mark a worker blocked unless the child verdict or severities justify it
 
-### 4) Collect and validate child artifacts
+### 5) Collect and validate child artifacts
 
 After the subagents finish, check the seven expected summary paths.
 
@@ -228,7 +248,7 @@ python3 scripts/render_control_plane.py \
   --state /path/to/repo/.repo-harness/repo-health-control-plane.json
 ```
 
-### 5) Aggregate and validate the machine rollup
+### 6) Aggregate and validate the machine rollup
 
 Use the deterministic helper scripts:
 
@@ -246,7 +266,7 @@ python3 scripts/validate_repo_health_summary.py \
 Before the aggregate runs, move the overall stage to `aggregating` and redraw.
 This machine summary remains the single source of truth for `overall_health`, `coverage_status`, coverage classification, and blocked/missing/invalid distinctions.
 
-### 6) Synthesize richer evidence and final outputs
+### 7) Synthesize richer evidence and final outputs
 
 After the machine summary validates, synthesize cross-domain evidence and overwrite the final human-facing outputs:
 
