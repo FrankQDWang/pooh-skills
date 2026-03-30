@@ -10,7 +10,7 @@ Usage:
   ./scripts/install.sh
   ./scripts/install.sh --check
 
-This script manages the repo-local Codex plugin bundle at:
+This script manages the generated single-entry Codex plugin bundle at:
   plugins/pooh-skills/
 
 For a user-facing home-local Codex install, use:
@@ -33,7 +33,7 @@ case "${1:-}" in
     python3 "$SCRIPT_DIR/check_repo_plugin.py" \
       --repo "$REPO_ROOT" \
       --json-out "$REPO_ROOT/.repo-harness/repo-plugin-check.json"
-    printf '%s\n' "Repo-local Codex plugin bundle is ready at $REPO_ROOT/plugins/pooh-skills"
+    printf '%s\n' "Single-entry Codex plugin bundle is ready at $REPO_ROOT/plugins/pooh-skills"
     printf '%s\n' "To install it for one user, run: bash $REPO_ROOT/scripts/install_home_local_plugin.sh"
     ;;
   *)

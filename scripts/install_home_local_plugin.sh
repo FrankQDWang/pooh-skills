@@ -13,7 +13,7 @@ Usage:
   ./scripts/install_home_local_plugin.sh --skip-legacy-cleanup
 
 This script:
-  1. syncs the repo-local plugin bundle
+  1. syncs the single-entry plugin bundle
   2. validates the bundle and public plugin docs
   3. installs ~/plugins/pooh-skills into a home-local Codex marketplace
   4. removes legacy ~/.codex/skills copies for this fleet by default

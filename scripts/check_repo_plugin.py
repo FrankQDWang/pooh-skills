@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the repo-local Codex plugin bundle and public plugin docs."""
+"""Validate the single-entry Codex plugin bundle and public plugin docs."""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from typing import Iterable
 sys.dont_write_bytecode = True
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+PUBLIC_PLUGIN_SKILLS = {"repo-health-orchestrator"}
 
 SKIP_DIR_NAMES = {
     "__pycache__",
@@ -55,7 +56,7 @@ class CheckError:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Validate the repo-local Codex plugin bundle.")
+    parser = argparse.ArgumentParser(description="Validate the single-entry Codex plugin bundle.")
     parser.add_argument("--repo", default=".", help="Repository root.")
     parser.add_argument("--json-out", default=None, help="Optional JSON output path.")
     return parser.parse_args()
@@ -95,10 +96,23 @@ def iter_files(root: Path) -> Iterable[Path]:
 
 def bundle_skill_names(skills_dir: Path) -> set[str]:
     names: set[str] = set()
+    if not skills_dir.exists():
+        return names
     for child in sorted(skills_dir.iterdir()):
         if child.is_dir() and (child / "SKILL.md").exists():
             names.add(child.name)
     return names
+
+
+def subtree_hashes(root: Path, include_children: set[str]) -> dict[str, str]:
+    files: dict[str, str] = {}
+    for child_name in sorted(include_children):
+        child = root / child_name
+        if not child.exists():
+            continue
+        for path in iter_files(child):
+            files[str(path.relative_to(root))] = sha256(path)
+    return files
 
 
 def validate_manifest(plugin_manifest: Path, errors: list[CheckError]) -> None:
@@ -167,67 +181,79 @@ def validate_manifest(plugin_manifest: Path, errors: list[CheckError]) -> None:
         errors.append(CheckError(str(plugin_manifest), "Every starter prompt must point users to `$repo-health-orchestrator`."))
 
 
-def validate_marketplace(marketplace_path: Path, errors: list[CheckError]) -> None:
-    if not marketplace_path.exists():
-        errors.append(CheckError(str(marketplace_path), "Missing repo-local marketplace.json."))
-        return
-    try:
-        marketplace = read_json(marketplace_path)
-    except Exception as exc:
-        errors.append(CheckError(str(marketplace_path), f"marketplace.json must be valid JSON: {exc}"))
-        return
-
-    plugins = marketplace.get("plugins")
-    if not isinstance(plugins, list):
-        errors.append(CheckError(str(marketplace_path), "`plugins` must be an array."))
-        return
-
-    entry = next((item for item in plugins if isinstance(item, dict) and item.get("name") == "pooh-skills"), None)
-    if entry is None:
-        errors.append(CheckError(str(marketplace_path), "marketplace.json must contain a `pooh-skills` plugin entry."))
-        return
-
-    source = entry.get("source") or {}
-    policy = entry.get("policy") or {}
-    if source.get("source") != "local" or source.get("path") != "./plugins/pooh-skills":
-        errors.append(CheckError(str(marketplace_path), "pooh-skills marketplace entry must point to `./plugins/pooh-skills`."))
-    if policy.get("installation") != "AVAILABLE":
-        errors.append(CheckError(str(marketplace_path), "marketplace policy.installation must be `AVAILABLE`."))
-    if policy.get("authentication") != "ON_INSTALL":
-        errors.append(CheckError(str(marketplace_path), "marketplace policy.authentication must be `ON_INSTALL`."))
-    if entry.get("category") != "Productivity":
-        errors.append(CheckError(str(marketplace_path), "marketplace category must be `Productivity`."))
+def validate_no_repo_marketplace(marketplace_path: Path, errors: list[CheckError]) -> None:
+    if marketplace_path.exists():
+        errors.append(CheckError(str(marketplace_path), "Repo-local marketplace.json must not exist in the single-entry home-local model."))
 
 
-def validate_bundle(source_skills_dir: Path, plugin_skills_dir: Path, errors: list[CheckError]) -> None:
+def validate_bundle(
+    source_skills_dir: Path,
+    plugin_skills_dir: Path,
+    internal_skills_dir: Path,
+    errors: list[CheckError],
+) -> None:
     if not source_skills_dir.is_dir():
         errors.append(CheckError(str(source_skills_dir), "Missing source skills directory."))
         return
     if not plugin_skills_dir.is_dir():
-        errors.append(CheckError(str(plugin_skills_dir), "Missing plugin bundle skills directory."))
+        errors.append(CheckError(str(plugin_skills_dir), "Missing public plugin bundle skills directory."))
+        return
+    if not internal_skills_dir.is_dir():
+        errors.append(CheckError(str(internal_skills_dir), "Missing internal plugin bundle skills directory."))
         return
 
     source_skill_names = bundle_skill_names(source_skills_dir)
-    plugin_skill_names = bundle_skill_names(plugin_skills_dir)
-    if source_skill_names != plugin_skill_names:
+    public_skill_names = bundle_skill_names(plugin_skills_dir)
+    if public_skill_names != PUBLIC_PLUGIN_SKILLS:
         errors.append(
             CheckError(
                 str(plugin_skills_dir),
-                f"Plugin skill set drifted. source={sorted(source_skill_names)} bundle={sorted(plugin_skill_names)}",
+                f"Public plugin skill set must be exactly {sorted(PUBLIC_PLUGIN_SKILLS)}; found {sorted(public_skill_names)}",
             )
         )
-    if not (plugin_skills_dir / ".pooh-runtime").is_dir():
-        errors.append(CheckError(str(plugin_skills_dir / ".pooh-runtime"), "Plugin bundle must include `.pooh-runtime`."))
+    expected_internal_names = source_skill_names - PUBLIC_PLUGIN_SKILLS
+    internal_skill_names = bundle_skill_names(internal_skills_dir)
+    if internal_skill_names != expected_internal_names:
+        errors.append(
+            CheckError(
+                str(internal_skills_dir),
+                f"Internal plugin skill set drifted. expected={sorted(expected_internal_names)} bundle={sorted(internal_skill_names)}",
+            )
+        )
+    if not (internal_skills_dir / ".pooh-runtime").is_dir():
+        errors.append(CheckError(str(internal_skills_dir / ".pooh-runtime"), "Internal plugin bundle must include `.pooh-runtime`."))
 
-    source_files = {
-        str(path.relative_to(source_skills_dir)): sha256(path)
-        for path in iter_files(source_skills_dir)
-    }
-    plugin_files = {
+    source_public_files = subtree_hashes(source_skills_dir, PUBLIC_PLUGIN_SKILLS)
+    plugin_public_files = {
         str(path.relative_to(plugin_skills_dir)): sha256(path)
         for path in iter_files(plugin_skills_dir)
     }
+    source_internal_files = subtree_hashes(source_skills_dir, expected_internal_names | {".pooh-runtime"})
+    plugin_internal_files = {
+        str(path.relative_to(internal_skills_dir)): sha256(path)
+        for path in iter_files(internal_skills_dir)
+    }
 
+    compare_file_maps(source_public_files, plugin_public_files, plugin_skills_dir, errors, "Public bundle")
+    compare_file_maps(source_internal_files, plugin_internal_files, internal_skills_dir, errors, "Internal bundle")
+
+    for path in sorted(plugin_skills_dir.rglob("__pycache__")):
+        errors.append(CheckError(str(path), "Public plugin bundle must not contain `__pycache__` directories."))
+    for path in sorted(plugin_skills_dir.rglob("*.pyc")):
+        errors.append(CheckError(str(path), "Public plugin bundle must not contain `.pyc` files."))
+    for path in sorted(internal_skills_dir.rglob("__pycache__")):
+        errors.append(CheckError(str(path), "Internal plugin bundle must not contain `__pycache__` directories."))
+    for path in sorted(internal_skills_dir.rglob("*.pyc")):
+        errors.append(CheckError(str(path), "Internal plugin bundle must not contain `.pyc` files."))
+
+
+def compare_file_maps(
+    source_files: dict[str, str],
+    plugin_files: dict[str, str],
+    target_root: Path,
+    errors: list[CheckError],
+    label: str,
+) -> None:
     missing_from_bundle = sorted(set(source_files) - set(plugin_files))
     extra_in_bundle = sorted(set(plugin_files) - set(source_files))
     mismatched = sorted(
@@ -237,16 +263,11 @@ def validate_bundle(source_skills_dir: Path, plugin_skills_dir: Path, errors: li
     )
 
     for relative in missing_from_bundle[:20]:
-        errors.append(CheckError(str(plugin_skills_dir / relative), f"Bundle is missing source file `{relative}`."))
+        errors.append(CheckError(str(target_root / relative), f"{label} is missing source file `{relative}`."))
     for relative in extra_in_bundle[:20]:
-        errors.append(CheckError(str(plugin_skills_dir / relative), f"Bundle has stale extra file `{relative}`."))
+        errors.append(CheckError(str(target_root / relative), f"{label} has stale extra file `{relative}`."))
     for relative in mismatched[:20]:
-        errors.append(CheckError(str(plugin_skills_dir / relative), f"Bundle file `{relative}` is out of sync with source."))
-
-    for path in sorted(plugin_skills_dir.rglob("__pycache__")):
-        errors.append(CheckError(str(path), "Plugin bundle must not contain `__pycache__` directories."))
-    for path in sorted(plugin_skills_dir.rglob("*.pyc")):
-        errors.append(CheckError(str(path), "Plugin bundle must not contain `.pyc` files."))
+        errors.append(CheckError(str(target_root / relative), f"{label} file `{relative}` is out of sync with source."))
 
 
 def public_doc_paths(repo_root: Path) -> Iterable[Path]:
@@ -256,7 +277,6 @@ def public_doc_paths(repo_root: Path) -> Iterable[Path]:
         for path in sorted(repo_root.glob("*.md"))
         if path.name != "README.md"
     )
-    candidates.append(repo_root / ".agents" / "plugins" / "marketplace.json")
     candidates.append(repo_root / "plugins" / "pooh-skills" / ".codex-plugin" / "plugin.json")
     return candidates
 
@@ -285,6 +305,12 @@ def validate_docs(repo_root: Path, errors: list[CheckError]) -> None:
         for pattern in REQUIRED_README_INSTALL_PATTERNS:
             if pattern not in readme_text:
                 errors.append(CheckError(str(readme_path), f"README must document `{pattern}`."))
+        for forbidden in (
+            "repo-local plugin",
+            "repo-local Codex plugin",
+        ):
+            if forbidden in readme_text:
+                errors.append(CheckError(str(readme_path), f"README must not describe legacy `{forbidden}` flow."))
 
 
 def main() -> int:
@@ -293,13 +319,14 @@ def main() -> int:
     plugin_root = repo / "plugins" / "pooh-skills"
     plugin_manifest = plugin_root / ".codex-plugin" / "plugin.json"
     plugin_skills_dir = plugin_root / "skills"
+    internal_skills_dir = plugin_root / "internal-skills"
     source_skills_dir = repo / "skills"
     marketplace_path = repo / ".agents" / "plugins" / "marketplace.json"
 
     errors: list[CheckError] = []
     validate_manifest(plugin_manifest, errors)
-    validate_marketplace(marketplace_path, errors)
-    validate_bundle(source_skills_dir, plugin_skills_dir, errors)
+    validate_no_repo_marketplace(marketplace_path, errors)
+    validate_bundle(source_skills_dir, plugin_skills_dir, internal_skills_dir, errors)
     validate_docs(repo, errors)
 
     payload = {
@@ -317,7 +344,7 @@ def main() -> int:
             print(f"{error.path}: {error.message}", file=sys.stderr)
         return 1
 
-    print("Repo-local plugin bundle is valid.")
+    print("Single-entry plugin bundle is valid.")
     return 0
 
 

@@ -1,6 +1,6 @@
 # pooh-skills
 
-`pooh-skills` 现在以 repo-local Codex plugin 形态分发，而不是一组单独直装的 skill。
+`pooh-skills` 现在以 home-local Codex plugin 形态分发，对外只公开一个入口：`$repo-health-orchestrator`。
 
 This repository detects and reports only; it does not perform repository cleanup or automated fixes.
 It only targets Python / TypeScript repositories and their documentation surfaces.
@@ -8,14 +8,12 @@ It only targets Python / TypeScript repositories and their documentation surface
 ## 目录结构
 
 ```text
-.agents/
-  plugins/
-    marketplace.json
 plugins/
   pooh-skills/
     .codex-plugin/
       plugin.json
-    skills/          # generated plugin bundle, do not hand-edit
+    skills/          # generated public bundle; only repo-health-orchestrator is exposed
+    internal-skills/ # generated private worker bundle for orchestrator-only subagents
 skills/              # source of truth
   <skill-id>/
     SKILL.md
@@ -40,14 +38,19 @@ shared/
 - public plugin entrypoint: `$repo-health-orchestrator`
 - the 15 audit skills remain bundled for orchestrator use, but are no longer documented as the primary installation surface
 
-Codex discovers this repo-local plugin through [`.agents/plugins/marketplace.json`](.agents/plugins/marketplace.json), which points to [`plugins/pooh-skills/.codex-plugin/plugin.json`](plugins/pooh-skills/.codex-plugin/plugin.json).
+Codex discovers this plugin through the user's home-local marketplace at `~/.agents/plugins/marketplace.json`, which is created by [`scripts/install_home_local_plugin.sh`](scripts/install_home_local_plugin.sh) and points to [`plugins/pooh-skills/.codex-plugin/plugin.json`](plugins/pooh-skills/.codex-plugin/plugin.json) via `~/plugins/pooh-skills`.
 
 ## Build The Plugin Bundle
 
 Root [`skills/`](skills/) remains the only source of truth.
-The plugin bundle under [`plugins/pooh-skills/skills/`](plugins/pooh-skills/skills/) is generated and must stay byte-for-byte synchronized.
+The plugin bundle is split into:
 
-Sync the repo-local plugin bundle:
+- [`plugins/pooh-skills/skills/`](plugins/pooh-skills/skills/) for the one public orchestrator entrypoint
+- [`plugins/pooh-skills/internal-skills/`](plugins/pooh-skills/internal-skills/) for the 15 private worker audits and shared runtime
+
+Both generated directories must stay byte-for-byte synchronized with the root source tree.
+
+Sync the single-entry plugin bundle:
 
 ```bash
 python3 scripts/sync_plugin_bundle.py
@@ -70,7 +73,7 @@ bash scripts/install_home_local_plugin.sh
 
 That public installer does four things in one run:
 
-1. syncs `plugins/pooh-skills/skills/` from the root `skills/` source tree
+1. syncs the public and private plugin bundles from the root `skills/` source tree
 2. validates the plugin manifest, bundle sync, and public plugin docs
 3. installs `~/plugins/pooh-skills`
 4. updates `~/.agents/plugins/marketplace.json` and removes legacy `~/.codex/skills/<skill-id>` copies for this fleet
@@ -114,6 +117,7 @@ After install or uninstall, restart Codex or reopen the workspace if the plugin 
 
 - `repo-health-orchestrator` 是 Codex subagent-only：它会先清空并重建 repo-root `.repo-harness`，再启动 15 个 child audit subagents
 - `pooh-skills` plugin 对用户只公开一个主入口：`$repo-health-orchestrator`
+- plugin 内部的 15 个 worker audit 只存在于 `plugins/pooh-skills/internal-skills/`；它们是 orchestrator 的私有运行资源，不应该作为单独入口暴露给用户
 - `.repo-harness` 是纯输出目录，只保存当前 run 的 summary / report / brief / linkcheck / control-plane state 等工件，不放默认输入
 - `repo-health-orchestrator` 采用双层汇总：`repo-health-summary.json` 负责机器真相，`repo-health-evidence.json` 负责 cross-domain synthesis，最终 `repo-health-report.md` 与 `repo-health-agent-brief.md` 基于 evidence 生成
 - 所有 child skills 统一遵守 fail-fast bootstrap 合约：先 `preflight`，再尝试自动安装缺失依赖；安装失败时停止主审计，但仍写标准 blocked 工件
@@ -166,8 +170,8 @@ bash scripts/run_skill_fleet_harness.sh . .repo-harness
 
 - `fast` 用于本地快速元检查：frontmatter、description 规范、行数预算、链接存在性、visible eval surface
 - `strict` 会额外检查 runtime manifest shape、canonical shared refs、打包噪音、live-doc-sensitive skill 的引用入口，以及 orchestrator catalog completeness
-- `check_repo_plugin.py` 负责校验 plugin manifest、marketplace entry、bundle 同步状态，以及 README 中是否残留 legacy skill-install 语义
-- `install_home_local_plugin.sh` / `uninstall_home_local_plugin.sh` 是面对 clone 用户的公开安装面；`install.sh` 只负责 repo-local bundle 准备，不负责 home-local 注册
+- `check_repo_plugin.py` 负责校验 single-entry plugin manifest、public/private bundle 同步状态，以及 README 中是否残留 repo-local / legacy skill-install 语义
+- `install_home_local_plugin.sh` / `uninstall_home_local_plugin.sh` 是面对 clone 用户的公开安装面；`install.sh` 只负责生成与校验单入口 plugin bundle，不负责 home-local 注册
 - `shared/` 是仓库维护期的 canonical source，不是 skill 运行时依赖
 - plugin bundle 真正使用的是各自目录下的 `references/shared-*.md`；这些文件由 `shared/` materialize 出来，打包后仍然自包含可用
 - 换句话说，`shared/` 负责“单一真相源”，`skills/*/references/shared-*.md` 负责“安装后实际生效的本地副本”
@@ -175,7 +179,7 @@ bash scripts/run_skill_fleet_harness.sh . .repo-harness
 
 ## 兼容性声明
 
-- 这个仓库当前只维护 Codex plugin 兼容性
+- 这个仓库当前只维护 home-local Codex plugin 兼容性
 - 已存在的 `~/.claude/skills` 副本不再受支持，也不会由本仓库自动清理
 
 ## 扩展约定

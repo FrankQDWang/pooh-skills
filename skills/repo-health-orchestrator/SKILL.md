@@ -5,7 +5,9 @@ description: Coordinates installed pooh-skills audits through subagents, gathers
 
 # Repo Health Orchestrator
 
-This skill is the coordinator, not the specialist.
+This skill is the only public entrypoint in the `pooh-skills` plugin.
+
+It is the coordinator, not the specialist.
 
 Its job is to launch the focused audit skills as parallel subagents, collect their current-run artifacts, and turn them into one executive diagnosis instead of fifteen unrelated reports.
 
@@ -38,23 +40,29 @@ Write blocked repo-health artifacts when orchestrator preflight itself is blocke
 
 ## Expected child domains
 
-This skill coordinates these fifteen child audits:
+This skill coordinates these fifteen child audits.
 
-- `dependency-audit` → `.repo-harness/skills/dependency-audit/summary.json`
-- `signature-contract-hardgate` → `.repo-harness/skills/signature-contract-hardgate/summary.json`
-- `pythonic-ddd-drift-audit` → `.repo-harness/skills/pythonic-ddd-drift-audit/summary.json`
-- `module-shape-hardgate` → `.repo-harness/skills/module-shape-hardgate/summary.json`
-- `openapi-jsonschema-governance-audit` → `.repo-harness/skills/openapi-jsonschema-governance-audit/summary.json`
-- `distributed-side-effect-hardgate` → `.repo-harness/skills/distributed-side-effect-hardgate/summary.json`
-- `pydantic-ai-temporal-hardgate` → `.repo-harness/skills/pydantic-ai-temporal-hardgate/summary.json`
-- `error-governance-hardgate` → `.repo-harness/skills/error-governance-hardgate/summary.json`
-- `overdefensive-silent-failure-hardgate` → `.repo-harness/skills/overdefensive-silent-failure-hardgate/summary.json`
-- `ts-frontend-regression-audit` → `.repo-harness/skills/ts-frontend-regression-audit/summary.json`
-- `python-lint-format-audit` → `.repo-harness/skills/python-lint-format-audit/summary.json`
-- `ts-lint-format-audit` → `.repo-harness/skills/ts-lint-format-audit/summary.json`
-- `python-ts-security-posture-audit` → `.repo-harness/skills/python-ts-security-posture-audit/summary.json`
-- `llm-api-freshness-guard` → `.repo-harness/skills/llm-api-freshness-guard/summary.json`
-- `controlled-cleanup-hardgate` → `.repo-harness/skills/controlled-cleanup-hardgate/summary.json`
+They are private plugin resources, not public user-facing trigger names.
+For every child run, read the worker instructions from `../../internal-skills/<skill-id>/SKILL.md` relative to this skill directory.
+Do not ask the user to invoke those worker skills directly.
+
+The expected workers are:
+
+- `dependency-audit` from `../../internal-skills/dependency-audit/SKILL.md` → `.repo-harness/skills/dependency-audit/summary.json`
+- `signature-contract-hardgate` from `../../internal-skills/signature-contract-hardgate/SKILL.md` → `.repo-harness/skills/signature-contract-hardgate/summary.json`
+- `pythonic-ddd-drift-audit` from `../../internal-skills/pythonic-ddd-drift-audit/SKILL.md` → `.repo-harness/skills/pythonic-ddd-drift-audit/summary.json`
+- `module-shape-hardgate` from `../../internal-skills/module-shape-hardgate/SKILL.md` → `.repo-harness/skills/module-shape-hardgate/summary.json`
+- `openapi-jsonschema-governance-audit` from `../../internal-skills/openapi-jsonschema-governance-audit/SKILL.md` → `.repo-harness/skills/openapi-jsonschema-governance-audit/summary.json`
+- `distributed-side-effect-hardgate` from `../../internal-skills/distributed-side-effect-hardgate/SKILL.md` → `.repo-harness/skills/distributed-side-effect-hardgate/summary.json`
+- `pydantic-ai-temporal-hardgate` from `../../internal-skills/pydantic-ai-temporal-hardgate/SKILL.md` → `.repo-harness/skills/pydantic-ai-temporal-hardgate/summary.json`
+- `error-governance-hardgate` from `../../internal-skills/error-governance-hardgate/SKILL.md` → `.repo-harness/skills/error-governance-hardgate/summary.json`
+- `overdefensive-silent-failure-hardgate` from `../../internal-skills/overdefensive-silent-failure-hardgate/SKILL.md` → `.repo-harness/skills/overdefensive-silent-failure-hardgate/summary.json`
+- `ts-frontend-regression-audit` from `../../internal-skills/ts-frontend-regression-audit/SKILL.md` → `.repo-harness/skills/ts-frontend-regression-audit/summary.json`
+- `python-lint-format-audit` from `../../internal-skills/python-lint-format-audit/SKILL.md` → `.repo-harness/skills/python-lint-format-audit/summary.json`
+- `ts-lint-format-audit` from `../../internal-skills/ts-lint-format-audit/SKILL.md` → `.repo-harness/skills/ts-lint-format-audit/summary.json`
+- `python-ts-security-posture-audit` from `../../internal-skills/python-ts-security-posture-audit/SKILL.md` → `.repo-harness/skills/python-ts-security-posture-audit/summary.json`
+- `llm-api-freshness-guard` from `../../internal-skills/llm-api-freshness-guard/SKILL.md` → `.repo-harness/skills/llm-api-freshness-guard/summary.json`
+- `controlled-cleanup-hardgate` from `../../internal-skills/controlled-cleanup-hardgate/SKILL.md` → `.repo-harness/skills/controlled-cleanup-hardgate/summary.json`
 
 It is okay if a child domain concludes `not-applicable`.
 It is not okay to hide missing or invalid coverage.
@@ -109,13 +117,14 @@ Do not override those values.
 Each child subagent prompt must include:
 
 - repo root
+- exact internal worker `SKILL.md` path it must read before doing anything else
 - exact summary path it must write
 - its human report path and agent brief path when applicable
 - the rule that it owns only its domain and must not make cross-domain conclusions
 - the rule that best-effort artifacts are still required on uncertainty, using states like `triage`, `unverified`, `scan-blocked`, or `not-applicable`
 - the rule that dependency bootstrap failures are not ordinary uncertainty: they must emit blocked artifacts with machine-readable dependency failures
 
-Child subagents may call their own deterministic scripts or local wrappers if their skill defines them.
+Child subagents may call their own deterministic scripts or local wrappers if their private worker skill defines them.
 The orchestrator itself must not shell out to child wrappers.
 
 ## Terminal control plane contract

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Materialize the repo-local Codex plugin bundle from the root skill fleet."""
+"""Materialize the single-entry Codex plugin bundle from the root skill fleet."""
 
 from __future__ import annotations
 
@@ -13,7 +13,9 @@ sys.dont_write_bytecode = True
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SOURCE_SKILLS_DIR = REPO_ROOT / "skills"
 PLUGIN_ROOT = REPO_ROOT / "plugins" / "pooh-skills"
-TARGET_SKILLS_DIR = PLUGIN_ROOT / "skills"
+PUBLIC_SKILLS_DIR = PLUGIN_ROOT / "skills"
+INTERNAL_SKILLS_DIR = PLUGIN_ROOT / "internal-skills"
+PUBLIC_ENTRY_SKILL = "repo-health-orchestrator"
 
 SKIP_DIR_NAMES = {
     "__pycache__",
@@ -34,7 +36,7 @@ SKIP_FILE_SUFFIXES = {
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Sync root skills into the repo-local Codex plugin bundle.")
+    parser = argparse.ArgumentParser(description="Sync root skills into the single-entry Codex plugin bundle.")
     parser.add_argument("--repo", default=".", help="Repository root.")
     return parser.parse_args()
 
@@ -77,23 +79,42 @@ def copy_tree(source: Path, target: Path) -> None:
             shutil.copy2(child, destination)
 
 
+def copy_child(source_root: Path, target_root: Path, child_name: str) -> None:
+    source_child = source_root / child_name
+    if not source_child.exists():
+        raise SystemExit(f"Missing source subtree: {source_child}")
+    copy_tree(source_child, target_root / child_name)
+
+
 def main() -> int:
     args = parse_args()
     repo_root = Path(args.repo).resolve()
     source_skills_dir = repo_root / SOURCE_SKILLS_DIR.relative_to(REPO_ROOT)
     plugin_root = repo_root / PLUGIN_ROOT.relative_to(REPO_ROOT)
-    target_skills_dir = plugin_root / "skills"
+    public_skills_dir = plugin_root / PUBLIC_SKILLS_DIR.relative_to(PLUGIN_ROOT)
+    internal_skills_dir = plugin_root / INTERNAL_SKILLS_DIR.relative_to(PLUGIN_ROOT)
 
     if not source_skills_dir.is_dir():
         raise SystemExit(f"Missing source skills directory: {source_skills_dir}")
     if not plugin_root.is_dir():
         raise SystemExit(f"Missing plugin root: {plugin_root}")
 
-    if target_skills_dir.exists():
-        shutil.rmtree(target_skills_dir)
+    if public_skills_dir.exists():
+        shutil.rmtree(public_skills_dir)
+    if internal_skills_dir.exists():
+        shutil.rmtree(internal_skills_dir)
 
-    copy_tree(source_skills_dir, target_skills_dir)
-    print(f"Synchronized plugin bundle -> {target_skills_dir}")
+    copy_child(source_skills_dir, public_skills_dir, PUBLIC_ENTRY_SKILL)
+    copy_child(source_skills_dir, internal_skills_dir, ".pooh-runtime")
+    for child in sorted(source_skills_dir.iterdir()):
+        if should_skip(child):
+            continue
+        if child.name in {PUBLIC_ENTRY_SKILL, ".pooh-runtime"}:
+            continue
+        if child.is_dir() and (child / "SKILL.md").exists():
+            copy_child(source_skills_dir, internal_skills_dir, child.name)
+
+    print(f"Synchronized plugin bundle -> public={public_skills_dir} internal={internal_skills_dir}")
     return 0
 
 

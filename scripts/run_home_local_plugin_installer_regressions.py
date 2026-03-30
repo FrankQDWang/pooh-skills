@@ -41,6 +41,15 @@ def assert_pooh_entry(marketplace: dict) -> None:
     assert entry["category"] == "Productivity"
 
 
+def assert_single_entry_bundle(plugin_root: Path) -> None:
+    public_skills = sorted(path.parent.name for path in plugin_root.glob("skills/*/SKILL.md"))
+    internal_skills = sorted(path.parent.name for path in plugin_root.glob("internal-skills/*/SKILL.md"))
+    assert public_skills == ["repo-health-orchestrator"], f"public plugin skills drifted: {public_skills}"
+    assert len(internal_skills) == 15, f"internal worker count drifted: {internal_skills}"
+    assert "repo-health-orchestrator" not in internal_skills
+    assert (plugin_root / "internal-skills" / ".pooh-runtime").is_dir()
+
+
 def run_existing_marketplace_scenario(temp_root: Path) -> None:
     home_root = temp_root / "existing-home"
     home_root.mkdir(parents=True, exist_ok=True)
@@ -73,6 +82,7 @@ def run_existing_marketplace_scenario(temp_root: Path) -> None:
     installed_plugin = home_root / "plugins" / "pooh-skills"
     assert installed_plugin.is_symlink(), "installer should create a symlink by default"
     assert installed_plugin.resolve() == PLUGIN_TARGET.resolve()
+    assert_single_entry_bundle(installed_plugin.resolve())
 
     marketplace = read_json(marketplace_path)
     assert marketplace["interface"]["displayName"] == "Existing Local Plugins"
@@ -101,6 +111,7 @@ def run_fresh_home_scenario(temp_root: Path) -> None:
     marketplace_path = home_root / ".agents" / "plugins" / "marketplace.json"
     assert installed_plugin.is_symlink()
     assert installed_plugin.resolve() == PLUGIN_TARGET.resolve()
+    assert_single_entry_bundle(installed_plugin.resolve())
     marketplace = read_json(marketplace_path)
     assert marketplace["name"].endswith("-local")
     assert marketplace["interface"]["displayName"].endswith("Local Plugins")
