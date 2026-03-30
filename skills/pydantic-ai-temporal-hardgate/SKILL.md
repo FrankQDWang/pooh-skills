@@ -1,6 +1,6 @@
 ---
 name: pydantic-ai-temporal-hardgate
-description: "Audit Python repos that use Pydantic AI with Temporal for deterministic durable execution. Detect workflow non-determinism, sandbox escapes, raw agent I/O inside workflows, durable-agent drift, tool/deps contract errors, replay/test gaps, and fake safety theater. Produce a brutally direct human report plus a concise Codex remediation brief. Not for generic linting, repo normalization, or dead-code cleanup."
+description: "Audits Python repos that use Pydantic AI with Temporal for deterministic durable execution. Use for Temporal + pydantic-ai durable-path review、workflow determinism audit、replay/time-skipping verification、AI durable harness hardening. Produces a blunt human report, a concise agent brief, and a machine-readable summary."
 ---
 
 # Pydantic AI Temporal Hardgate Skill
@@ -48,6 +48,11 @@ description: "Audit Python repos that use Pydantic AI with Temporal for determin
 - 生成人类报告时，从 [`assets/human-report-template.md`](assets/human-report-template.md) 开始。
 - 生成 agent remediation brief 时，从 [`assets/agent-brief-template.md`](assets/agent-brief-template.md) 开始。
 - 生成 `.repo-harness/pydantic-temporal-summary.json` 时，必须遵守 [`assets/pydantic-temporal-summary.schema.json`](assets/pydantic-temporal-summary.schema.json)。
+- 共享输出契约读取 [`references/shared-output-contract.md`](references/shared-output-contract.md)。
+- 共享报告语气与双读者要求读取 [`references/shared-reporting-style.md`](references/shared-reporting-style.md)。
+- 共享 runtime truth 与 blocked artifact 语义读取 [`references/shared-runtime-artifact-contract.md`](references/shared-runtime-artifact-contract.md)。
+- live-doc 核验与 blocked 规则读取 [`references/live-doc-verification.md`](references/live-doc-verification.md)。
+- Context7 查询路径与提问模板读取 [`references/context7-query-playbook.md`](references/context7-query-playbook.md)。
 - 判断官方 durable path、hard fail、误报黑名单、证据优先级时，读取 [`references/pydantic-temporal-domain-standard.md`](references/pydantic-temporal-domain-standard.md)。
 - 判断 `broken` / `unsafe` / `fragile` / `sound` / `hardened` / `unverified` 的边界，以及总体 verdict 映射时，读取 [`references/evaluation-matrix.md`](references/evaluation-matrix.md)。
 - 当另一个 skill 或 CI 需要稳定 baseline 工件时，使用 `scripts/run_pydantic_temporal_scan.py`、`scripts/validate_pydantic_temporal_summary.py` 和 `scripts/run_all.sh`。
@@ -57,37 +62,10 @@ description: "Audit Python repos that use Pydantic AI with Temporal for determin
 
 ## 双读者输出
 
-你必须始终输出两份东西。
+始终输出人类报告和 agent brief，但共享 contract 不要在这里重复展开。
 
-### 1) 人类报告
-
-对象可能没有很多编程经验，但必须能看懂。解释结构固定为：
-
-- **是什么**
-- **为什么重要**
-- **建议做什么**
-- **给非程序员的人话解释**
-
-语气要求：
-
-- 尖锐、直接、少废话
-- 不做企业温和包装
-- 不安慰、不圆场
-- 只批系统，不骂人
-- 允许说“这不是 durable execution，这是一次性脚本侥幸跑通”
-- 不允许人身攻击、粗口堆砌、或脱离证据的狠话
-
-### 2) Agent brief
-
-读者是 `Codex` 或同级别 agent。
-
-要求：
-
-- 给 **决策建议**，不是教程
-- 告诉它该 **adopt / harden / replace / quarantine / remove / defer**
-- 告诉它应该改成什么形状，不要写长篇命令说明
-- 默认 agent 足够强，不需要基础概念教学
-- 输出字段稳定，方便后续自动消费
+- 共享语气、双读者规则、blocked artifact 语义，按 [`references/shared-reporting-style.md`](references/shared-reporting-style.md) 与 [`references/shared-output-contract.md`](references/shared-output-contract.md) 执行。
+- 这个 skill 额外要求：人类报告必须写出 **是什么 / 为什么重要 / 建议做什么 / 给非程序员的人话解释**，agent brief 只给决策与目标形状，不写长教程。
 
 ## Operating stance
 
@@ -106,16 +84,16 @@ description: "Audit Python repos that use Pydantic AI with Temporal for determin
 - Applicability 弱时，不要硬套标准，直接写 `not-applicable`
 - 合并重复发现，按根因叙事，不要做廉价流水账
 
-## 默认严格路线
+## Live Doc Verification
 
-如果 repo 属于 `Python + Temporal + pydantic-ai`，默认优先认可下面这条更严格、更现代、也更适合 AI 主导编码的路线：
+这个 skill 不把“我记得官方现在推荐什么”当成可靠事实。
 
-- `basedpyright` strict 作为主类型门
-- `Ruff` 作为基础代码面
-- `Semgrep` 作为反模式快门
-- Replay + time-skipping integration tests 作为 Temporal 真验证
-- `TestModel`、`FunctionModel`、`Agent.override`、`ALLOW_MODEL_REQUESTS=False` 作为 pydantic-ai 真验证
-- `TemporalAgent` + `PydanticAIPlugin` + 可选 `PydanticAIWorkflow` 作为官方 durable path
+如果 repo 属于 `Python + Temporal + pydantic-ai`，先做这四步：
+
+1. 从 repo 里提取版本线索、真实 runtime surface、以及 durable path 的实际接线位置。
+2. 用 [`references/context7-query-playbook.md`](references/context7-query-playbook.md) 里的方式，通过 `Context7` 查当前官方文档。
+3. 用 [`references/live-doc-verification.md`](references/live-doc-verification.md) 里的 blocked 规则决定这次 run 能不能给正式 verdict。
+4. 再拿本地静态证据去判断当前实现到底偏离官方 durable path 多远。
 
 不要把下面这些当成主答案：
 
@@ -124,7 +102,7 @@ description: "Audit Python repos that use Pydantic AI with Temporal for determin
 - “本地跑过一次”
 - “mypy 没报错应该差不多”
 
-这些都不是 durable harness。最多算心理安慰。
+这些都不是 live-doc-grounded durable harness。最多算局部信号。
 
 ## 必查 gate
 
@@ -218,25 +196,20 @@ bash scripts/run_all.sh /path/to/repo
 
 ## 人类报告契约
 
-使用 [`assets/human-report-template.md`](assets/human-report-template.md) 作为默认骨架。
+使用 [`assets/human-report-template.md`](assets/human-report-template.md) 与 [`references/shared-reporting-style.md`](references/shared-reporting-style.md) 作为默认骨架。
 
-人类报告必须做到：
+这个 skill 额外要求：
 
 - 开头给一句狠但准确的总判决
 - 单独写“这套仓库现在在教 AI 学什么坏习惯”
-- 每个关键问题都写：
-  - **是什么**
-  - **为什么重要**
-  - **建议做什么**
-  - **给非程序员的人话解释**
+- 每个关键问题都写 **是什么 / 为什么重要 / 建议做什么 / 给非程序员的人话解释**
 - 把已确认问题与无法从本地证明的问题分开
 - 行动顺序拆成 **现在就做 / 下一步 / 之后再做**
-- 术语翻译成人话
 - 允许尖锐，但不允许脱离证据
 
 ## Agent brief 契约
 
-使用 [`assets/agent-brief-template.md`](assets/agent-brief-template.md) 作为默认骨架。
+使用 [`assets/agent-brief-template.md`](assets/agent-brief-template.md) 与 [`references/shared-output-contract.md`](references/shared-output-contract.md) 作为默认骨架。
 
 每个 finding 至少给出这些字段：
 
@@ -271,13 +244,15 @@ bash scripts/run_all.sh /path/to/repo
 
 ## 输出契约
 
-当可以写文件时，始终创建：
+按 [`references/shared-output-contract.md`](references/shared-output-contract.md) 产出标准工件。
+
+这个 skill 的具体文件名固定为：
 
 - `.repo-harness/pydantic-temporal-human-report.md`
 - `.repo-harness/pydantic-temporal-agent-brief.md`
 - `.repo-harness/pydantic-temporal-summary.json`
 
-`summary.json` 必须符合 [`assets/pydantic-temporal-summary.schema.json`](assets/pydantic-temporal-summary.schema.json)。
+summary 必须符合 [`assets/pydantic-temporal-summary.schema.json`](assets/pydantic-temporal-summary.schema.json)。
 
 如果 repo 不适用，也照样创建三份产物，但内容应明确标记：
 

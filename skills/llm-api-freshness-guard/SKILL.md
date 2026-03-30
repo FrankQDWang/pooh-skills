@@ -1,6 +1,6 @@
 ---
 name: llm-api-freshness-guard
-description: "Audit code, repos, diffs, or snippets for stale LLM API usage and documentation drift across mainstream provider and wrapper surfaces. Use for LLM API 过时检查、老 SDK / 老 endpoint 核验、OpenAI Responses vs Chat Completions migration review, Anthropic Messages API migration, Gemini SDK drift, Azure OpenAI compatibility checks, model deprecation checks, tool/function-calling drift, streaming schema drift, structured-output drift, base_url/auth config drift, wrapper pass-through risk, and Context7-backed latest-doc verification. Produce a blunt human report, a handoff-oriented agent brief, and a machine-readable summary JSON."
+description: "Audits code, repos, diffs, or snippets for stale LLM API usage and documentation drift across mainstream provider and wrapper surfaces. Use for LLM API 过时检查、SDK/endpoint drift review、tool/streaming/structured-output drift、compat-layer drift、Context7-backed latest-doc verification. Produces a blunt human report, a concise agent brief, and a machine-readable summary."
 ---
 
 # LLM API Freshness Guard
@@ -56,6 +56,11 @@ If Context7 is unavailable:
 - For the human-readable report, start from [`assets/human-report-template.md`](assets/human-report-template.md).
 - For the agent remediation brief, start from [`assets/agent-brief-template.md`](assets/agent-brief-template.md).
 - For `.repo-harness/llm-api-freshness-summary.json`, conform to [`assets/llm-api-freshness-summary.schema.json`](assets/llm-api-freshness-summary.schema.json).
+- For shared output rules, read [`references/shared-output-contract.md`](references/shared-output-contract.md).
+- For shared reporting tone and reader expectations, read [`references/shared-reporting-style.md`](references/shared-reporting-style.md).
+- For shared runtime truth and blocked-artifact behavior, read [`references/shared-runtime-artifact-contract.md`](references/shared-runtime-artifact-contract.md).
+- For live-doc gating and blocked behavior, read [`references/live-doc-verification.md`](references/live-doc-verification.md).
+- For Context7 query composition, read [`references/context7-query-playbook.md`](references/context7-query-playbook.md).
 - For live documentation lookup policy, query design, failure mode, and evidence rules, read [`references/context7-usage-policy.md`](references/context7-usage-policy.md).
 - For provider detection, wrapper handling, and official-doc precedence, read [`references/provider-resolution-policy.md`](references/provider-resolution-policy.md).
 - For concrete Context7 query examples by provider and wrapper, read [`references/provider-query-cheatsheet.md`](references/provider-query-cheatsheet.md).
@@ -228,30 +233,20 @@ This skill ships with a built-in provider registry for mainstream provider and w
 
 ## Human report contract
 
-Always produce a human-readable report using `assets/human-report-template.md` as the starting shape.
+Use [`assets/human-report-template.md`](assets/human-report-template.md) with [`references/shared-reporting-style.md`](references/shared-reporting-style.md).
 
-The human report must:
+This skill adds these freshness-specific requirements:
 
 - clearly say whether this is a **verified**, **blocked**, or internal **local-scan-only** triage artifact
-- explain each major finding as:
-  - **是什么**
-  - **为什么重要**
-  - **建议做什么**
-- distinguish:
-  - hard stale usage
-  - migration candidates
-  - ambiguous cases
-  - docs-unverified cases
-- say which providers / wrappers were checked
-- say which docs were checked and which were not
+- explain each major finding as **是什么 / 为什么重要 / 建议做什么**
+- distinguish hard stale usage, migration candidates, ambiguous cases, and docs-unverified cases
+- say which providers / wrappers were checked and which docs were actually verified
 - prioritize actions into **现在 / 下一步 / 之后**
-- avoid vague "maybe old" hand-waving
-- stay readable for a non-specialist human even when the tone is blunt
-- tie every harsh statement to concrete code evidence or verified doc drift
+- avoid vague “maybe old” hand-waving; every claim must tie back to code evidence or verified doc drift
 
 ## Agent brief contract
 
-Always produce a concise remediation brief for a strong coding agent using `assets/agent-brief-template.md` as the starting shape.
+Use [`assets/agent-brief-template.md`](assets/agent-brief-template.md) with [`references/shared-output-contract.md`](references/shared-output-contract.md).
 
 For each finding, provide:
 
@@ -273,25 +268,16 @@ For each finding, provide:
 - `autofix_allowed`
 - `notes`
 
-Agent guidance should be:
-
-- short
-- unambiguous
-- handoff-oriented
-- free of long tutorials unless the repo is genuinely ambiguous
-- conservative about behavioral change
-
 ## Output contract
 
-When you can write files, create:
+Follow [`references/shared-output-contract.md`](references/shared-output-contract.md).
+For this skill, the concrete artifact names are:
 
 - `.repo-harness/llm-api-freshness-report.md`
 - `.repo-harness/llm-api-freshness-agent-brief.md`
 - `.repo-harness/llm-api-freshness-summary.json`
 
 The summary JSON must conform to [`assets/llm-api-freshness-summary.schema.json`](assets/llm-api-freshness-summary.schema.json).
-
-If the environment does not allow file creation, present the same structure directly in the response.
 
 ## Severity and confidence model
 
@@ -337,19 +323,6 @@ It does **not** pretend that current docs were verified.
 - Do not recommend destructive refactors as the first move.
 - Never leak API keys, org IDs, or proprietary prompts into Context7 queries.
 - Do not call a gateway or wrapper "OpenAI-compatible" in a way that hides real semantic differences.
-
-## What good looks like
-
-A strong result from this skill has all of the following:
-
-- the provider surface is correctly identified
-- wrapper and compatibility-layer semantics are not blurred together
-- Context7 verification is explicit and version-aware when possible
-- removed / deprecated / legacy / ambiguous states are kept separate
-- the human report is blunt but readable
-- the agent brief is handoff-oriented, not tutorial sludge
-- the summary JSON is useful to CI, orchestration, or later remediation
-- the result is honest about uncertainty instead of bluffing
 
 ## Final reminder
 

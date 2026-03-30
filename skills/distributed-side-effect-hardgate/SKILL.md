@@ -1,6 +1,6 @@
 ---
 name: distributed-side-effect-hardgate
-description: Audits Python / TypeScript repositories for distributed side-effect hazards: dual writes, pre-commit external effects, outbox gaps, idempotency gaps, unsafe retries, event contract drift, and message-handling reliability holes. Use for 分布式一致性巡检、event-driven reliability audit、outbox / idempotency review、dual-write diagnosis、message consumer hardening、AI 快速编码后的生产级错法排查. Produces a blunt human report, a concise agent handoff brief, and machine-readable findings.
+description: "Audits Python / TypeScript repositories for distributed side-effect hazards: dual writes, pre-commit external effects, outbox gaps, idempotency gaps, unsafe retries, event contract drift, and message-handling reliability holes. Use for 分布式一致性巡检、event-driven reliability audit、outbox / idempotency review、dual-write diagnosis、message consumer hardening、AI 快速编码后的生产级错法排查. Produces a blunt human report, a concise agent handoff brief, and machine-readable findings."
 ---
 # Distributed Side-Effect Hardgate
 
@@ -47,6 +47,9 @@ Read only what is needed.
 - `assets/human-report-template.md` — default human report skeleton
 - `assets/agent-brief-template.md` — concise remediation brief for another coding agent
 - `assets/distributed-side-effect-summary.schema.json` — machine output contract
+- `references/shared-output-contract.md` — shared output contract
+- `references/shared-reporting-style.md` — shared reporting and reader rules
+- `references/shared-runtime-artifact-contract.md` — shared blocked-artifact and runtime truth rules
 - `references/principles.md` — operating principles and reliability baseline
 - `references/failure-modes.md` — high-signal anti-pattern catalog
 - `references/evals.md` — trigger and false-positive regression cases

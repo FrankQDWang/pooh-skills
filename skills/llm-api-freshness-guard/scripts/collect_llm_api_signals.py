@@ -192,6 +192,66 @@ def utc_now() -> str:
     return dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat()
 
 
+def blocked_dependency_failure() -> dict[str, object]:
+    return {
+        "name": "context7",
+        "kind": "mcp",
+        "required_for": "llm-api-freshness-guard",
+        "attempted_command": "Context7 live-doc verification",
+        "failure_reason": "Context7-backed live documentation evidence was not provided",
+        "blocked_by_security": False,
+        "blocked_by_permissions": False,
+        "blocked_by_network": False,
+    }
+
+
+def load_doc_evidence(path: Optional[str]) -> List[dict]:
+    if not path:
+        return []
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    if isinstance(payload, list):
+        entries = payload
+    elif isinstance(payload, dict):
+        entries = payload.get("doc_verification", [])
+    else:
+        raise ValueError("doc evidence must be a list or an object with doc_verification")
+
+    normalized: List[dict] = []
+    required = {
+        "provider",
+        "library",
+        "library_id",
+        "language",
+        "version_hint",
+        "queries",
+        "status",
+        "checked_at",
+        "source_ref",
+        "notes",
+    }
+    for idx, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            raise ValueError(f"doc_verification[{idx}] must be an object")
+        missing = required - set(entry)
+        if missing:
+            raise ValueError(f"doc_verification[{idx}] missing keys: {sorted(missing)}")
+        normalized.append(
+            {
+                "provider": str(entry["provider"]),
+                "library": str(entry["library"]),
+                "library_id": str(entry["library_id"]),
+                "language": str(entry["language"]),
+                "version_hint": str(entry["version_hint"]),
+                "queries": [str(item) for item in entry["queries"]],
+                "status": str(entry["status"]),
+                "checked_at": str(entry["checked_at"]),
+                "source_ref": str(entry["source_ref"]),
+                "notes": str(entry["notes"]),
+            }
+        )
+    return normalized
+
+
 def debug(msg: str) -> None:
     # Uncomment for debugging:
     # print(msg, file=sys.stderr)
@@ -654,11 +714,13 @@ def make_provider_ambiguous_finding(wrapper_scores: Counter, evidence: Sequence[
     }
 
 
-def build_priorities(providers: Sequence[str], wrappers: Sequence[str], ambiguity: bool) -> dict:
+def build_priorities(providers: Sequence[str], wrappers: Sequence[str], ambiguity: bool, official_verdict_available: bool) -> dict:
     now: List[str] = []
     nxt: List[str] = []
     later: List[str] = []
 
+    if not official_verdict_available:
+        now.append("Restore Context7-backed live documentation verification before trusting this audit result.")
     if ambiguity:
         now.append("Resolve the actual runtime provider surface before making any freshness claims; extend the provider registry first if the integration is outside the built-in set.")
     if providers:
@@ -689,6 +751,16 @@ def build_priorities(providers: Sequence[str], wrappers: Sequence[str], ambiguit
 def render_report(summary: dict, grouped_suspicions: Sequence[dict]) -> str:
     providers = ", ".join(summary["repo_profile"]["providers_detected"]) or "none"
     wrappers = ", ".join(summary["repo_profile"]["wrappers_detected"]) or "none"
+    mode = summary["mode"]
+    if mode == "verified":
+        verdict_line = "Official docs were verified for this run."
+        diagnosis = "This is an official freshness audit result backed by Context7-tracked live docs plus deterministic local signals."
+    elif mode == "blocked":
+        verdict_line = "The official audit flow is blocked because live-doc verification evidence is missing."
+        diagnosis = "This run may still contain local triage evidence, but it is not an official freshness verdict because Context7-backed live-doc verification is missing."
+    else:
+        verdict_line = "Only local triage evidence was collected."
+        diagnosis = "This is not a real freshness verdict yet. It is a deterministic local scan that found likely provider surfaces, wrappers, and suspicious patterns, but it did not check current docs. Treat it as triage, not truth."
     version_lines = []
     for key, values in summary["repo_profile"]["version_hints"].items():
         if values:
@@ -701,14 +773,14 @@ def render_report(summary: dict, grouped_suspicions: Sequence[dict]) -> str:
         "# LLM API Freshness Audit",
         "",
         "## Verdict",
-        "- Overall verdict: local signal scan completed; live freshness verdict not available yet.",
-        "- Verification mode: `local-scan-only`",
+        f"- Overall verdict: {verdict_line}",
+        f"- Verification mode: `{mode}`",
         f"- Providers in scope: {providers}",
         f"- Wrappers / gateways in scope: {wrappers}",
         "- Highest-risk surface: anything listed below under suspicious patterns still needs current-doc verification.",
         "",
         "## Executive diagnosis",
-        "This is not a real freshness verdict yet. It is a deterministic local scan that found likely provider surfaces, wrappers, and suspicious patterns, but it did not check current docs. Treat it as triage, not truth.",
+        diagnosis,
         "",
         "## 现在最该做的事",
     ]
@@ -762,7 +834,7 @@ def render_report(summary: dict, grouped_suspicions: Sequence[dict]) -> str:
         [
             "",
             "## Blockers and ambiguity",
-            "- Live docs were not verified in this run.",
+            f"- Live docs verification mode: `{mode}`.",
             "- Wrapper or gateway usage may hide the true provider semantics.",
             "- Local pattern matches can identify migration candidates, but they cannot prove current deprecation state.",
             "",
@@ -780,21 +852,20 @@ def render_report(summary: dict, grouped_suspicions: Sequence[dict]) -> str:
     for item in summary["priorities"]["later"]:
         lines.append(f"- {item}")
 
-    lines.extend(
-        [
-            "",
-            "## Skipped checks",
-            "- Context7-backed current-doc verification was not executed by this local wrapper.",
-            "- No provider-specific migration recommendation is final until the live docs are checked.",
-            "",
-        ]
-    )
+    lines.extend(["", "## Skipped checks"])
+    if mode != "verified":
+        lines.append("- Context7-backed current-doc verification is still missing for this run.")
+        lines.append("- No provider-specific migration recommendation is final until the live docs are checked.")
+    else:
+        lines.append("- No major live-doc verification gap is visible in the recorded doc evidence.")
+    lines.append("")
     return "\n".join(lines)
 
 
 def render_agent_brief(summary: dict, grouped_suspicions: Sequence[dict]) -> str:
     providers = summary["repo_profile"]["providers_detected"]
     wrappers = summary["repo_profile"]["wrappers_detected"]
+    mode = summary["mode"]
     lines = [
         "# LLM API Freshness Agent Brief",
         "",
@@ -806,7 +877,7 @@ def render_agent_brief(summary: dict, grouped_suspicions: Sequence[dict]) -> str
         f"- Wrappers / gateways: {', '.join(wrappers) or 'none'}",
         f"- Verification mode: {summary['mode']}",
         f"- Files scanned: {summary['repo_profile']['files_scanned']}",
-        "- Current docs checked: none",
+        f"- Current docs checked: {'yes' if summary['mode'] == 'verified' else 'no'}",
         "",
         "## Findings queue",
     ]
@@ -849,7 +920,7 @@ def render_agent_brief(summary: dict, grouped_suspicions: Sequence[dict]) -> str
             "## Output rules for the coding agent",
             "- Keep patches small and reversible first.",
             "- Do not rewrite unrelated provider code.",
-            "- Treat this local scan as triage only.",
+            f"- Treat this run as {'an official verified audit' if mode == 'verified' else 'blocked/triage evidence'} for change planning.",
             "- Convert suspicious patterns into real findings only after live-doc verification.",
             "",
         ]
@@ -857,34 +928,41 @@ def render_agent_brief(summary: dict, grouped_suspicions: Sequence[dict]) -> str
     return "\n".join(lines)
 
 
-def build_summary(root: Path, files_scanned: int, language_counts: Counter, provider_scores: Counter, wrapper_scores: Counter, version_hints: Dict[str, List[str]], model_hints: Dict[str, List[str]], base_url_hints: Dict[str, List[str]], evidence: List[dict], grouped_suspicions: Sequence[dict]) -> dict:
+def build_summary(root: Path, files_scanned: int, language_counts: Counter, provider_scores: Counter, wrapper_scores: Counter, version_hints: Dict[str, List[str]], model_hints: Dict[str, List[str]], base_url_hints: Dict[str, List[str]], evidence: List[dict], grouped_suspicions: Sequence[dict], doc_verification: Sequence[dict]) -> dict:
     detected_providers = select_detected(provider_scores, minimum_score=4)
     detected_wrappers = select_detected(wrapper_scores, minimum_score=4)
+    if not detected_providers and doc_verification:
+        detected_providers = sorted({entry["provider"] for entry in doc_verification if entry.get("provider")})
     provider_files = build_provider_file_map(evidence)
+    official_verdict_available = any(entry.get("status") == "verified" for entry in doc_verification)
 
     findings: List[dict] = []
     if not detected_providers:
         findings.append(make_provider_ambiguous_finding(wrapper_scores, evidence))
 
-    for provider in detected_providers:
-        findings.append(
-            make_docs_unverified_finding(
-                provider=provider,
-                files=provider_files.get(provider, []),
-                suspicions=grouped_suspicions,
-                version_hints=version_hints,
-                model_hints=model_hints,
+    if not official_verdict_available:
+        for provider in detected_providers:
+            findings.append(
+                make_docs_unverified_finding(
+                    provider=provider,
+                    files=provider_files.get(provider, []),
+                    suspicions=grouped_suspicions,
+                    version_hints=version_hints,
+                    model_hints=model_hints,
+                )
             )
-        )
 
     for group in grouped_suspicions:
         findings.append(make_local_suspicion_finding(group))
 
+    mode = "verified" if official_verdict_available else "blocked"
+    dependency_status = "ready" if official_verdict_available else "blocked"
+    dependency_failures = [] if official_verdict_available else [blocked_dependency_failure()]
     summary = {
         "skill": "llm-api-freshness-guard",
         "version": "1.0.0",
         "generated_at": utc_now(),
-        "mode": "local-scan-only",
+        "mode": mode,
         "repo_profile": {
             "repo_root": str(root.resolve()),
             "files_scanned": files_scanned,
@@ -896,18 +974,28 @@ def build_summary(root: Path, files_scanned: int, language_counts: Counter, prov
             "model_hints": dict(sorted(model_hints.items())),
             "base_url_hints": dict(sorted(base_url_hints.items())),
         },
-        "doc_verification": [],
+        "doc_verification": list(doc_verification),
         "findings": findings,
         "priorities": build_priorities(
             providers=detected_providers,
             wrappers=detected_wrappers,
             ambiguity=not bool(detected_providers),
+            official_verdict_available=official_verdict_available,
         ),
-        "scan_limitations": [
-            "This summary was generated by the deterministic local signal collector only.",
-            "Current provider docs were not verified in this run.",
-            "Local suspicious patterns are migration candidates, not final freshness verdicts.",
-        ],
+        "scan_limitations": (
+            [
+                "Current provider docs were verified through supplied Context7-backed evidence.",
+                "Local suspicious patterns still need code-aware prioritization before any patching.",
+            ]
+            if official_verdict_available
+            else [
+                "This run is blocked because Context7-backed live-doc verification evidence was not provided.",
+                "Local suspicious patterns are triage clues, not final freshness verdicts.",
+            ]
+        ),
+        "dependency_status": dependency_status,
+        "bootstrap_actions": [],
+        "dependency_failures": dependency_failures,
     }
     return summary
 
@@ -922,7 +1010,7 @@ def write_text(path: Path, data: str) -> None:
     path.write_text(data, encoding="utf-8")
 
 
-def collect(root: Path, registry: ProviderRegistry) -> dict:
+def collect(root: Path, registry: ProviderRegistry, doc_verification: Sequence[dict]) -> dict:
     provider_scores: Counter = Counter()
     wrapper_scores: Counter = Counter()
     version_hints: Dict[str, List[str]] = {}
@@ -973,6 +1061,7 @@ def collect(root: Path, registry: ProviderRegistry) -> dict:
         base_url_hints=base_url_hints,
         evidence=evidence,
         grouped_suspicions=grouped_suspicions,
+        doc_verification=doc_verification,
     )
     signals = {
         "generated_at": utc_now(),
@@ -999,8 +1088,9 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Collect local LLM API signals for freshness audits.")
     parser.add_argument("repo", help="Path to the repository or directory to scan.")
     parser.add_argument("--provider-registry", help="Optional path to a provider registry JSON override.")
+    parser.add_argument("--doc-evidence-json", help="JSON file containing Context7-backed doc_verification evidence.")
     parser.add_argument("--json-out", help="Write the raw signals JSON to this path.")
-    parser.add_argument("--summary-out", help="Write the local-scan-only summary JSON to this path.")
+    parser.add_argument("--summary-out", help="Write the freshness summary JSON to this path.")
     parser.add_argument("--report-out", help="Write a baseline human report to this path.")
     parser.add_argument("--agent-brief-out", help="Write a baseline agent brief to this path.")
     parser.add_argument("--stdout", choices=["signals", "summary"], default="signals", help="What to print to stdout when no output path is given.")
@@ -1023,8 +1113,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     except RuntimeError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
+    try:
+        doc_verification = load_doc_evidence(args.doc_evidence_json)
+    except Exception as exc:
+        print(f"error: could not load doc evidence: {exc}", file=sys.stderr)
+        return 2
 
-    result = collect(root, registry)
+    result = collect(root, registry, doc_verification)
 
     if args.json_out:
         write_json(Path(args.json_out), result["signals"])

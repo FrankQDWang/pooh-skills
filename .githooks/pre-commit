@@ -3,3 +3,7 @@ set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel)"
 "$repo_root/.githooks/_main_only_guard.sh"
+python3 "$repo_root/scripts/check_skill_fleet.py" \
+  --repo "$repo_root" \
+  --mode fast \
+  --json-out "$repo_root/.repo-harness/skill-fleet-fastcheck.json"

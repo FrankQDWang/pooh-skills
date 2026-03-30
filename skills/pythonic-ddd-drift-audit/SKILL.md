@@ -48,6 +48,9 @@ Read only what you need.
 - `assets/human-report-template.md`
 - `assets/agent-brief-template.md`
 - `assets/pythonic-ddd-drift-summary.schema.json`
+- `references/shared-output-contract.md`
+- `references/shared-reporting-style.md`
+- `references/shared-runtime-artifact-contract.md`
 - `references/pythonic-principles.md`
 - `references/detection-policy.md`
 - `references/evals.md`

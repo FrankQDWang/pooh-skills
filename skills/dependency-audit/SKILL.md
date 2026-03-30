@@ -1,6 +1,6 @@
 ---
 name: dependency-audit
-description: "Audit Python / TypeScript repositories and workspaces for dependency direction, boundary leaks, cycles, and dead-code signals with Tach, Dependency Cruiser, and Knip. Use for 仓库依赖巡检、架构边界审计、repo audit、workspace diagnosis、cleanup planning. Produce a sharp, plain-language human report plus a concise remediation brief for Codex."
+description: "Audits Python / TypeScript repositories and workspaces for dependency direction, boundary leaks, cycles, and dead-code signals with Tach, Dependency Cruiser, and Knip. Use for 仓库依赖巡检、架构边界审计、repo audit、workspace diagnosis、cleanup planning. Produces a sharp human report, a concise agent brief, and a machine-readable summary."
 ---
 
 # Dependency Audit Skill
@@ -31,6 +31,9 @@ Your job is to **detect, explain, prioritize, and recommend**.
 - When producing the human report, start from [`assets/human-report-template.md`](assets/human-report-template.md).
 - When producing the agent remediation brief, start from [`assets/agent-brief-template.md`](assets/agent-brief-template.md).
 - When producing `.repo-harness/repo-audit-summary.json`, it must conform to [`assets/repo-audit-summary.schema.json`](assets/repo-audit-summary.schema.json).
+- For shared output rules, read [`references/shared-output-contract.md`](references/shared-output-contract.md).
+- For shared reporting tone and reader expectations, read [`references/shared-reporting-style.md`](references/shared-reporting-style.md).
+- For shared runtime truth and blocked-artifact behavior, read [`references/shared-runtime-artifact-contract.md`](references/shared-runtime-artifact-contract.md).
 - When you need guidance on tool interpretation, repair patterns, false-positive handling, or reporting tone, read [`references/tooling-policy.md`](references/tooling-policy.md).
 - When another skill or CI needs a deterministic baseline, use `scripts/run_dependency_audit_scan.py`, `scripts/validate_repo_audit_summary.py`, and `scripts/run_all.sh`.
 
@@ -40,10 +43,7 @@ Use some or all of these tools depending on the repo:
 - **Dependency Cruiser** for JS/TS dependency rules, cycles, forbidden imports, dependency graph governance, and gradual rollout via baseline/ignore-known style workflows
 - **Knip** for unused files, unused dependencies, unused exports/types, and optional low-risk cleanup opportunities
 
-The output has **two readers**:
-
-1. **Human reader**: can be non-technical, but still wants a blunt, decision-ready diagnosis. Explain each problem as **是什么 / 为什么重要 / 下一步做什么**.
-2. **Coding agent**: Codex or a similar coding agent. Give **decision-level repair guidance**, not long tutorials. Assume the agent can handle execution details.
+The deliverable always serves **two readers**. Follow the shared reporting/output references, then add dependency-specific interpretation and rollout advice on top.
 
 ## Operating stance
 
@@ -218,24 +218,16 @@ Do **not** recommend “fail CI on everything immediately” for a large legacy 
 
 ## Human report contract
 
-Always produce a human-readable report. Use `assets/human-report-template.md` as the starting shape.
+Use [`assets/human-report-template.md`](assets/human-report-template.md) together with [`references/shared-reporting-style.md`](references/shared-reporting-style.md).
 
-The human report must:
+For this skill, add these repo-structure specifics:
 
-- avoid unexplained jargon
-- explain every major finding with:
-  - **是什么**
-  - **为什么重要**
-  - **建议做什么**
-- state which tools were used and why
-- separate certain findings from provisional / low-confidence findings
+- explain every major finding as **是什么 / 为什么重要 / 建议做什么**
+- state which tools were used, which were skipped, and why
+- separate confirmed findings from provisional / low-confidence findings
 - prioritize actions into **现在 / 下一步 / 之后**
-- explain why “baseline first” or “scan first, fix later” may be the right decision
-- call out any skipped checks and the reason they were skipped
-- stay readable for a non-technical human even when the tone is sharp
-- use a direct, Linus-style tone when the design deserves criticism
+- explain why “baseline first” or “scan first, fix later” is the safer path when the repo is noisy
 - tie every harsh statement to concrete technical evidence, risk, or structural damage
-- avoid empty insults, vague venting, or emotional language without a next step
 
 For a non-programmer, translate common terms in plain language:
 
@@ -247,7 +239,7 @@ For a non-programmer, translate common terms in plain language:
 
 ## Agent brief contract
 
-Always produce a concise remediation brief for a strong coding agent. Use `assets/agent-brief-template.md` as the starting shape.
+Use [`assets/agent-brief-template.md`](assets/agent-brief-template.md) together with [`references/shared-output-contract.md`](references/shared-output-contract.md).
 
 For each finding, provide:
 
@@ -264,13 +256,6 @@ For each finding, provide:
 - `autofix_allowed`
 - `notes`
 
-Agent guidance should be:
-
-- short
-- unambiguous
-- handoff-oriented
-- free of long tutorials unless absolutely necessary
-
 Prefer recommendation shapes like:
 
 - create or refine a baseline
@@ -283,15 +268,14 @@ Prefer recommendation shapes like:
 
 ## Output contract
 
-When you can write files, create:
+Follow [`references/shared-output-contract.md`](references/shared-output-contract.md).
+For this skill, the concrete artifact names are:
 
 - `.repo-harness/repo-audit-report.md`
 - `.repo-harness/repo-audit-agent-brief.md`
 - `.repo-harness/repo-audit-summary.json`
 
-`.repo-harness/repo-audit-summary.json` must conform to [`assets/repo-audit-summary.schema.json`](assets/repo-audit-summary.schema.json).
-
-If the environment does not allow file creation, present the same structure directly in the response.
+The summary artifact must conform to [`assets/repo-audit-summary.schema.json`](assets/repo-audit-summary.schema.json).
 
 ## Severity and confidence model
 

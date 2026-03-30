@@ -17,6 +17,8 @@ skills/
     scripts/
 scripts/
   install.sh
+shared/
+  *.md
 ```
 
 ## 当前 skill
@@ -83,6 +85,44 @@ scripts/
 - 旧 skill 的 wrapper 现在会先走共享 `.pooh-runtime` 合约；缺依赖时不会再伪装成“保守 baseline 成功”
 - Python 边界工具的唯一标准是 `Tach`；仓库不引入 `import-linter`
 
+## Skill Authoring Contract
+
+新增或修改 skill 时，统一遵守以下仓库级约束：
+
+1. `SKILL.md` frontmatter 必须是合法 YAML，且只允许 `name` 与 `description`
+2. `description` 必须使用第三人称，且统一写成 `Audits ... Use for ... Produces ...` 或 `Coordinates ... Use for ... Produces ...`
+3. `SKILL.md` 正文必须保持精简，默认要求少于 `500` 行
+4. 每个 skill 都必须提供可见的 `references/evals.md`，至少覆盖 `Should trigger`、`Should not trigger`、`False positive / regression cases`
+5. `repo-health-orchestrator` 额外必须在 `references/evals.md` 中提供 `Failure scenarios`
+6. `SKILL.md` 的本地链接必须存在，且必须保持 skill 安装后自包含；不要从一个 skill 直接链接另一个 skill 或仓库根目录文件
+7. 跨 skill 复用的通用 contract 统一维护在仓库根目录 `shared/`，再同步到每个 skill 自己的 `references/shared-*.md`
+8. 容易过期的生态细节不要写死在 core workflow；应写成“先识别本仓库实际 surface，再去官方最新文档核验”
+
+## Live-Doc Verification
+
+- `llm-api-freshness-guard` 与 `pydantic-ai-temporal-hardgate` 现在默认要求 live-doc evidence
+- 这类 skill 的核心流程是：先从目标仓库提取版本与 surface 线索，再调用 Context7 MCP 检查官方当前文档
+- 没有 Context7-backed 文档证据时，wrapper 必须输出标准 blocked artifacts，而不是给出正式成功 verdict
+- live-doc evidence 通过 `--doc-evidence-json <path>` 注入 deterministic wrapper；summary schema 会记录 `checked_at` 与 `source_ref`
+
+## Harness
+
+仓库内置了用于防再犯的 fleet harness：
+
+```bash
+python3 scripts/check_skill_fleet.py --repo . --mode fast --json-out .repo-harness/skill-fleet-fastcheck.json
+python3 scripts/check_skill_fleet.py --repo . --mode strict --json-out .repo-harness/skill-fleet-strictcheck.json
+python3 scripts/sync_shared_skill_refs.py --check
+python3 scripts/sync_shared_skill_refs.py --write
+python3 scripts/run_repo_health_fixture_regressions.py
+bash scripts/run_skill_fleet_harness.sh . .repo-harness
+```
+
+- `fast` 用于本地快速元检查：frontmatter、description 规范、行数预算、链接存在性、visible eval surface
+- `strict` 会额外检查 shared refs 同步、live-doc-sensitive skill 的引用入口，以及 orchestrator failure fixtures
+- `shared/` 是 canonical source；每个 skill 下的 `references/shared-*.md` 是安装后仍可工作的本地副本
+- 修改 `shared/` 后，必须运行 `python3 scripts/sync_shared_skill_refs.py --write`
+
 ## 兼容性声明
 
 - 这个仓库当前只维护 Codex 兼容性
@@ -104,6 +144,8 @@ scripts/
 
 - 远端 GitHub ruleset 已禁止创建任何非 `main` 分支
 - 本仓库提供 `.githooks/`，用于在本地拒绝非 `main` 上的 commit / rebase / merge / push
+- `pre-commit` 会先跑 main-only guard，再跑 fleet fast check
+- `pre-push` 会先跑 main-only guard，再跑严格版 fleet harness
 - 当前 clone 应设置：`git config core.hooksPath .githooks`
 - `.githooks/` 是仓库内文件，但 `core.hooksPath` 是 clone 本地 Git 配置；新 clone 拉下来后需要重新执行一次
 

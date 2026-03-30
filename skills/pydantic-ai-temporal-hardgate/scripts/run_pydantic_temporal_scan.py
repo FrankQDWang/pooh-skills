@@ -116,6 +116,68 @@ class Finding:
     notes: str = ""
 
 
+def blocked_dependency_failure() -> dict[str, object]:
+    return {
+        "name": "context7",
+        "kind": "mcp",
+        "required_for": "pydantic-ai-temporal-hardgate",
+        "attempted_command": "Context7 live-doc verification",
+        "failure_reason": "Context7-backed live documentation evidence was not provided",
+        "blocked_by_security": False,
+        "blocked_by_permissions": False,
+        "blocked_by_network": False,
+    }
+
+
+def load_doc_evidence(path: str | None) -> list[dict[str, object]]:
+    if not path:
+        return []
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    if isinstance(payload, list):
+        entries = payload
+    elif isinstance(payload, dict):
+        entries = payload.get("doc_verification", [])
+    else:
+        raise ValueError("doc evidence must be a list or object with doc_verification")
+    required = {
+        "subject",
+        "library",
+        "library_id",
+        "version_hint",
+        "queries",
+        "status",
+        "checked_at",
+        "source_ref",
+        "notes",
+    }
+    normalized: list[dict[str, object]] = []
+    for idx, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            raise ValueError(f"doc_verification[{idx}] must be an object")
+        missing = required - set(entry)
+        if missing:
+            raise ValueError(f"doc_verification[{idx}] missing keys: {sorted(missing)}")
+        normalized.append(
+            {
+                "subject": str(entry["subject"]),
+                "library": str(entry["library"]),
+                "library_id": str(entry["library_id"]),
+                "version_hint": str(entry["version_hint"]),
+                "queries": [str(item) for item in entry["queries"]],
+                "status": str(entry["status"]),
+                "checked_at": str(entry["checked_at"]),
+                "source_ref": str(entry["source_ref"]),
+                "notes": str(entry["notes"]),
+            }
+        )
+    return normalized
+
+
+def live_doc_ready(entries: list[dict[str, object]]) -> bool:
+    verified_subjects = {str(entry["subject"]).lower() for entry in entries if entry.get("status") == "verified"}
+    return any("temporal" in subject for subject in verified_subjects) and any("pydantic" in subject for subject in verified_subjects)
+
+
 def iter_files(root: Path) -> list[Path]:
     files: list[Path] = []
     for current_root, dirs, filenames in os.walk(root):
@@ -558,6 +620,10 @@ def infer_verdict(applicable: bool, gates: list[GateState]) -> str:
 
 def render_human_report(summary: dict[str, object]) -> str:
     tool_runs = summary.get("tool_runs", [])
+    verified_doc_entries = [
+        entry for entry in summary.get("doc_verification", [])
+        if isinstance(entry, dict) and entry.get("status") == "verified"
+    ]
     if summary["overall_verdict"] == "not-applicable":
         return "\n".join([
             "# Pydantic AI + Temporal 审计报告",
@@ -586,6 +652,7 @@ def render_human_report(summary: dict[str, object]) -> str:
         "## 一句话判决",
         f"- **总体结论**：{summary['overall_verdict']}",
         "- **一句狠话**：Workflow 里顺手写 I/O，不叫快，叫把重放模型写废。",
+        f"- **live-doc 状态**：{'verified' if verified_doc_entries else 'blocked / missing'}",
         "",
         "## 这套仓库现在在教 AI 学什么坏习惯",
         "- 把 local green test 当成 durable execution 证据。",
@@ -658,6 +725,10 @@ def render_human_report(summary: dict[str, object]) -> str:
 
 
 def render_agent_brief(summary: dict[str, object]) -> str:
+    verified_doc_entries = [
+        entry for entry in summary.get("doc_verification", [])
+        if isinstance(entry, dict) and entry.get("status") == "verified"
+    ]
     lines = [
         "# Pydantic AI + Temporal Hardgate — Agent Brief",
         "",
@@ -666,6 +737,7 @@ def render_agent_brief(summary: dict[str, object]) -> str:
         f"- `workflow_surface`: {', '.join(summary['repo_profile']['workflow_surface']) or 'none'}",
         f"- `agent_surface`: {', '.join(summary['repo_profile']['agent_surface']) or 'none'}",
         f"- `overall_verdict`: {summary['overall_verdict']}",
+        f"- `live_doc_verification`: {'verified' if verified_doc_entries else 'blocked-or-missing'}",
         "",
         "## Tool runs",
         *(f"- {item['tool']}: {item['status']} ({item['summary']})" for item in summary.get('tool_runs', [])),
@@ -701,11 +773,18 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo", required=True)
     parser.add_argument("--out-dir", required=True)
+    parser.add_argument("--doc-evidence-json")
     args = parser.parse_args()
 
     repo = Path(args.repo).resolve()
     out_dir = Path(args.out_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        doc_verification = load_doc_evidence(args.doc_evidence_json)
+    except Exception as exc:
+        print(f"error: could not load doc evidence: {exc}", file=sys.stderr)
+        return 2
 
     files = iter_files(repo)
     collected = collect_signals(repo, files)
@@ -715,13 +794,23 @@ def main() -> int:
     gates = [build_gate_state(name, applicable, signals, repo_profile) for name in GATE_ORDER]
     tool_runs, _ = collect_tool_runs(repo, applicable)
     findings = build_findings(gates, signals, tool_runs) if applicable else []
+    dependency_status = "ready"
+    dependency_failures: list[dict[str, object]] = []
     overall_verdict = infer_verdict(applicable, gates)
+    if applicable and not live_doc_ready(doc_verification):
+        overall_verdict = "scan-blocked"
+        dependency_status = "blocked"
+        dependency_failures = [blocked_dependency_failure()]
 
     summary = {
         "repo_profile": repo_profile,
         "overall_verdict": overall_verdict,
+        "doc_verification": doc_verification,
         "gate_states": [asdict(item) for item in gates],
         "findings": [asdict(item) for item in findings],
+        "dependency_status": dependency_status,
+        "bootstrap_actions": [],
+        "dependency_failures": dependency_failures,
         "wrong_rules": [
             "Do not treat `asyncio.sleep()` as a universal workflow violation without looking at the actual Temporal usage.",
             "Do not confuse local CI files with remote merge enforcement.",

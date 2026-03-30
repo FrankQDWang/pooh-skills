@@ -7,21 +7,38 @@ source "$SCRIPT_DIR/../../.pooh-runtime/bin/runtime_wrapper.sh"
 print_usage() {
   cat <<'EOF'
 Usage:
-  bash scripts/run_all.sh [repo-root] [out-dir]
+  bash scripts/run_all.sh [--doc-evidence-json path] [repo-root] [out-dir]
 
 Examples:
   bash scripts/run_all.sh .
+  bash scripts/run_all.sh --doc-evidence-json .repo-harness/pydantic-temporal-doc-evidence.json .
   bash scripts/run_all.sh . .repo-harness
 EOF
 }
 
-if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
-  print_usage
-  exit 0
-fi
+DOC_EVIDENCE_JSON=""
+POSITIONAL=()
 
-REPO_ROOT="${1:-.}"
-OUT_DIR="${2:-$REPO_ROOT/.repo-harness}"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --doc-evidence-json)
+      [[ $# -ge 2 ]] || { printf '%s\n' "--doc-evidence-json requires a path" >&2; exit 2; }
+      DOC_EVIDENCE_JSON="$2"
+      shift 2
+      ;;
+    -h|--help)
+      print_usage
+      exit 0
+      ;;
+    *)
+      POSITIONAL+=("$1")
+      shift
+      ;;
+  esac
+done
+
+REPO_ROOT="${POSITIONAL[0]:-.}"
+OUT_DIR="${POSITIONAL[1]:-$REPO_ROOT/.repo-harness}"
 SUMMARY_PATH="$OUT_DIR/pydantic-temporal-summary.json"
 REPORT_PATH="$OUT_DIR/pydantic-temporal-human-report.md"
 AGENT_BRIEF_PATH="$OUT_DIR/pydantic-temporal-agent-brief.md"
@@ -49,9 +66,17 @@ fi
 
 pooh_runtime_update "running" "" "Running pydantic-ai-temporal hardgate scan."
 
-python3 "$SCRIPT_DIR/run_pydantic_temporal_scan.py" \
-  --repo "$REPO_ROOT" \
+RUN_ARGS=(
+  python3
+  "$SCRIPT_DIR/run_pydantic_temporal_scan.py"
+  --repo "$REPO_ROOT"
   --out-dir "$OUT_DIR"
+)
+if [[ -n "$DOC_EVIDENCE_JSON" ]]; then
+  RUN_ARGS+=(--doc-evidence-json "$DOC_EVIDENCE_JSON")
+fi
+
+"${RUN_ARGS[@]}"
 
 pooh_runtime_inject_summary
 

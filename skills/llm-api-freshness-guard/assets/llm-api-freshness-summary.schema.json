@@ -219,6 +219,8 @@
         "version_hint",
         "queries",
         "status",
+        "checked_at",
+        "source_ref",
         "notes"
       ],
       "properties": {
@@ -250,6 +252,12 @@
             "failed",
             "skipped"
           ]
+        },
+        "checked_at": {
+          "type": "string"
+        },
+        "source_ref": {
+          "type": "string"
         },
         "notes": {
           "type": "string"

@@ -11,6 +11,7 @@ from pathlib import Path
 REQUIRED_TOP = {
     "repo_profile",
     "overall_verdict",
+    "doc_verification",
     "gate_states",
     "findings",
     "dependency_status",
@@ -45,7 +46,19 @@ REQUIRED_FINDING = {
     "merge_gate",
     "autofix_allowed",
 }
+REQUIRED_DOC_ENTRY = {
+    "subject",
+    "library",
+    "library_id",
+    "version_hint",
+    "queries",
+    "status",
+    "checked_at",
+    "source_ref",
+    "notes",
+}
 VALID_DEPENDENCY_STATUS = {"ready", "auto-installed", "blocked"}
+VALID_DOC_STATUS = {"verified", "ambiguous", "failed", "skipped"}
 
 
 def fail(message: str) -> int:
@@ -96,6 +109,19 @@ def main() -> int:
         missing_gate = REQUIRED_GATE - set(gate)
         if missing_gate:
             return fail(f"gate_states[{idx}] missing keys: {sorted(missing_gate)}")
+
+    if not isinstance(data["doc_verification"], list):
+        return fail("doc_verification must be a list")
+    for idx, entry in enumerate(data["doc_verification"]):
+        if not isinstance(entry, dict):
+            return fail(f"doc_verification[{idx}] must be an object")
+        missing_doc = REQUIRED_DOC_ENTRY - set(entry)
+        if missing_doc:
+            return fail(f"doc_verification[{idx}] missing keys: {sorted(missing_doc)}")
+        if entry["status"] not in VALID_DOC_STATUS:
+            return fail(f"doc_verification[{idx}] has invalid status: {entry['status']}")
+        if not isinstance(entry["queries"], list):
+            return fail(f"doc_verification[{idx}].queries must be a list")
 
     if not isinstance(data["findings"], list):
         return fail("findings must be a list")

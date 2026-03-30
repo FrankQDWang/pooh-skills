@@ -58,6 +58,9 @@ Read only what is needed.
 - `assets/human-report-template.md`
 - `assets/agent-brief-template.md`
 - `assets/repo-health-summary.schema.json`
+- `references/shared-output-contract.md`
+- `references/shared-reporting-style.md`
+- `references/shared-runtime-artifact-contract.md`
 - `references/integration-matrix.md`
 - `references/synthesis-policy.md`
 - `references/verdict-policy.md`

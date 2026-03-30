@@ -5,6 +5,7 @@
   "required": [
     "repo_profile",
     "overall_verdict",
+    "doc_verification",
     "gate_states",
     "findings",
     "dependency_status",
@@ -59,11 +60,47 @@
       "type": "string",
       "enum": [
         "not-applicable",
+        "scan-blocked",
         "workflow-time-bomb",
         "paper-guardrails",
         "partially-contained",
         "durable-harness"
       ]
+    },
+    "doc_verification": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "subject",
+          "library",
+          "library_id",
+          "version_hint",
+          "queries",
+          "status",
+          "checked_at",
+          "source_ref",
+          "notes"
+        ],
+        "properties": {
+          "subject": { "type": "string" },
+          "library": { "type": "string" },
+          "library_id": { "type": "string" },
+          "version_hint": { "type": "string" },
+          "queries": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "status": {
+            "type": "string",
+            "enum": ["verified", "ambiguous", "failed", "skipped"]
+          },
+          "checked_at": { "type": "string" },
+          "source_ref": { "type": "string" },
+          "notes": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
     },
     "gate_states": {
       "type": "array",

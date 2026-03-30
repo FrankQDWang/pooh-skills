@@ -1,6 +1,6 @@
 ---
 name: signature-contract-hardgate
-description: "Audit Python / TypeScript repos for strict 'signature as contract' / 签名即契约 hard gates in AI-led coding. Detect whether compile-time checks, runtime schemas, error contracts, escape-hatch bans, architecture boundaries, contract tests, and merge protections are real or just theater. Produce a blunt human report plus a concise Codex remediation brief. Not for dead-code cleanup or generic repo normalization."
+description: "Audits Python / TypeScript repos for strict 'signature as contract' hard gates in AI-led coding. Use for 签名即契约审计、compile-time/runtime contract hardening、escape-hatch governance、merge-gate review. Produces a blunt human report, a concise agent brief, and a machine-readable summary."
 ---
 
 # Signature Contract Hardgate Skill
@@ -53,6 +53,9 @@ description: "Audit Python / TypeScript repos for strict 'signature as contract'
 - 生成人类报告时，从 [`assets/human-report-template.md`](assets/human-report-template.md) 开始。
 - 生成 agent remediation brief 时，从 [`assets/agent-brief-template.md`](assets/agent-brief-template.md) 开始。
 - 生成 `.repo-harness/contract-hardgate-summary.json` 时，必须遵守 [`assets/contract-hardgate-summary.schema.json`](assets/contract-hardgate-summary.schema.json)。
+- 共享输出契约读取 [`references/shared-output-contract.md`](references/shared-output-contract.md)。
+- 共享报告语气与双读者要求读取 [`references/shared-reporting-style.md`](references/shared-reporting-style.md)。
+- 共享 runtime truth 与 blocked artifact 语义读取 [`references/shared-runtime-artifact-contract.md`](references/shared-runtime-artifact-contract.md)。
 - 判断 `Python` / `TypeScript` / cross-language 的严格默认标准时，读取 [`references/strict-harness-standard.md`](references/strict-harness-standard.md)。
 - 判断 `missing` / `theater` / `partial` / `enforced` / `hardened` 的边界，以及总体 verdict 映射时，读取 [`references/evaluation-matrix.md`](references/evaluation-matrix.md)。
 - 当另一个 skill 或 CI 只需要稳定 baseline 工件时，使用 `scripts/run_contract_hardgate_scan.py`、`scripts/validate_contract_hardgate_summary.py` 和 `scripts/run_all.sh`。
@@ -61,38 +64,10 @@ description: "Audit Python / TypeScript repos for strict 'signature as contract'
 
 ## 双读者输出
 
-你必须始终输出两份东西。
+始终输出人类报告和 agent brief，但不要在 core skill 里重复共享 contract。
 
-### 1) 人类报告
-
-对象可能没有很多编程经验，但必须能看懂。解释结构固定为：
-
-- **是什么**
-- **为什么重要**
-- **建议做什么**
-
-语气要求：
-
-- 尖锐、直接、少废话
-- 不做企业温和包装
-- 不安慰、不圆场
-- **只批系统，不骂人**
-- 可以说“这不是契约，这是注释”
-- 不要进行人身羞辱、粗口攻击、阴阳怪气表演
-
-你要像一个对工程质量零耐心的严格 reviewer，而不是客服。
-
-### 2) Agent brief
-
-读者是 `Codex` 或同级别 agent。
-
-要求：
-
-- 给 **决策建议**，不是教程
-- 告诉它该 **采用 / 强化 / 隔离 / 删除 / 延后**
-- 告诉它应该改成什么形状，不需要把命令讲到手把手
-- 默认 agent 足够强，不需要长篇 command walkthrough
-- 用结构化字段表达，方便后续自动处理
+- 共享语气、双读者规则、blocked artifact 语义，按 [`references/shared-reporting-style.md`](references/shared-reporting-style.md) 与 [`references/shared-output-contract.md`](references/shared-output-contract.md) 执行。
+- 这个 skill 额外要求：人类报告必须把每个问题讲成 **是什么 / 为什么重要 / 建议做什么**，agent brief 只给决策与目标形状，不写长教程。
 
 ## 总目标
 
@@ -187,15 +162,15 @@ description: "Audit Python / TypeScript repos for strict 'signature as contract'
 
 ## 输出契约
 
-始终创建：
+按 [`references/shared-output-contract.md`](references/shared-output-contract.md) 产出标准工件。
+
+这个 skill 的具体文件名固定为：
 
 - `.repo-harness/contract-hardgate-human-report.md`
 - `.repo-harness/contract-hardgate-agent-brief.md`
 - `.repo-harness/contract-hardgate-summary.json`
 
-如果不能写文件，就把同样结构直接返回。
-
-其中 summary JSON 必须符合 [`assets/contract-hardgate-summary.schema.json`](assets/contract-hardgate-summary.schema.json)。
+summary JSON 必须符合 [`assets/contract-hardgate-summary.schema.json`](assets/contract-hardgate-summary.schema.json)。
 
 ## Fleet baseline mode
 
@@ -209,23 +184,14 @@ bash scripts/run_all.sh /path/to/repo
 
 ## 人类报告契约
 
-使用 [`assets/human-report-template.md`](assets/human-report-template.md) 作为默认骨架。
+使用 [`assets/human-report-template.md`](assets/human-report-template.md) 与 [`references/shared-reporting-style.md`](references/shared-reporting-style.md) 作为默认骨架。
 
-人类报告必须做到：
+这个 skill 额外要求：
 
 - 开头给一句狠但准确的总判决
-- 把术语翻译成人话
-- 每个关键问题都写：
-  - **是什么**
-  - **为什么重要**
-  - **建议做什么**
-- 单独写一节：
-  - **这套仓库现在在教 AI 学坏什么**
+- 单独写一节：**这套仓库现在在教 AI 学坏什么**
 - 把“确认的问题”和“无法从本地验证的问题”分开
-- 行动建议按：
-  - **立刻做**
-  - **本周做**
-  - **之后做**
+- 行动建议按 **立刻做 / 本周做 / 之后做**
 - 如果仓库存在“配置有了但门没上锁”，要直接点破，不要委婉
 
 允许的表达风格：
@@ -235,16 +201,9 @@ bash scripts/run_all.sh /path/to/repo
 - “类型系统看起来很严格，运行时入口却没验，风险还在原地。”
 - “你不是在约束 AI，你是在鼓励它走捷径。”
 
-不允许：
-
-- 人身攻击
-- 嘲讽作者智力
-- 脏话输出
-- 夸张到脱离证据
-
 ## Agent brief 契约
 
-使用 [`assets/agent-brief-template.md`](assets/agent-brief-template.md) 作为默认骨架。
+使用 [`assets/agent-brief-template.md`](assets/agent-brief-template.md) 与 [`references/shared-output-contract.md`](references/shared-output-contract.md) 作为默认骨架。
 
 每个 finding 至少给出这些字段：
 
@@ -289,16 +248,6 @@ bash scripts/run_all.sh /path/to/repo
 - `replace broad exceptions with explicit domain error channel at service boundary`
 - `quarantine legacy debt to named paths with owner and exit criteria`
 - `make contract-layer paths code-owner protected`
-
-Agent brief 风格要求：
-
-- 短
-- 硬
-- 没废话
-- 面向补丁
-- 面向决策
-- 不写“也许可以考虑”
-- 不写冗长教程
 
 ## 安全规则
 

@@ -109,11 +109,15 @@ def validate_doc_verification(entries: Any, errors: List[str]) -> None:
         path = f"doc_verification[{idx}]"
         if not expect_type(entry, dict, path, errors):
             continue
-        expect_keys(entry, ["provider", "library", "library_id", "language", "version_hint", "queries", "status", "notes"], path, errors)
+        expect_keys(entry, ["provider", "library", "library_id", "language", "version_hint", "queries", "status", "checked_at", "source_ref", "notes"], path, errors)
         if "status" in entry and entry["status"] not in ALLOWED_DOC_STATUSES:
             add_error(errors, f"{path}.status: invalid value {entry['status']!r}")
         if "queries" in entry:
             validate_string_list(entry["queries"], f"{path}.queries", errors)
+        if "checked_at" in entry and not isinstance(entry["checked_at"], str):
+            add_error(errors, f"{path}.checked_at: expected string")
+        if "source_ref" in entry and not isinstance(entry["source_ref"], str):
+            add_error(errors, f"{path}.source_ref: expected string")
 
 
 def validate_findings(entries: Any, errors: List[str]) -> None:

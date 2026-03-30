@@ -46,6 +46,9 @@ Read only what is needed.
 - `assets/human-report-template.md` - exact report shape for humans
 - `assets/agent-brief-template.md` - short remediation brief for another coding agent
 - `assets/cleanup-summary.schema.json` - JSON output contract
+- `references/shared-output-contract.md` - shared output contract
+- `references/shared-reporting-style.md` - shared reporting and reader rules
+- `references/shared-runtime-artifact-contract.md` - shared blocked-artifact and runtime truth rules
 - `references/playbook.md` - full cleanup playbook from scope to deletion to rollout
 - `references/failure-modes.md` - common cleanup mistakes and how to avoid them
 - `references/marker-policy.md` - recommended deprecation marker format

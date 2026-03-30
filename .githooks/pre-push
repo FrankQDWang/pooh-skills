@@ -14,3 +14,7 @@ while read -r local_ref _local_oid remote_ref _remote_oid; do
     exit 1
   fi
 done
+
+bash "$repo_root/scripts/run_skill_fleet_harness.sh" \
+  "$repo_root" \
+  "$repo_root/.repo-harness"
