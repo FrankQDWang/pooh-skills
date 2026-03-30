@@ -23,5 +23,6 @@ python3 "$SCRIPT_DIR/run_new_audit_fixture_regressions.py"
 python3 "$SCRIPT_DIR/run_repo_health_fixture_regressions.py"
 python3 "$SCRIPT_DIR/run_child_wrapper_smoke_matrix.py"
 python3 "$SCRIPT_DIR/run_control_plane_renderer_regressions.py"
+python3 "$SCRIPT_DIR/run_home_local_plugin_installer_regressions.py"
 
 echo "Skill fleet harness passed."

@@ -26,6 +26,9 @@ skills/              # source of truth
 scripts/
   sync_plugin_bundle.py
   check_repo_plugin.py
+  manage_home_local_plugin.py
+  install_home_local_plugin.sh
+  uninstall_home_local_plugin.sh
 shared/
   *.md  # authoring-time canonical shared refs; not installed as runtime deps
 ```
@@ -55,6 +58,38 @@ Validate the plugin manifest, marketplace entry, bundle sync status, and public 
 ```bash
 python3 scripts/check_repo_plugin.py --repo . --json-out .repo-harness/repo-plugin-check.json
 ```
+
+## Install For One User
+
+Other users no longer need to copy standalone skills into `~/.codex/skills`.
+After cloning this repository, install the plugin into one home-local Codex marketplace:
+
+```bash
+bash scripts/install_home_local_plugin.sh
+```
+
+That public installer does four things in one run:
+
+1. syncs `plugins/pooh-skills/skills/` from the root `skills/` source tree
+2. validates the plugin manifest, bundle sync, and public plugin docs
+3. installs `~/plugins/pooh-skills`
+4. updates `~/.agents/plugins/marketplace.json` and removes legacy `~/.codex/skills/<skill-id>` copies for this fleet
+
+Useful variants:
+
+```bash
+bash scripts/install_home_local_plugin.sh --home /custom/home
+bash scripts/install_home_local_plugin.sh --mode copy
+bash scripts/install_home_local_plugin.sh --skip-legacy-cleanup
+```
+
+To remove the home-local installation again:
+
+```bash
+bash scripts/uninstall_home_local_plugin.sh
+```
+
+After install or uninstall, restart Codex or reopen the workspace if the plugin list does not refresh immediately.
 
 ## Current Skill Fleet
 
@@ -125,12 +160,14 @@ python3 scripts/run_new_audit_fixture_regressions.py
 python3 scripts/run_repo_health_fixture_regressions.py
 python3 scripts/run_child_wrapper_smoke_matrix.py
 python3 scripts/run_control_plane_renderer_regressions.py
+python3 scripts/run_home_local_plugin_installer_regressions.py
 bash scripts/run_skill_fleet_harness.sh . .repo-harness
 ```
 
 - `fast` 用于本地快速元检查：frontmatter、description 规范、行数预算、链接存在性、visible eval surface
 - `strict` 会额外检查 runtime manifest shape、canonical shared refs、打包噪音、live-doc-sensitive skill 的引用入口，以及 orchestrator catalog completeness
 - `check_repo_plugin.py` 负责校验 plugin manifest、marketplace entry、bundle 同步状态，以及 README 中是否残留 legacy skill-install 语义
+- `install_home_local_plugin.sh` / `uninstall_home_local_plugin.sh` 是面对 clone 用户的公开安装面；`install.sh` 只负责 repo-local bundle 准备，不负责 home-local 注册
 - `shared/` 是仓库维护期的 canonical source，不是 skill 运行时依赖
 - plugin bundle 真正使用的是各自目录下的 `references/shared-*.md`；这些文件由 `shared/` materialize 出来，打包后仍然自包含可用
 - 换句话说，`shared/` 负责“单一真相源”，`skills/*/references/shared-*.md` 负责“安装后实际生效的本地副本”

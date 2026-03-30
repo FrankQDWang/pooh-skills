@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -32,10 +33,18 @@ SKIP_FILE_SUFFIXES = {
     ".pyc",
 }
 FORBIDDEN_PUBLIC_DOC_PATTERNS = (
-    "~/.codex/skills",
     "scripts/install.sh --all",
     "./scripts/install.sh",
     "--target codex",
+)
+REQUIRED_PUBLIC_INSTALL_FILES = (
+    "scripts/install_home_local_plugin.sh",
+    "scripts/uninstall_home_local_plugin.sh",
+    "scripts/manage_home_local_plugin.py",
+)
+REQUIRED_README_INSTALL_PATTERNS = (
+    "bash scripts/install_home_local_plugin.sh",
+    "bash scripts/uninstall_home_local_plugin.sh",
 )
 
 
@@ -261,6 +270,21 @@ def validate_docs(repo_root: Path, errors: list[CheckError]) -> None:
         for pattern in FORBIDDEN_PUBLIC_DOC_PATTERNS:
             if pattern in text:
                 errors.append(CheckError(str(path), f"Public plugin surface still contains legacy skill-install pattern `{pattern}`."))
+
+    for relative in REQUIRED_PUBLIC_INSTALL_FILES:
+        path = repo_root / relative
+        if not path.exists():
+            errors.append(CheckError(str(path), "Missing public home-local plugin install file."))
+            continue
+        if path.suffix == ".sh" and not os.access(path, os.X_OK):
+            errors.append(CheckError(str(path), "Public install shell scripts must be executable."))
+
+    readme_path = repo_root / "README.md"
+    if readme_path.exists():
+        readme_text = read_text(readme_path)
+        for pattern in REQUIRED_README_INSTALL_PATTERNS:
+            if pattern not in readme_text:
+                errors.append(CheckError(str(readme_path), f"README must document `{pattern}`."))
 
 
 def main() -> int:
