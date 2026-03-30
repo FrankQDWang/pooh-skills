@@ -18,7 +18,7 @@ skills/
 scripts/
   install.sh
 shared/
-  *.md
+  *.md  # authoring-time canonical shared refs; not installed as runtime deps
 ```
 
 ## 当前 skill
@@ -120,7 +120,10 @@ bash scripts/run_skill_fleet_harness.sh . .repo-harness
 
 - `fast` 用于本地快速元检查：frontmatter、description 规范、行数预算、链接存在性、visible eval surface
 - `strict` 会额外检查 shared refs 同步、live-doc-sensitive skill 的引用入口，以及 orchestrator failure fixtures
-- `shared/` 是 canonical source；每个 skill 下的 `references/shared-*.md` 是安装后仍可工作的本地副本
+- `shared/` 是仓库维护期的 canonical source，不是 skill 运行时依赖
+- `scripts/install.sh` 不会把根目录 `shared/` 安装到 `~/.codex/skills`
+- skill 真正使用的是各自目录下的 `references/shared-*.md`；这些文件由 `shared/` materialize 出来，安装后仍然自包含可用
+- 换句话说，`shared/` 负责“单一真相源”，`skills/*/references/shared-*.md` 负责“安装后实际生效的本地副本”
 - 修改 `shared/` 后，必须运行 `python3 scripts/sync_shared_skill_refs.py --write`
 
 ## 兼容性声明
