@@ -47,6 +47,9 @@ CREDENTIAL_ASSIGNMENT_RE = re.compile(
     """
 )
 CREDENTIAL_URL_RE = re.compile(r"(?i)\b(?:postgres|mysql|mongodb|redis|amqp|https?)://[^/\s:@]+:[^/\s@]{6,}@")
+ENV_SECRET_ASSIGNMENT_RE = re.compile(
+    r"(?i)\b(?:openai_api_key|anthropic_api_key|api_key|auth_token|access_token|client_secret|secret_key|password)\b\s*=\s*([^\s#]{8,})"
+)
 SENSITIVE_FILE_RE = re.compile(r"(?i)(^|/)(?:\.env(?:\.[^/]+)?|.*\.(?:pem|key|p12|pfx)|id_rsa|id_dsa)$")
 PLACEHOLDER_RE = re.compile(r"(?i)(changeme|example|sample|dummy|placeholder|test[-_]?only|notasecret|fake|your[_-]|<[^>]+>|\$\{[^}]+\})")
 IGNORE_PATTERNS = (".env", ".env.*", "*.pem", "*.key", "*.p12", "*.pfx", "id_rsa", "id_dsa")
@@ -153,6 +156,24 @@ def collect_worktree_findings(repo: Path) -> tuple[list[Finding], list[Finding],
                     )
                 )
                 break
+            else:
+                env_secret_match = ENV_SECRET_ASSIGNMENT_RE.search(line) if path.name.startswith(".env") else None
+                if env_secret_match:
+                    value = env_secret_match.group(1).strip()
+                    if value and not is_placeholder(value):
+                        secret_findings.append(
+                            Finding(
+                                id=f"secret-material-{len(secret_findings) + 1:02d}",
+                                category="secret-material",
+                                severity="high",
+                                confidence="medium",
+                                title="Secret-bearing environment assignment is stored directly in a dotenv file",
+                                path=relative_path,
+                                line=line_no,
+                                evidence_summary=f"`{relative_path}:{line_no}` assigns a secret-bearing env key to a literal value with redacted preview `{redact_preview(value)}`.",
+                                recommended_change_shape="Remove the literal from the dotenv file, rotate it if necessary, and inject the secret through a local secret manager or an untracked env source instead.",
+                            )
+                        )
 
             credential_match = CREDENTIAL_ASSIGNMENT_RE.search(line) if scan_credential_literals else None
             if credential_match:
