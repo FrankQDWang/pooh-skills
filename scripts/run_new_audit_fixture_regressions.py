@@ -31,6 +31,15 @@ def write(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
+def inject_foreign_runtime_payload(repo: Path) -> None:
+    base = repo / ".council-runtime" / "home" / ".local" / "share" / "uv" / "tools" / "fixture" / "site-packages" / "fixture_payload"
+    write(base / "tests" / "test_placeholder.py", "def test_placeholder() -> None:\n    assert True\n")
+    write(base / "tests" / "logic.test.ts", "describe.skip('runtime', () => { test.todo('runtime'); });\n")
+    write(base / "client-openapi.json", "{\n  \"openapi\": \"3.1.0\"\n}\n")
+    write(base / "package.json", "{\n  \"name\": \"foreign-runtime\",\n  \"scripts\": {\"lint\": \"biome check .\", \"test\": \"pnpm audit\"}\n}\n")
+    write(base / ".github" / "workflows" / "ci.yml", "name: runtime\njobs:\n  t:\n    runs-on: ubuntu-latest\n    steps:\n      - run: pnpm audit\n")
+
+
 def run_scan(repo: Path, script_rel: str) -> dict:
     out_dir = repo / ".repo-harness"
     summary = out_dir / "summary.json"
@@ -65,6 +74,7 @@ def assert_case(case: Case) -> None:
         repo = tempdir / "repo"
         repo.mkdir(parents=True, exist_ok=True)
         case.setup(repo)
+        inject_foreign_runtime_payload(repo)
         payload = run_scan(repo, case.script_rel)
         if payload.get("overall_verdict") != case.expected_verdict:
             raise RuntimeError(
@@ -75,6 +85,10 @@ def assert_case(case: Case) -> None:
             actual = categories.get(category_id)
             if actual != expected_state:
                 raise RuntimeError(f"{case.name}: expected {category_id}={expected_state}, got {actual}")
+        for finding in payload.get("findings", []):
+            path = str(finding.get("path") or "")
+            if path.startswith(".council-runtime/"):
+                raise RuntimeError(f"{case.name}: foreign-runtime finding leaked into results: {path}")
     finally:
         shutil.rmtree(tempdir, ignore_errors=True)
 

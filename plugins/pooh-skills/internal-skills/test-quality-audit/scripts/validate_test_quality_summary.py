@@ -58,12 +58,16 @@ REQUIRED_COVERAGE = {
     "source_files_detected",
     "test_files_scanned",
     "ci_configs_scanned",
+    "foreign_runtime_source_files_excluded",
+    "foreign_runtime_test_files_excluded",
     "ci_gate_hits",
     "placeholder_hits",
     "skip_retry_hits",
     "internal_mock_hits",
     "failure_path_hits",
+    "surface_source",
 }
+VALID_SURFACE_SOURCES = {"git-index", "filesystem-fallback"}
 
 
 def fail(message: str) -> int:
@@ -102,6 +106,22 @@ def main() -> int:
     missing_coverage = REQUIRED_COVERAGE - set(coverage)
     if missing_coverage:
         return fail(f"coverage missing keys: {sorted(missing_coverage)}")
+    if coverage.get("surface_source") not in VALID_SURFACE_SOURCES:
+        return fail(f"coverage.surface_source invalid: {coverage.get('surface_source')}")
+    for key in (
+        "source_files_detected",
+        "test_files_scanned",
+        "ci_configs_scanned",
+        "foreign_runtime_source_files_excluded",
+        "foreign_runtime_test_files_excluded",
+        "ci_gate_hits",
+        "placeholder_hits",
+        "skip_retry_hits",
+        "internal_mock_hits",
+        "failure_path_hits",
+    ):
+        if not isinstance(coverage.get(key), int):
+            return fail(f"coverage.{key} must be an integer")
 
     categories = data.get("categories")
     if not isinstance(categories, list) or not categories:

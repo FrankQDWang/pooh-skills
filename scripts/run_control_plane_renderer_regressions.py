@@ -68,6 +68,9 @@ def write_summary(summary_path: Path, repo_root: Path, harness_dir: Path) -> Non
         elif spec.domain == "silent-failure":
             status = "invalid"
             notes = "summary failed validation"
+        surface_note = ""
+        if spec.domain == "test-quality":
+            surface_note = "surface: first-party 12 | foreign-runtime excluded 4"
         skill_runs.append(
             {
                 "run_id": RUN_ID,
@@ -82,6 +85,7 @@ def write_summary(summary_path: Path, repo_root: Path, harness_dir: Path) -> Non
                 "child_verdict": verdict,
                 "severity_counts": severity_counts,
                 "top_categories": ["regression-signal"] if spec.domain == "structure" else [],
+                "surface_note": surface_note,
                 "notes": notes,
             }
         )
@@ -224,6 +228,7 @@ def main() -> int:
                 "Invalid: overdefensive-silent-failure-hardgate",
                 "Audit-Security-Posture",
                 "Fix structure first.",
+                "surface: first-party 12 | foreign-runtime excluded 4",
             ],
         )
         assert_contains(

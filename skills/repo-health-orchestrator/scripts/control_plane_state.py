@@ -179,6 +179,7 @@ def default_state_path_values(state_path: Path, model_label: str | None = None) 
             "output_label": to_output_label(summary_path),
             "detail": "Not started yet",
             "notes": "",
+            "surface_note": "",
             "child_verdict": "",
             "top_categories": [],
             "bootstrap_actions": [],
@@ -392,6 +393,7 @@ def finalize_from_summary(args: argparse.Namespace) -> dict[str, Any]:
         worker["notes"] = str(run.get("notes") or "")
         worker["dependency_status"] = str(run.get("dependency_status") or worker.get("dependency_status") or "ready")
         worker["child_verdict"] = str(run.get("child_verdict") or "")
+        worker["surface_note"] = str(run.get("surface_note") or "")
         worker["summary_path"] = str(run.get("summary_path") or worker.get("summary_path") or "")
         worker["output_label"] = to_output_label(worker["summary_path"])
         worker["top_categories"] = [str(item) for item in run.get("top_categories") or []]

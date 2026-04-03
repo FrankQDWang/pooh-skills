@@ -68,6 +68,11 @@ def create_fixture_repo(root: Path) -> None:
         "name: ci\non: [push]\njobs:\n  checks:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo ok\n",
         encoding="utf-8",
     )
+    foreign = root / ".council-runtime" / "home" / ".local" / "share" / "uv" / "fixture" / "site-packages" / "payload"
+    foreign.mkdir(parents=True, exist_ok=True)
+    (foreign / "test_noise.py").write_text("def test_noise() -> None:\n    assert True\n", encoding="utf-8")
+    (foreign / "noise.test.ts").write_text("describe.skip('noise', () => test.todo('noise'));\n", encoding="utf-8")
+    (foreign / "client-openapi.json").write_text("{\n  \"openapi\": \"3.1.0\"\n}\n", encoding="utf-8")
 
 
 def read_json(path: Path) -> dict:

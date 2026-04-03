@@ -142,6 +142,47 @@ def extract_top_categories(findings: list[dict[str, Any]], limit: int = 3) -> li
     return [cat for cat, _ in counter.most_common(limit)]
 
 
+def summarize_surface_note(domain: str, coverage: dict[str, Any]) -> str:
+    if domain == "secrets-and-hardcode":
+        source = str(coverage.get("surface_source") or "git-index")
+        first_party = int(coverage.get("files_scanned", 0) or 0)
+        foreign = int(coverage.get("foreign_runtime_files_excluded", 0) or 0)
+        ignored = int(coverage.get("ignored_actionable_files_scanned", 0) or 0)
+        parts = []
+        if source != "git-index":
+            parts.append(source)
+        parts.extend(
+            [
+                f"first-party {first_party}",
+                f"foreign-runtime excluded {foreign}",
+                f"ignored-actionable {ignored}",
+            ]
+        )
+        return "surface: " + " | ".join(parts)
+    if domain == "test-quality":
+        source = str(coverage.get("surface_source") or "git-index")
+        first_party = (
+            int(coverage.get("source_files_detected", 0) or 0)
+            + int(coverage.get("test_files_scanned", 0) or 0)
+            + int(coverage.get("ci_configs_scanned", 0) or 0)
+        )
+        foreign = (
+            int(coverage.get("foreign_runtime_source_files_excluded", 0) or 0)
+            + int(coverage.get("foreign_runtime_test_files_excluded", 0) or 0)
+        )
+        parts = []
+        if source != "git-index":
+            parts.append(source)
+        parts.extend(
+            [
+                f"first-party {first_party}",
+                f"foreign-runtime excluded {foreign}",
+            ]
+        )
+        return "surface: " + " | ".join(parts)
+    return ""
+
+
 def classify_run(
     data: dict[str, Any] | None,
     err: str | None,
@@ -314,6 +355,8 @@ def main() -> int:
         findings = [item for item in ((data or {}).get("findings") or []) if isinstance(item, dict)]
         top_categories = extract_top_categories(findings)
         rollup_bucket = str((data or {}).get("rollup_bucket") or "") if data else ""
+        coverage = (data or {}).get("coverage") if isinstance((data or {}).get("coverage"), dict) else {}
+        surface_note = summarize_surface_note(domain, coverage)
         notes = classification_note
         if status == "missing":
             missing_skills.append(skill_name)
@@ -349,6 +392,7 @@ def main() -> int:
             "rollup_bucket": rollup_bucket,
             "severity_counts": sev,
             "top_categories": top_categories,
+            "surface_note": surface_note,
             "notes": notes,
         })
 

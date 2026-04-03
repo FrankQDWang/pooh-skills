@@ -17,9 +17,18 @@ if str(RUNTIME_BIN) not in sys.path:
     sys.path.insert(0, str(RUNTIME_BIN))
 
 from standard_audit_utils import iter_text_files  # noqa: E402
+from standard_audit_utils import describe_surface_source  # noqa: E402
+from standard_audit_utils import first_party_files  # noqa: E402
+from standard_audit_utils import foreign_runtime_files  # noqa: E402
+from standard_audit_utils import foreign_runtime_text_files  # noqa: E402
+from standard_audit_utils import format_surface_note  # noqa: E402
+from standard_audit_utils import ignored_actionable_secret_files  # noqa: E402
+from standard_audit_utils import is_foreign_runtime_path  # noqa: E402
+from standard_audit_utils import is_hard_skipped  # noqa: E402
 from standard_audit_utils import package_managers  # noqa: E402
 from standard_audit_utils import read_text  # noqa: E402
 from standard_audit_utils import rel  # noqa: E402
+from standard_audit_utils import surface_source  # noqa: E402
 from standard_audit_utils import write_json  # noqa: E402
 from standard_audit_utils import write_text  # noqa: E402
 
@@ -106,26 +115,35 @@ def is_placeholder(value: str) -> bool:
     return bool(PLACEHOLDER_RE.search(value))
 
 
-def iter_secret_candidate_files(repo: Path) -> list[Path]:
+def first_party_secret_candidate_files(repo: Path) -> list[Path]:
     candidates = {path for path in iter_text_files(repo)}
-    for path in repo.rglob("*"):
-        if not path.is_file():
-            continue
-        relative_path = rel(path, repo)
-        if relative_path.startswith(".git/") or "/.git/" in f"/{relative_path}":
-            continue
-        if SENSITIVE_FILE_RE.search(relative_path):
+    for path in first_party_files(repo):
+        if SENSITIVE_FILE_RE.search(rel(path, repo)):
             candidates.add(path)
     return sorted(candidates)
 
 
-def collect_worktree_findings(repo: Path) -> tuple[list[Finding], list[Finding], list[str], int]:
+def foreign_runtime_secret_candidate_files(repo: Path) -> list[Path]:
+    candidates = {path for path in foreign_runtime_text_files(repo)}
+    for path in foreign_runtime_files(repo):
+        if SENSITIVE_FILE_RE.search(rel(path, repo)):
+            candidates.add(path)
+    return sorted(candidates)
+
+
+def iter_secret_candidate_files(repo: Path) -> tuple[list[Path], list[Path]]:
+    first_party = first_party_secret_candidate_files(repo)
+    ignored_actionable = ignored_actionable_secret_files(repo)
+    return sorted(dict.fromkeys(first_party)), sorted(dict.fromkeys(ignored_actionable))
+
+
+def collect_worktree_findings(repo: Path, candidate_files: Sequence[Path]) -> tuple[list[Finding], list[Finding], list[str], int]:
     secret_findings: list[Finding] = []
     credential_findings: list[Finding] = []
     sensitive_files: list[str] = []
     files_scanned = 0
 
-    for path in iter_secret_candidate_files(repo):
+    for path in candidate_files:
         files_scanned += 1
         relative_path = rel(path, repo)
         if SENSITIVE_FILE_RE.search(relative_path):
@@ -210,16 +228,8 @@ def collect_worktree_findings(repo: Path) -> tuple[list[Finding], list[Finding],
     return secret_findings[:12], credential_findings[:12], sorted(set(sensitive_files))[:12], files_scanned
 
 
-def sensitive_files_in_repo(repo: Path) -> list[str]:
-    matches: list[str] = []
-    for path in repo.rglob("*"):
-        if not path.is_file():
-            continue
-        relative_path = path.relative_to(repo).as_posix()
-        if "/.git/" in f"/{relative_path}" or relative_path.startswith(".git/"):
-            continue
-        if SENSITIVE_FILE_RE.search(relative_path):
-            matches.append(relative_path)
+def sensitive_files_in_repo(repo: Path, candidate_files: Sequence[Path]) -> list[str]:
+    matches = [rel(path, repo) for path in candidate_files if SENSITIVE_FILE_RE.search(rel(path, repo))]
     return sorted(set(matches))[:12]
 
 
@@ -249,10 +259,10 @@ def git_history_matches(repo: Path) -> tuple[bool, list[str], list[Finding]]:
                 "--all",
                 "-G",
                 HISTORY_REGEX,
-                "--format=%H",
+                "--format=__COMMIT__:%H",
                 "--name-only",
                 "--max-count",
-                "6",
+                "12",
             ],
             cwd=repo,
             check=True,
@@ -275,20 +285,30 @@ def git_history_matches(repo: Path) -> tuple[bool, list[str], list[Finding]]:
             )
         ]
 
-    commits: list[str] = []
-    files: list[str] = []
+    commit_files: list[tuple[str, list[str]]] = []
+    current_commit = ""
+    current_files: list[str] = []
     for raw_line in result.stdout.splitlines():
         line = raw_line.strip()
         if not line:
             continue
-        if re.fullmatch(r"[0-9a-f]{40}", line):
-            commits.append(line)
-        elif not line.startswith(".repo-harness/"):
-            files.append(line)
-    if not commits:
-        return True, ["No high-signal secret material was matched in accessible git history."], []
+        if line.startswith("__COMMIT__:"):
+            if current_commit and current_files:
+                commit_files.append((current_commit, current_files))
+            current_commit = line.split(":", 1)[1]
+            current_files = []
+            continue
+        rel_path = Path(line)
+        if is_hard_skipped(rel_path) or is_foreign_runtime_path(rel_path):
+            continue
+        current_files.append(line)
+    if current_commit and current_files:
+        commit_files.append((current_commit, current_files))
+    if not commit_files:
+        return True, ["No high-signal secret material was matched in accessible first-party git history."], []
 
-    evidence = [f"commit {commit[:12]}" for commit in commits[:4]]
+    evidence = [f"commit {commit[:12]}" for commit, _ in commit_files[:4]]
+    files = [path for _, paths in commit_files[:4] for path in paths]
     if files:
         evidence.extend(f"file {path}" for path in files[:4])
     history_findings = [
@@ -298,13 +318,13 @@ def git_history_matches(repo: Path) -> tuple[bool, list[str], list[Finding]]:
             severity="high",
             confidence="medium",
             title="Git history still shows high-signal secret material",
-            path=files[idx] if idx < len(files) else ".git-history",
+            path=paths[0] if paths else ".git-history",
             line=1,
             evidence_summary=f"Accessible git history matched high-signal secret patterns in commit `{commit[:12]}`.",
             recommended_change_shape="Review whether the leaked material still needs rotation or revoke-first handling, then decide whether history rewrite is required.",
             notes="History-only evidence still matters even if the current working tree is clean.",
         )
-        for idx, commit in enumerate(commits[:4])
+        for idx, (commit, paths) in enumerate(commit_files[:4])
     ]
     return True, evidence[:8], history_findings
 
@@ -436,6 +456,16 @@ def top_actions(findings: list[Finding], history_available: bool) -> list[str]:
     return actions[:3]
 
 
+def surface_note_from_summary(summary: dict[str, object]) -> str:
+    coverage = summary.get("coverage") or {}
+    return format_surface_note(
+        first_party_count=int(coverage.get("files_scanned", 0) or 0),
+        foreign_runtime_excluded=int(coverage.get("foreign_runtime_files_excluded", 0) or 0),
+        ignored_actionable_count=int(coverage.get("ignored_actionable_files_scanned", 0) or 0),
+        source=str(coverage.get("surface_source") or "git-index"),
+    )
+
+
 def render_report(summary: dict[str, object]) -> str:
     lines = [
         "# Secrets and Hardcode Audit Report",
@@ -446,7 +476,11 @@ def render_report(summary: dict[str, object]) -> str:
         f"- repo_scope: `{summary['repo_scope']}`",
         f"- package_managers: `{', '.join(summary.get('package_managers') or ['none'])}`",
         "",
-        "## 2. Category states",
+        "## 2. Scan surface",
+        f"- note: `{surface_note_from_summary(summary)}`",
+        f"- source: `{describe_surface_source(Path(str(summary['repo_root'])))}`",
+        "",
+        "## 3. Category states",
         "",
     ]
     for category in summary["categories"]:
@@ -463,7 +497,7 @@ def render_report(summary: dict[str, object]) -> str:
             lines.append(f"- notes: {category['notes']}")
         lines.append("")
 
-    lines.extend(["## 3. Highest-risk findings", ""])
+    lines.extend(["## 4. Highest-risk findings", ""])
     if not summary["findings"]:
         lines.append("No material secret-hygiene findings were detected from the current local evidence set.")
     else:
@@ -483,7 +517,7 @@ def render_report(summary: dict[str, object]) -> str:
                 ]
             )
 
-    lines.extend(["## 4. Ordered action queue", ""])
+    lines.extend(["## 5. Ordered action queue", ""])
     for action in summary["top_actions"]:
         lines.append(f"- {action}")
     lines.append("")
@@ -496,6 +530,7 @@ def render_brief(summary: dict[str, object]) -> str:
         "",
         f"- overall_verdict: `{summary['overall_verdict']}`",
         f"- summary_line: `{summary['summary_line']}`",
+        f"- scan_surface: `{surface_note_from_summary(summary)}`",
         "",
         "## Immediate actions",
         "",
@@ -523,7 +558,10 @@ def render_brief(summary: dict[str, object]) -> str:
 
 
 def build_summary(repo: Path) -> dict[str, object]:
-    candidate_files = iter_secret_candidate_files(repo)
+    first_party_candidates, ignored_actionable_candidates = iter_secret_candidate_files(repo)
+    candidate_files = sorted(dict.fromkeys(first_party_candidates + ignored_actionable_candidates))
+    surface_mode, _ = surface_source(repo)
+    foreign_runtime_candidates = foreign_runtime_secret_candidate_files(repo)
     if not candidate_files:
         categories = [
             category_entry(category_id, "not-applicable", "high", ["No text or config files were detected."])
@@ -541,11 +579,15 @@ def build_summary(repo: Path) -> dict[str, object]:
             "package_managers": package_managers(repo),
             "coverage": {
                 "files_scanned": 0,
+                "first_party_files_scanned": 0,
+                "ignored_actionable_files_scanned": 0,
+                "foreign_runtime_files_excluded": len(foreign_runtime_candidates),
                 "worktree_secret_hits": 0,
                 "hardcoded_credential_hits": 0,
                 "history_secret_hits": 0,
                 "sensitive_file_hits": 0,
                 "git_history_available": False,
+                "surface_source": surface_mode,
             },
             "categories": categories,
             "findings": [],
@@ -553,8 +595,8 @@ def build_summary(repo: Path) -> dict[str, object]:
             "severity_counts": {"critical": 0, "high": 0, "medium": 0, "low": 0},
         }
 
-    secret_findings, credential_findings, _, files_scanned = collect_worktree_findings(repo)
-    sensitive_files = sensitive_files_in_repo(repo)
+    secret_findings, credential_findings, _, files_scanned = collect_worktree_findings(repo, candidate_files)
+    sensitive_files = sensitive_files_in_repo(repo, candidate_files)
     git_available, history_evidence, history_findings = git_history_matches(repo)
     ignore_findings, ignore_evidence = collect_ignore_findings(repo, sensitive_files)
 
@@ -606,11 +648,15 @@ def build_summary(repo: Path) -> dict[str, object]:
         "package_managers": package_managers(repo),
         "coverage": {
             "files_scanned": files_scanned,
+            "first_party_files_scanned": len(first_party_candidates),
+            "ignored_actionable_files_scanned": len(ignored_actionable_candidates),
+            "foreign_runtime_files_excluded": len(foreign_runtime_candidates),
             "worktree_secret_hits": len(secret_findings),
             "hardcoded_credential_hits": len(credential_findings),
             "history_secret_hits": len(history_findings),
             "sensitive_file_hits": len(sensitive_files),
             "git_history_available": git_available,
+            "surface_source": surface_mode,
         },
         "categories": categories,
         "findings": [item.to_dict() for item in findings[:12]],

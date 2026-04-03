@@ -6,19 +6,28 @@ from __future__ import annotations
 import json
 import os
 import re
+import subprocess
 from collections import Counter
+from dataclasses import dataclass
 from datetime import datetime, timezone
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Iterable
 
 SCHEMA_VERSION = "1.0.0"
-SKIP_DIRS = {
+HARD_SKIP_DIRS = {
     ".git",
     ".hg",
     ".svn",
+    "__pycache__",
+    ".repo-harness",
+    ".pooh-runtime",
+    ".idea",
+    ".vscode",
+}
+FOREIGN_RUNTIME_PARTS = {
     ".venv",
     "venv",
-    "__pycache__",
     "node_modules",
     "dist",
     "build",
@@ -31,14 +40,27 @@ SKIP_DIRS = {
     ".ruff_cache",
     ".tox",
     "coverage",
-    ".repo-harness",
-    ".pooh-runtime",
     "vendor",
     "target",
     "out",
-    ".idea",
-    ".vscode",
+    "site-packages",
+    "dist-packages",
+    "__pypackages__",
 }
+FOREIGN_RUNTIME_ROOTS = {
+    ".council-runtime",
+}
+FOREIGN_RUNTIME_SEQUENCES = (
+    (".local", "share", "uv"),
+    (".local", "share", "pnpm"),
+    (".local", "share", "npm"),
+    ("home", ".codex"),
+    ("home", ".claude"),
+    (".claude", "plugins", "cache"),
+    (".codex", "plugins", "cache"),
+)
+SECRET_ACTIONABLE_ROOTS = ("apps", "packages", "services", "infra", "scripts")
+SECRET_ACTIONABLE_SUFFIXES = {".pem", ".key", ".p12", ".pfx"}
 TEXT_EXTS = {
     ".py",
     ".pyi",
@@ -78,6 +100,14 @@ ALLOWED_DEPENDENCY_STATUS = {"ready", "auto-installed", "blocked"}
 ALLOWED_ROLLUP_BUCKETS = {"blocked", "red", "yellow", "green", "not-applicable"}
 
 
+@dataclass(frozen=True)
+class RepoSurface:
+    source: str
+    fallback_reason: str
+    first_party_files: tuple[str, ...]
+    foreign_runtime_files: tuple[str, ...]
+
+
 def utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
@@ -105,22 +135,266 @@ def rel(path: Path, repo: Path) -> str:
     return path.relative_to(repo).as_posix()
 
 
-def is_skipped(rel_path: Path) -> bool:
-    return any(part in SKIP_DIRS for part in rel_path.parts)
+def is_hard_skipped(rel_path: Path) -> bool:
+    return any(part in HARD_SKIP_DIRS for part in rel_path.parts)
 
 
-def iter_text_files(repo: Path, suffixes: set[str] | None = None) -> list[Path]:
-    wanted = suffixes or TEXT_EXTS
-    files: list[Path] = []
+def path_has_sequence(parts: tuple[str, ...], sequence: tuple[str, ...]) -> bool:
+    if len(parts) < len(sequence):
+        return False
+    for index in range(0, len(parts) - len(sequence) + 1):
+        if parts[index : index + len(sequence)] == sequence:
+            return True
+    return False
+
+
+def is_foreign_runtime_path(rel_path: Path) -> bool:
+    parts = tuple(rel_path.parts)
+    if not parts:
+        return False
+    if parts[0] in FOREIGN_RUNTIME_ROOTS:
+        return True
+    if any(part in FOREIGN_RUNTIME_PARTS for part in parts):
+        return True
+    return any(path_has_sequence(parts, sequence) for sequence in FOREIGN_RUNTIME_SEQUENCES)
+
+
+def _git_repo_file_list(repo: Path) -> tuple[list[str] | None, str]:
+    try:
+        inside = subprocess.run(
+            ["git", "rev-parse", "--is-inside-work-tree"],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return None, f"git index unavailable: {exc}"
+    if inside.stdout.strip() != "true":
+        return None, "git index unavailable: checkout is not inside a git work tree"
+
+    rel_paths: set[str] = set()
+    commands = (
+        ["git", "ls-files", "-z"],
+        ["git", "ls-files", "--others", "--exclude-standard", "-z"],
+    )
+    for command in commands:
+        try:
+            completed = subprocess.run(
+                command,
+                cwd=repo,
+                check=True,
+                capture_output=True,
+                timeout=20,
+            )
+        except Exception as exc:  # noqa: BLE001
+            return None, f"git index unavailable: {exc}"
+        raw = completed.stdout.decode("utf-8", errors="ignore")
+        rel_paths.update(item for item in raw.split("\x00") if item)
+    return sorted(rel_paths), ""
+
+
+def _filesystem_repo_file_list(repo: Path) -> list[str]:
+    rel_paths: list[str] = []
     for path in repo.rglob("*"):
         if not path.is_file():
             continue
-        rel_path = path.relative_to(repo)
-        if is_skipped(rel_path):
+        rel_paths.append(path.relative_to(repo).as_posix())
+    return sorted(rel_paths)
+
+
+@lru_cache(maxsize=None)
+def _surface_inventory(repo_root: str) -> RepoSurface:
+    repo = Path(repo_root)
+    git_rel_paths, fallback_reason = _git_repo_file_list(repo)
+    if git_rel_paths is not None:
+        rel_paths = git_rel_paths
+        source = "git-index"
+    else:
+        rel_paths = _filesystem_repo_file_list(repo)
+        source = "filesystem-fallback"
+        if not fallback_reason:
+            fallback_reason = "git index unavailable"
+
+    first_party: list[str] = []
+    foreign_runtime: list[str] = []
+    for rel_value in rel_paths:
+        rel_path = Path(rel_value)
+        if is_hard_skipped(rel_path):
             continue
-        if path.suffix.lower() in wanted or path.name in {"package.json", "pnpm-lock.yaml", "pyproject.toml", "uv.lock", ".npmrc"}:
-            files.append(path)
+        if is_foreign_runtime_path(rel_path):
+            foreign_runtime.append(rel_value)
+            continue
+        first_party.append(rel_value)
+
+    return RepoSurface(
+        source=source,
+        fallback_reason=fallback_reason,
+        first_party_files=tuple(sorted(dict.fromkeys(first_party))),
+        foreign_runtime_files=tuple(sorted(dict.fromkeys(foreign_runtime))),
+    )
+
+
+def repo_surface(repo: Path) -> RepoSurface:
+    return _surface_inventory(str(repo.resolve()))
+
+
+def surface_source(repo: Path) -> tuple[str, str]:
+    surface = repo_surface(repo)
+    return surface.source, surface.fallback_reason
+
+
+def _filter_surface_files(
+    repo: Path,
+    rel_paths: Iterable[str],
+    *,
+    suffixes: set[str] | None = None,
+    names: set[str] | None = None,
+) -> list[Path]:
+    files: list[Path] = []
+    wanted = suffixes
+    for rel_value in rel_paths:
+        rel_path = Path(rel_value)
+        path = repo / rel_path
+        if not path.exists() or not path.is_file():
+            continue
+        if names is not None and path.name not in names:
+            continue
+        if wanted is not None:
+            if path.suffix.lower() not in wanted and path.name not in {"package.json", "pnpm-lock.yaml", "pyproject.toml", "uv.lock", ".npmrc"}:
+                continue
+        files.append(path)
     return sorted(files)
+
+
+def first_party_files(repo: Path) -> list[Path]:
+    surface = repo_surface(repo)
+    return _filter_surface_files(repo, surface.first_party_files)
+
+
+def foreign_runtime_files(repo: Path) -> list[Path]:
+    surface = repo_surface(repo)
+    return _filter_surface_files(repo, surface.foreign_runtime_files)
+
+
+def first_party_text_files(
+    repo: Path,
+    *,
+    suffixes: set[str] | None = None,
+    names: set[str] | None = None,
+) -> list[Path]:
+    wanted = suffixes or TEXT_EXTS
+    surface = repo_surface(repo)
+    return _filter_surface_files(repo, surface.first_party_files, suffixes=wanted, names=names)
+
+
+def foreign_runtime_text_files(
+    repo: Path,
+    *,
+    suffixes: set[str] | None = None,
+    names: set[str] | None = None,
+) -> list[Path]:
+    wanted = suffixes or TEXT_EXTS
+    surface = repo_surface(repo)
+    return _filter_surface_files(repo, surface.foreign_runtime_files, suffixes=wanted, names=names)
+
+
+def is_actionable_secret_file(rel_path: Path) -> bool:
+    name = rel_path.name
+    if name.startswith(".env"):
+        return True
+    if name in {"id_rsa", "id_dsa"}:
+        return True
+    return rel_path.suffix.lower() in SECRET_ACTIONABLE_SUFFIXES
+
+
+def _secret_candidate_rel_paths(repo: Path) -> list[str]:
+    candidates: set[str] = set()
+    for path in repo.iterdir():
+        if not path.is_file():
+            continue
+        rel_path = path.relative_to(repo)
+        if is_actionable_secret_file(rel_path) and not is_hard_skipped(rel_path) and not is_foreign_runtime_path(rel_path):
+            candidates.add(rel_path.as_posix())
+    for root_name in SECRET_ACTIONABLE_ROOTS:
+        root = repo / root_name
+        if not root.exists():
+            continue
+        for path in root.rglob("*"):
+            if not path.is_file():
+                continue
+            rel_path = path.relative_to(repo)
+            if is_actionable_secret_file(rel_path) and not is_hard_skipped(rel_path) and not is_foreign_runtime_path(rel_path):
+                candidates.add(rel_path.as_posix())
+    return sorted(candidates)
+
+
+def _git_check_ignored(repo: Path, rel_paths: list[str]) -> set[str]:
+    if not rel_paths:
+        return set()
+    try:
+        completed = subprocess.run(
+            ["git", "check-ignore", "--stdin"],
+            cwd=repo,
+            input="\n".join(rel_paths) + "\n",
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+    except Exception:  # noqa: BLE001
+        return set()
+    if completed.returncode not in {0, 1}:
+        return set()
+    return {line.strip() for line in completed.stdout.splitlines() if line.strip()}
+
+
+def ignored_actionable_secret_files(repo: Path) -> list[Path]:
+    surface = repo_surface(repo)
+    candidates = [item for item in _secret_candidate_rel_paths(repo) if item not in set(surface.first_party_files)]
+    if not candidates:
+        return []
+    if surface.source == "git-index":
+        candidates = sorted(_git_check_ignored(repo, candidates))
+    return [repo / Path(rel_value) for rel_value in candidates]
+
+
+def foreign_runtime_excluded_count(
+    repo: Path,
+    *,
+    suffixes: set[str] | None = None,
+    names: set[str] | None = None,
+) -> int:
+    return len(foreign_runtime_text_files(repo, suffixes=suffixes, names=names))
+
+
+def format_surface_note(
+    *,
+    first_party_count: int,
+    foreign_runtime_excluded: int,
+    ignored_actionable_count: int | None = None,
+    source: str = "git-index",
+) -> str:
+    parts: list[str] = []
+    if source != "git-index":
+        parts.append(source)
+    parts.append(f"first-party {first_party_count}")
+    parts.append(f"foreign-runtime excluded {foreign_runtime_excluded}")
+    if ignored_actionable_count is not None:
+        parts.append(f"ignored-actionable {ignored_actionable_count}")
+    return "surface: " + " | ".join(parts)
+
+
+def describe_surface_source(repo: Path) -> str:
+    source, fallback_reason = surface_source(repo)
+    if source == "git-index":
+        return "Used git-index first-party surface: tracked plus untracked non-ignored files."
+    return f"Used filesystem fallback because git index was unavailable: {fallback_reason}."
+
+
+def iter_text_files(repo: Path, suffixes: set[str] | None = None) -> list[Path]:
+    return first_party_text_files(repo, suffixes=suffixes)
 
 
 def workflow_files(repo: Path) -> list[Path]:

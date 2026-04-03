@@ -16,9 +16,14 @@ if str(RUNTIME_BIN) not in sys.path:
     sys.path.insert(0, str(RUNTIME_BIN))
 
 from standard_audit_utils import iter_text_files  # noqa: E402
+from standard_audit_utils import describe_surface_source  # noqa: E402
+from standard_audit_utils import first_party_text_files  # noqa: E402
+from standard_audit_utils import foreign_runtime_text_files  # noqa: E402
+from standard_audit_utils import format_surface_note  # noqa: E402
 from standard_audit_utils import package_managers  # noqa: E402
 from standard_audit_utils import read_text  # noqa: E402
 from standard_audit_utils import rel  # noqa: E402
+from standard_audit_utils import surface_source  # noqa: E402
 from standard_audit_utils import write_json  # noqa: E402
 from standard_audit_utils import write_text  # noqa: E402
 
@@ -131,15 +136,13 @@ def category_entry(category_id: str, state: str, confidence: str, evidence: list
 
 def ci_config_files(repo: Path) -> list[Path]:
     files: list[Path] = []
-    workflows = repo / ".github" / "workflows"
-    if workflows.is_dir():
-        files.extend(sorted(path for path in workflows.iterdir() if path.is_file() and path.suffix.lower() in {".yml", ".yaml"}))
-    circle = repo / ".circleci" / "config.yml"
-    if circle.exists():
-        files.append(circle)
-    for candidate in CI_CANDIDATE_FILES:
-        path = repo / candidate
-        if path.exists():
+    for path in first_party_text_files(repo, suffixes={".yml", ".yaml"}):
+        relative = rel(path, repo)
+        if relative.startswith(".github/workflows/"):
+            files.append(path)
+        elif relative == ".circleci/config.yml":
+            files.append(path)
+        elif relative in CI_CANDIDATE_FILES:
             files.append(path)
     unique: dict[str, Path] = {str(path): path for path in files}
     return list(unique.values())
@@ -149,6 +152,17 @@ def collect_repo_surface(repo: Path) -> tuple[list[Path], list[Path]]:
     source_files: list[Path] = []
     test_files: list[Path] = []
     for path in iter_text_files(repo, suffixes=SOURCE_EXTS):
+        if is_test_file(path, repo):
+            test_files.append(path)
+        else:
+            source_files.append(path)
+    return source_files, test_files
+
+
+def collect_foreign_runtime_surface(repo: Path) -> tuple[list[Path], list[Path]]:
+    source_files: list[Path] = []
+    test_files: list[Path] = []
+    for path in foreign_runtime_text_files(repo, suffixes=SOURCE_EXTS):
         if is_test_file(path, repo):
             test_files.append(path)
         else:
@@ -264,6 +278,24 @@ def top_actions(findings: list[Finding], category_states: dict[str, str]) -> lis
     return actions[:3]
 
 
+def surface_note_from_summary(summary: dict[str, object]) -> str:
+    coverage = summary.get("coverage") or {}
+    first_party_total = (
+        int(coverage.get("source_files_detected", 0) or 0)
+        + int(coverage.get("test_files_scanned", 0) or 0)
+        + int(coverage.get("ci_configs_scanned", 0) or 0)
+    )
+    foreign_runtime_total = (
+        int(coverage.get("foreign_runtime_source_files_excluded", 0) or 0)
+        + int(coverage.get("foreign_runtime_test_files_excluded", 0) or 0)
+    )
+    return format_surface_note(
+        first_party_count=first_party_total,
+        foreign_runtime_excluded=foreign_runtime_total,
+        source=str(coverage.get("surface_source") or "git-index"),
+    )
+
+
 def render_report(summary: dict[str, object]) -> str:
     lines = [
         "# Test Quality Audit Report",
@@ -274,7 +306,11 @@ def render_report(summary: dict[str, object]) -> str:
         f"- repo_scope: `{summary['repo_scope']}`",
         f"- package_managers: `{', '.join(summary.get('package_managers') or ['none'])}`",
         "",
-        "## 2. Category states",
+        "## 2. Scan surface",
+        f"- note: `{surface_note_from_summary(summary)}`",
+        f"- source: `{describe_surface_source(Path(str(summary['repo_root'])))}`",
+        "",
+        "## 3. Category states",
         "",
     ]
     for category in summary["categories"]:
@@ -289,7 +325,7 @@ def render_report(summary: dict[str, object]) -> str:
             lines.append(f"- notes: {category['notes']}")
         lines.append("")
 
-    lines.extend(["## 3. Highest-risk findings", ""])
+    lines.extend(["## 4. Highest-risk findings", ""])
     if not summary["findings"]:
         lines.append("No material test-governance findings were detected from the current local evidence set.")
     else:
@@ -307,7 +343,7 @@ def render_report(summary: dict[str, object]) -> str:
                 "",
             ])
 
-    lines.extend(["## 4. Ordered action queue", ""])
+    lines.extend(["## 5. Ordered action queue", ""])
     for action in summary["top_actions"]:
         lines.append(f"- {action}")
     lines.append("")
@@ -320,6 +356,7 @@ def render_brief(summary: dict[str, object]) -> str:
         "",
         f"- overall_verdict: `{summary['overall_verdict']}`",
         f"- summary_line: `{summary['summary_line']}`",
+        f"- scan_surface: `{surface_note_from_summary(summary)}`",
         "",
         "## Immediate actions",
         "",
@@ -346,7 +383,9 @@ def render_brief(summary: dict[str, object]) -> str:
 
 def build_summary(repo: Path) -> dict[str, object]:
     source_files, test_files = collect_repo_surface(repo)
+    foreign_runtime_source_files, foreign_runtime_test_files = collect_foreign_runtime_surface(repo)
     ci_files = ci_config_files(repo)
+    surface_mode, _ = surface_source(repo)
     if not source_files and not test_files and not ci_files:
         categories = [
             category_entry(category_id, "not-applicable", "high", ["No Python or TypeScript code or test surface was detected."])
@@ -366,11 +405,14 @@ def build_summary(repo: Path) -> dict[str, object]:
                 "source_files_detected": 0,
                 "test_files_scanned": 0,
                 "ci_configs_scanned": 0,
+                "foreign_runtime_source_files_excluded": len(foreign_runtime_source_files),
+                "foreign_runtime_test_files_excluded": len(foreign_runtime_test_files),
                 "ci_gate_hits": 0,
                 "placeholder_hits": 0,
                 "skip_retry_hits": 0,
                 "internal_mock_hits": 0,
                 "failure_path_hits": 0,
+                "surface_source": surface_mode,
             },
             "categories": categories,
             "findings": [],
@@ -513,11 +555,14 @@ def build_summary(repo: Path) -> dict[str, object]:
             "source_files_detected": len(source_files),
             "test_files_scanned": len(test_files),
             "ci_configs_scanned": len(ci_files),
+            "foreign_runtime_source_files_excluded": len(foreign_runtime_source_files),
+            "foreign_runtime_test_files_excluded": len(foreign_runtime_test_files),
             "ci_gate_hits": ci_gate_hits,
             "placeholder_hits": len(placeholder_hits),
             "skip_retry_hits": len(skip_retry_hits),
             "internal_mock_hits": len(internal_mock_hits),
             "failure_path_hits": len(failure_hits),
+            "surface_source": surface_mode,
         },
         "categories": categories,
         "findings": [item.to_dict() for item in findings[:12]],

@@ -60,32 +60,43 @@
     "coverage": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "source_files_detected",
-        "test_files_scanned",
-        "ci_configs_scanned",
-        "ci_gate_hits",
-        "placeholder_hits",
-        "skip_retry_hits",
-        "internal_mock_hits",
-        "failure_path_hits"
-      ],
-      "properties": {
-        "source_files_detected": {
-          "type": "integer",
-          "minimum": 0
+    "required": [
+      "source_files_detected",
+      "test_files_scanned",
+      "ci_configs_scanned",
+      "foreign_runtime_source_files_excluded",
+      "foreign_runtime_test_files_excluded",
+      "ci_gate_hits",
+      "placeholder_hits",
+      "skip_retry_hits",
+      "internal_mock_hits",
+      "failure_path_hits",
+      "surface_source"
+    ],
+    "properties": {
+      "source_files_detected": {
+        "type": "integer",
+        "minimum": 0
         },
         "test_files_scanned": {
           "type": "integer",
           "minimum": 0
         },
-        "ci_configs_scanned": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "ci_gate_hits": {
-          "type": "integer",
-          "minimum": 0
+      "ci_configs_scanned": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "foreign_runtime_source_files_excluded": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "foreign_runtime_test_files_excluded": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "ci_gate_hits": {
+        "type": "integer",
+        "minimum": 0
         },
         "placeholder_hits": {
           "type": "integer",
@@ -99,12 +110,19 @@
           "type": "integer",
           "minimum": 0
         },
-        "failure_path_hits": {
-          "type": "integer",
-          "minimum": 0
-        }
+      "failure_path_hits": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "surface_source": {
+        "type": "string",
+        "enum": [
+          "git-index",
+          "filesystem-fallback"
+        ]
       }
-    },
+    }
+  },
     "categories": {
       "type": "array",
       "items": {

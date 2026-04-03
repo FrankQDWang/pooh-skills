@@ -54,12 +54,17 @@ VALID_DEPENDENCY_STATUS = {"ready", "auto-installed", "blocked"}
 VALID_ROLLUP_BUCKETS = {"blocked", "red", "yellow", "green", "not-applicable"}
 REQUIRED_COVERAGE = {
     "files_scanned",
+    "first_party_files_scanned",
+    "ignored_actionable_files_scanned",
+    "foreign_runtime_files_excluded",
     "worktree_secret_hits",
     "hardcoded_credential_hits",
     "history_secret_hits",
     "sensitive_file_hits",
     "git_history_available",
+    "surface_source",
 }
+VALID_SURFACE_SOURCES = {"git-index", "filesystem-fallback"}
 
 
 def fail(message: str) -> int:
@@ -98,6 +103,22 @@ def main() -> int:
     missing_coverage = REQUIRED_COVERAGE - set(coverage)
     if missing_coverage:
         return fail(f"coverage missing keys: {sorted(missing_coverage)}")
+    if coverage.get("surface_source") not in VALID_SURFACE_SOURCES:
+        return fail(f"coverage.surface_source invalid: {coverage.get('surface_source')}")
+    for key in (
+        "files_scanned",
+        "first_party_files_scanned",
+        "ignored_actionable_files_scanned",
+        "foreign_runtime_files_excluded",
+        "worktree_secret_hits",
+        "hardcoded_credential_hits",
+        "history_secret_hits",
+        "sensitive_file_hits",
+    ):
+        if not isinstance(coverage.get(key), int):
+            return fail(f"coverage.{key} must be an integer")
+    if not isinstance(coverage.get("git_history_available"), bool):
+        return fail("coverage.git_history_available must be a boolean")
 
     categories = data.get("categories")
     if not isinstance(categories, list) or not categories:

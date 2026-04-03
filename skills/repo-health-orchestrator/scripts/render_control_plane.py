@@ -250,7 +250,7 @@ def format_worker(worker: dict[str, Any], width: int, use_ansi: bool, unicode_mo
         f"Output: {worker.get('output_label') or 'No artifact'}",
         inner_width,
     )
-    notes = str(worker.get("child_verdict") or "")
+    notes = str(worker.get("surface_note") or worker.get("child_verdict") or "")
     if not notes and worker.get("top_categories"):
         notes = ", ".join(worker.get("top_categories") or [])
     notes_line = truncate_plain(f"Notes: {notes or '-'}", inner_width)
