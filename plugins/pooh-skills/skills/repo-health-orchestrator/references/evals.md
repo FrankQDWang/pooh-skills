@@ -24,6 +24,8 @@ Expected: keep it visible without calling the whole rollup incomplete.
 Expected: preserve blocked status instead of silently downgrading it.
 4. One child summary belongs to an older `run_id`.  
 Expected: classify it as `invalid` instead of treating it as current coverage.
+5. The runtime cannot hold 17 concurrent child subagents.  
+Expected: orchestrator still completes by using batched subagent execution instead of shell fallback.
 
 ## Failure Scenarios
 

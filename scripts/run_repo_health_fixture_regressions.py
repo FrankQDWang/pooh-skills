@@ -177,18 +177,18 @@ def make_cases() -> list[Case]:
         Case(
             "missing-child-report",
             healthy,
-            "healthy",
-            "complete",
+            "watch",
+            "partial",
             missing_reports=("silent-failure",),
-            expected_unknowns=(("silent-failure", "missing-human-report"),),
+            expected_invalid_summaries=("overdefensive-silent-failure-hardgate",),
         ),
         Case(
             "missing-child-brief",
             healthy,
-            "healthy",
-            "complete",
+            "watch",
+            "partial",
             missing_briefs=("module-shape",),
-            expected_unknowns=(("module-shape", "missing-agent-brief"),),
+            expected_invalid_summaries=("module-shape-hardgate",),
         ),
     ]
 

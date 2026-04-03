@@ -183,6 +183,17 @@ def summarize_surface_note(domain: str, coverage: dict[str, Any]) -> str:
     return ""
 
 
+def artifact_gate_status(report_path: Path, agent_brief_path: Path) -> tuple[str | None, str]:
+    missing: list[str] = []
+    if not report_path.exists():
+        missing.append(f"human report missing at {report_path}")
+    if not agent_brief_path.exists():
+        missing.append(f"agent brief missing at {agent_brief_path}")
+    if not missing:
+        return None, ""
+    return "invalid", "; ".join(missing)
+
+
 def classify_run(
     data: dict[str, Any] | None,
     err: str | None,
@@ -366,6 +377,17 @@ def main() -> int:
             invalid_summaries.append(skill_name)
             child_verdict = ""
             rollup_bucket = ""
+        else:
+            artifact_status, artifact_note = artifact_gate_status(report_path, agent_brief_path)
+            if artifact_status == "invalid":
+                status = "invalid"
+                invalid_summaries.append(skill_name)
+                child_verdict = ""
+                rollup_bucket = ""
+                notes = artifact_note
+
+        if status == "invalid":
+            notes = notes or "child artifact contract failed validation"
         elif dependency_status == "blocked":
             first_failure = dependency_failures[0] if dependency_failures else {}
             failure_name = str(first_failure.get("name") or "dependency")

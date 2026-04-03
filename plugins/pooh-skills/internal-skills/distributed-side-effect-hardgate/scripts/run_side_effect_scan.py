@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import sys
 from collections import Counter
@@ -27,16 +26,12 @@ RUNTIME_BIN_DIR = Path(__file__).resolve().parents[2] / ".pooh-runtime" / "bin"
 if str(RUNTIME_BIN_DIR) not in sys.path:
     sys.path.insert(0, str(RUNTIME_BIN_DIR))
 
+from standard_audit_utils import describe_surface_source, first_party_text_files  # noqa: E402
+from standard_audit_utils import foreign_runtime_excluded_count, format_surface_note, surface_source  # noqa: E402
 from tool_runner import ToolRun, run_astgrep_pattern, run_semgrep_rules  # noqa: E402
 
 TEXT_EXTS = {
     ".py", ".pyi", ".ts", ".tsx", ".js", ".jsx", ".json", ".yaml", ".yml", ".toml", ".ini",
-}
-
-SKIP_DIRS = {
-    ".git", ".hg", ".svn", ".venv", "venv", "node_modules", "dist", "build",
-    "__pycache__", ".mypy_cache", ".pytest_cache", ".ruff_cache", ".turbo", ".next",
-    ".idea", ".vscode", "coverage", ".repo-harness",
 }
 
 DB_PATTERNS = [
@@ -127,6 +122,7 @@ CONSUMER_HINTS = [
         r"\bwebhook\b", r"\bon_message\b", r"\bon_event\b", r"\bprocess_",
     ]
 ]
+TOOL_BATCH_SIZE = 200
 
 STATE_MUTATION_PATTERNS = [
     re.compile(p, re.IGNORECASE)
@@ -168,12 +164,7 @@ class Finding:
 
 
 def iter_files(root: Path) -> Iterable[Path]:
-    for current_root, dirs, files in os.walk(root):
-        dirs[:] = [d for d in dirs if d not in SKIP_DIRS and d != "skills"]
-        for name in files:
-            path = Path(current_root) / name
-            if path.suffix.lower() in TEXT_EXTS:
-                yield path
+    yield from first_party_text_files(root, suffixes=TEXT_EXTS)
 
 
 def read_text(path: Path) -> str:
@@ -204,18 +195,76 @@ def severity_counts(findings: list[Finding]) -> dict[str, int]:
     return {k: int(counter.get(k, 0)) for k in ("critical", "high", "medium", "low")}
 
 
+def relative_targets(repo: Path, files: list[Path], suffixes: set[str]) -> list[str]:
+    return [str(path.relative_to(repo)) for path in files if path.suffix.lower() in suffixes]
+
+
+def chunk_targets(targets: list[str], batch_size: int = TOOL_BATCH_SIZE) -> list[list[str]]:
+    return [targets[index : index + batch_size] for index in range(0, len(targets), batch_size)]
+
+
+def merge_tool_runs(tool: str, runs: list[ToolRun]) -> ToolRun:
+    if not runs:
+        return ToolRun(
+            tool=tool,
+            status="skipped",
+            command="",
+            exit_code=0,
+            issue_count=0,
+            summary=f"{tool} was skipped because no first-party targets were detected.",
+            details=[],
+        )
+    status = "passed"
+    exit_code = 0
+    issue_count = 0
+    details: list[str] = []
+    for run in runs:
+        issue_count += run.issue_count
+        details.extend(run.details[:3])
+        if run.status == "failed":
+            status = "failed"
+            exit_code = run.exit_code
+        elif run.status == "issues" and status != "failed":
+            status = "issues"
+            exit_code = run.exit_code
+    if status == "failed":
+        summary = f"{tool} execution failed in at least one first-party target batch."
+    elif status == "issues":
+        if issue_count:
+            summary = f"{tool} reported {issue_count} finding(s) across first-party targets."
+        else:
+            summary = f"{tool} returned a non-zero audit result across first-party targets."
+    else:
+        summary = f"{tool} ran successfully with no machine-detected findings across first-party targets."
+    return ToolRun(
+        tool=tool,
+        status=status,
+        command=f"{tool} batched first-party targets ({len(runs)} chunk(s))",
+        exit_code=exit_code,
+        issue_count=issue_count,
+        summary=summary,
+        details=details[:5],
+    )
+
+
 def build_tool_runs(repo: Path, files: list[Path]) -> list[ToolRun]:
     tool_runs: list[ToolRun] = []
-    py_targets = any(path.suffix.lower() in {".py", ".pyi"} for path in files)
-    js_targets = any(path.suffix.lower() in {".ts", ".tsx", ".js", ".jsx"} for path in files)
+    py_targets = relative_targets(repo, files, {".py", ".pyi"})
+    js_targets = relative_targets(repo, files, {".ts", ".tsx", ".js", ".jsx"})
 
     if py_targets:
-        semgrep_run, _ = run_semgrep_rules(SEMGRP_SIDE_EFFECT_RULES, repo, [str(repo)])
-        tool_runs.append(semgrep_run)
+        semgrep_runs: list[ToolRun] = []
+        for batch in chunk_targets(py_targets):
+            semgrep_run, _ = run_semgrep_rules(SEMGRP_SIDE_EFFECT_RULES, repo, batch)
+            semgrep_runs.append(semgrep_run)
+        tool_runs.append(merge_tool_runs("semgrep", semgrep_runs))
     if js_targets:
-        ast_lang = "typescript" if any(path.suffix.lower() in {".ts", ".tsx"} for path in files) else "javascript"
-        ast_run, _ = run_astgrep_pattern("fetch($$$ARGS)", ast_lang, repo, [str(repo)])
-        tool_runs.append(ast_run)
+        ast_lang = "typescript" if any(target.endswith((".ts", ".tsx")) for target in js_targets) else "javascript"
+        ast_runs: list[ToolRun] = []
+        for batch in chunk_targets(js_targets):
+            ast_run, _ = run_astgrep_pattern("fetch($$$ARGS)", ast_lang, repo, batch)
+            ast_runs.append(ast_run)
+        tool_runs.append(merge_tool_runs("ast-grep", ast_runs))
     return tool_runs
 
 
@@ -282,6 +331,8 @@ def render_human_report(summary: dict[str, Any]) -> str:
         f"- overall_verdict: `{summary.get('overall_verdict')}`",
         f"- summary_line: {summary.get('summary_line')}",
         f"- dependency_status: `{summary.get('dependency_status')}`",
+        f"- surface_source: `{summary.get('surface_source_note', '')}`",
+        f"- scan_surface: `{summary.get('surface_note', '')}`",
         "",
         "## 2. Locked tool runs",
         "",
@@ -333,6 +384,8 @@ def render_agent_brief(summary: dict[str, Any]) -> str:
         f"- overall_verdict: `{summary.get('overall_verdict')}`",
         f"- dependency_status: `{summary.get('dependency_status')}`",
         f"- summary_line: {summary.get('summary_line')}",
+        f"- surface_source: `{summary.get('surface_source_note', '')}`",
+        f"- scan_surface: `{summary.get('surface_note', '')}`",
         "",
         "## Ordered actions",
         "1. Remove blocker-level dual-write, retry, or idempotency risks before tuning anything cosmetic.",
@@ -360,6 +413,13 @@ def render_agent_brief(summary: dict[str, Any]) -> str:
 
 def scan(repo: Path) -> dict:
     files = list(iter_files(repo))
+    surface_kind, _ = surface_source(repo)
+    surface_note = format_surface_note(
+        first_party_count=len(files),
+        foreign_runtime_excluded=foreign_runtime_excluded_count(repo, suffixes=TEXT_EXTS),
+        source=surface_kind,
+    )
+    surface_source_note = describe_surface_source(repo)
     tool_runs = build_tool_runs(repo, files)
     repo_text = []
     for path in files:
@@ -556,6 +616,8 @@ def scan(repo: Path) -> dict:
         "repo_root": str(repo),
         "overall_verdict": verdict,
         "summary_line": summary_line,
+        "surface_source_note": surface_source_note,
+        "surface_note": surface_note,
         "language_profile": dict(language_counter),
         "coverage": {
             "files_scanned": len(files),

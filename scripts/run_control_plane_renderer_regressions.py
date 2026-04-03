@@ -120,6 +120,23 @@ def assert_contains(label: str, text: str, fragments: list[str]) -> None:
         raise RuntimeError(f"{label}: missing fragments {missing}")
 
 
+def load_state(state_path: Path) -> dict:
+    return json.loads(state_path.read_text(encoding="utf-8"))
+
+
+def worker_by_domain(state_path: Path, domain: str) -> dict:
+    state = load_state(state_path)
+    for worker in state.get("workers", []):
+        if worker.get("domain") == domain:
+            return worker
+    raise RuntimeError(f"worker not found for domain {domain}")
+
+
+def write_runtime_payload(path: Path, payload: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
 def main() -> int:
     tmpdir = Path(tempfile.mkdtemp(prefix="renderer-regression-"))
     try:
@@ -176,6 +193,99 @@ def main() -> int:
             cwd=REPO_ROOT,
         )
 
+        structure_runtime_dir = harness_dir / "skills" / "dependency-audit"
+        structure_summary = structure_runtime_dir / "summary.json"
+        structure_report = structure_runtime_dir / "report.md"
+        structure_brief = structure_runtime_dir / "agent-brief.md"
+        structure_summary.parent.mkdir(parents=True, exist_ok=True)
+        structure_summary.write_text("{\"ok\": true}\n", encoding="utf-8")
+        structure_brief.write_text("brief\n", encoding="utf-8")
+        write_runtime_payload(
+            structure_runtime_dir / "runtime.json",
+            {
+                "schema_version": "1.0",
+                "run_id": RUN_ID,
+                "skill": "dependency-audit",
+                "domain": "structure",
+                "repo_root": str(repo_root.resolve()),
+                "generated_at": "2026-03-30T00:00:00+00:00",
+                "stage": "complete",
+                "dependency_status": "ready",
+                "current_action": "Main audit completed successfully.",
+                "bootstrap_actions": [],
+                "dependency_failures": [],
+                "summary_path": str(structure_summary.resolve()),
+                "report_path": str(structure_report.resolve()),
+                "agent_brief_path": str(structure_brief.resolve()),
+            },
+        )
+        run_python(
+            [
+                "python3",
+                str(ORCH_SCRIPTS / "control_plane_state.py"),
+                "sync-worker-runtime",
+                "--state",
+                str(state_path),
+                "--domain",
+                "structure",
+                "--runtime",
+                str(structure_runtime_dir / "runtime.json"),
+            ],
+            cwd=REPO_ROOT,
+        )
+        structure_worker = worker_by_domain(state_path, "structure")
+        if structure_worker.get("runtime_status") != "invalid":
+            raise RuntimeError("sync-worker-runtime should mark complete-with-missing-artifacts as invalid")
+        if "report artifact missing" not in str(structure_worker.get("detail") or ""):
+            raise RuntimeError("structure worker detail did not mention the missing report artifact")
+
+        contracts_runtime_dir = harness_dir / "skills" / "signature-contract-hardgate"
+        contracts_summary = contracts_runtime_dir / "summary.json"
+        contracts_report = contracts_runtime_dir / "report.md"
+        contracts_brief = contracts_runtime_dir / "agent-brief.md"
+        contracts_runtime_dir.mkdir(parents=True, exist_ok=True)
+        contracts_summary.write_text("{\"ok\": true}\n", encoding="utf-8")
+        contracts_report.write_text("report\n", encoding="utf-8")
+        contracts_brief.write_text("brief\n", encoding="utf-8")
+        write_runtime_payload(
+            contracts_runtime_dir / "runtime.json",
+            {
+                "schema_version": "1.0",
+                "run_id": RUN_ID,
+                "skill": "signature-contract-hardgate",
+                "domain": "contracts",
+                "repo_root": str(repo_root.resolve()),
+                "generated_at": "2026-03-30T00:00:00+00:00",
+                "stage": "complete",
+                "dependency_status": "preinstalled",
+                "current_action": "Main audit completed successfully.",
+                "bootstrap_actions": [],
+                "dependency_failures": [],
+                "summary_path": str(contracts_summary.resolve()),
+                "report_path": str(contracts_report.resolve()),
+                "agent_brief_path": str(contracts_brief.resolve()),
+            },
+        )
+        run_python(
+            [
+                "python3",
+                str(ORCH_SCRIPTS / "control_plane_state.py"),
+                "sync-worker-runtime",
+                "--state",
+                str(state_path),
+                "--domain",
+                "contracts",
+                "--runtime",
+                str(contracts_runtime_dir / "runtime.json"),
+            ],
+            cwd=REPO_ROOT,
+        )
+        contracts_worker = worker_by_domain(state_path, "contracts")
+        if contracts_worker.get("runtime_status") != "invalid":
+            raise RuntimeError("legacy runtime shape should project to invalid")
+        if "dependency_status invalid: preinstalled" not in str(contracts_worker.get("detail") or ""):
+            raise RuntimeError("contracts worker detail did not mention the legacy dependency_status value")
+
         wide_running = render(state_path, 160)
         narrow_running = render(state_path, 96)
         assert_contains(
@@ -186,6 +296,7 @@ def main() -> int:
                 "ACTION QUEUE",
                 "CHILD SUBAGENT SKILLS (Workers)",
                 "Audit-Dependencies",
+                "INVALID",
                 "Audit-Python-Lint",
                 "run_id: renderer-regression-run",
             ],

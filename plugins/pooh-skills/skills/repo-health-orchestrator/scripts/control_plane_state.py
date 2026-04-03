@@ -58,6 +58,23 @@ STATUS_LABELS = {
     "not-applicable": "NOT APPLICABLE",
 }
 
+RUNTIME_REQUIRED_KEYS = {
+    "schema_version",
+    "run_id",
+    "skill",
+    "domain",
+    "repo_root",
+    "generated_at",
+    "stage",
+    "dependency_status",
+    "current_action",
+    "bootstrap_actions",
+    "dependency_failures",
+    "summary_path",
+    "report_path",
+    "agent_brief_path",
+}
+
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -437,6 +454,8 @@ def runtime_to_worker_status(runtime: dict[str, Any]) -> tuple[str, str, str]:
     detail = str(runtime.get("current_action") or "")
     if dependency_status == "blocked" or stage == "blocked":
         return "blocked", STATUS_LABELS["blocked"], detail or "Dependency bootstrap blocked the worker."
+    if stage == "invalid":
+        return "invalid", STATUS_LABELS["invalid"], detail or "Runtime sidecar failed validation."
     if stage == "preflight":
         return "preflight", STATUS_LABELS["preflight"], detail or "Running runtime preflight."
     if stage == "bootstrapping":
@@ -448,6 +467,39 @@ def runtime_to_worker_status(runtime: dict[str, Any]) -> tuple[str, str, str]:
     if stage == "complete":
         return "complete", STATUS_LABELS["complete"], detail or "Audit completed."
     return "waiting", STATUS_LABELS["waiting"], detail or "Not started yet"
+
+
+def runtime_shape_error(runtime: dict[str, Any]) -> str | None:
+    missing = sorted(RUNTIME_REQUIRED_KEYS - set(runtime))
+    if missing:
+        return f"runtime missing required keys: {missing}"
+    if not isinstance(runtime.get("bootstrap_actions"), list):
+        return "runtime bootstrap_actions must be a list"
+    if not isinstance(runtime.get("dependency_failures"), list):
+        return "runtime dependency_failures must be a list"
+    dependency_status = str(runtime.get("dependency_status") or "")
+    if dependency_status not in {"ready", "auto-installed", "blocked"}:
+        return f"runtime dependency_status invalid: {dependency_status or '-'}"
+    return None
+
+
+def missing_runtime_artifacts(runtime: dict[str, Any]) -> list[str]:
+    stage = str(runtime.get("stage") or "")
+    if stage not in {"complete", "blocked", "not-applicable"}:
+        return []
+    missing: list[str] = []
+    for label, key in (
+        ("summary", "summary_path"),
+        ("report", "report_path"),
+        ("agent-brief", "agent_brief_path"),
+    ):
+        path_value = str(runtime.get(key) or "")
+        if not path_value:
+            missing.append(f"{label} path missing")
+            continue
+        if not Path(path_value).exists():
+            missing.append(f"{label} artifact missing at {path_value}")
+    return missing
 
 
 def sync_worker_runtime(args: argparse.Namespace) -> dict[str, Any]:
@@ -465,6 +517,14 @@ def sync_worker_runtime(args: argparse.Namespace) -> dict[str, Any]:
     runtime_run_id = str(runtime.get("run_id") or "")
     runtime_skill = str(runtime.get("skill") or "")
     expected_skill = str(target.get("skill_name") or "")
+    shape_error = runtime_shape_error(runtime)
+    if shape_error:
+        target["runtime_status"] = "invalid"
+        target["status_label"] = STATUS_LABELS["invalid"]
+        target["detail"] = shape_error
+        target["notes"] = shape_error
+        state["generated_at"] = utc_now()
+        return state
     if runtime_run_id != state["run_id"]:
         target["runtime_status"] = "invalid"
         target["status_label"] = STATUS_LABELS["invalid"]
@@ -481,6 +541,11 @@ def sync_worker_runtime(args: argparse.Namespace) -> dict[str, Any]:
         return state
 
     runtime_status, status_label, detail = runtime_to_worker_status(runtime)
+    missing = missing_runtime_artifacts(runtime)
+    if missing:
+        runtime_status = "invalid"
+        status_label = STATUS_LABELS["invalid"]
+        detail = "; ".join(missing)
     target["runtime_status"] = runtime_status
     target["status_label"] = status_label
     target["detail"] = detail

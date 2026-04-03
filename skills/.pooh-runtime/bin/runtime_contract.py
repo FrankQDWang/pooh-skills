@@ -503,19 +503,28 @@ def command_output(command: list[str], cwd: Path) -> tuple[bool, str]:
     return run_command(command, cwd)
 
 
-def tool_version_matches(tool_id: str, registry: dict[str, Any]) -> tuple[bool, str]:
+def tool_check_command(tool_id: str, registry: dict[str, Any]) -> list[str]:
+    entry = registry["tools"][tool_id]
+    tool_path = resolve_tool_path(tool_id, registry)
+    check_args = entry.get("check_args")
+    if not isinstance(check_args, list) or not check_args or any(not isinstance(item, str) or not item for item in check_args):
+        raise ValueError(f"tool registry entry for {tool_id} must declare non-empty check_args")
+    return [str(tool_path), *[str(item) for item in check_args]]
+
+
+def tool_check_matches(tool_id: str, registry: dict[str, Any]) -> tuple[bool, str, list[str]]:
     entry = registry["tools"][tool_id]
     tool_path = resolve_tool_path(tool_id, registry)
     if not tool_path.exists():
-        return False, "tool binary does not exist in shared runtime"
-    command = [str(tool_path), *[str(item) for item in entry.get("version_args") or ["--version"]]]
+        return False, "tool binary does not exist in shared runtime", [str(tool_path)]
+    command = tool_check_command(tool_id, registry)
     success, output = command_output(command, RUNTIME_ROOT)
     if not success:
-        return False, output
-    expected = str(entry.get("version_match") or "").strip()
+        return False, output, command
+    expected = str(entry.get("check_match") or "").strip()
     if expected and expected not in output:
-        return False, f"expected version marker {expected!r} but saw {output!r}"
-    return True, output
+        return False, f"expected check marker {expected!r} but saw {output!r}", command
+    return True, output, command
 
 
 def bootstrap_actions_entry(name: str, kind: str, status: str, command: list[str], details: str) -> dict[str, Any]:
@@ -600,9 +609,9 @@ def ensure_node_toolchain(actions: list[dict[str, Any]]) -> list[dict[str, Any]]
 def install_docs_tool(tool_id: str, registry: dict[str, Any], actions: list[dict[str, Any]]) -> list[dict[str, Any]]:
     entry = registry["tools"][tool_id]
     tool_path = resolve_tool_path(tool_id, registry)
-    version_ok, version_output = tool_version_matches(tool_id, registry)
-    if version_ok:
-        actions.append(bootstrap_actions_entry(tool_id, "docs-binary", "ready", [str(tool_path), "--version"], version_output))
+    check_ok, check_output, check_command = tool_check_matches(tool_id, registry)
+    if check_ok:
+        actions.append(bootstrap_actions_entry(tool_id, "docs-binary", "ready", check_command, check_output))
         return []
 
     spec = entry["download"]
@@ -672,8 +681,8 @@ def install_docs_tool(tool_id: str, registry: dict[str, Any], actions: list[dict
             "blocked_by_network": blocked_by_network,
         }]
 
-    ok, output = tool_version_matches(tool_id, registry)
-    actions.append(bootstrap_actions_entry(tool_id, "docs-binary", "installed" if ok else "failed", [str(tool_path), "--version"], output))
+    ok, output, check_command = tool_check_matches(tool_id, registry)
+    actions.append(bootstrap_actions_entry(tool_id, "docs-binary", "installed" if ok else "failed", check_command, output))
     if ok:
         return []
     blocked_by_security, blocked_by_permissions, blocked_by_network = classify_failure(output)
@@ -681,7 +690,7 @@ def install_docs_tool(tool_id: str, registry: dict[str, Any], actions: list[dict
         "name": tool_id,
         "kind": "docs-binary",
         "required_for": tool_id,
-        "attempted_command": f"{tool_path} --version",
+        "attempted_command": shlex.join(check_command),
         "failure_reason": output,
         "blocked_by_security": blocked_by_security,
         "blocked_by_permissions": blocked_by_permissions,
@@ -692,14 +701,14 @@ def install_docs_tool(tool_id: str, registry: dict[str, Any], actions: list[dict
 def verify_required_tools(required_tools: list[str], registry: dict[str, Any]) -> list[dict[str, Any]]:
     failures: list[dict[str, Any]] = []
     for tool_id in required_tools:
-        ok, output = tool_version_matches(tool_id, registry)
+        ok, output, command = tool_check_matches(tool_id, registry)
         if ok:
             continue
         failures.append({
             "name": tool_id,
             "kind": "tool",
             "required_for": tool_id,
-            "attempted_command": f"{resolve_tool_path(tool_id, registry)} --version",
+            "attempted_command": shlex.join(command),
             "failure_reason": output,
             "blocked_by_security": False,
             "blocked_by_permissions": False,
@@ -1488,26 +1497,65 @@ def extract_child_verdict(summary: dict[str, Any]) -> str:
     return str(value) if isinstance(value, str) else ""
 
 
+def invalid_sidecar(state: dict[str, Any], *, reason: str) -> dict[str, Any]:
+    updated = dict(state)
+    updated["stage"] = "invalid"
+    updated["current_action"] = reason
+    updated["generated_at"] = utc_now()
+    return updated
+
+
+def missing_final_artifacts(state: dict[str, Any], summary_path: Path) -> list[str]:
+    expected = [
+        ("summary", summary_path),
+        ("report", Path(str(state.get("report_path") or ""))),
+        ("agent-brief", Path(str(state.get("agent_brief_path") or ""))),
+    ]
+    missing: list[str] = []
+    for label, path in expected:
+        if not str(path):
+            missing.append(f"{label} path missing from runtime sidecar")
+            continue
+        if not path.exists():
+            missing.append(f"{label} artifact missing at {path}")
+    return missing
+
+
 def finalize_sidecar(args: argparse.Namespace) -> int:
     state_path = Path(args.state).resolve()
     state = load_json(state_path)
-    summary = load_json(Path(args.summary).resolve())
-    dependency_status = str(summary.get("dependency_status") or state.get("dependency_status") or "ready")
-    child_verdict = extract_child_verdict(summary)
-    if dependency_status == "blocked":
-        state["stage"] = "blocked"
-        state["current_action"] = "Blocked summary finalized."
-    elif child_verdict == "not-applicable":
-        state["stage"] = "not-applicable"
-        state["current_action"] = "Main audit finished as not applicable."
-    else:
-        state["stage"] = "complete"
-        state["current_action"] = "Main audit completed successfully."
-    state["dependency_status"] = dependency_status
-    state["generated_at"] = utc_now()
-    write_json_atomic(state_path, state)
-    print(f"Wrote {state_path}")
-    return 0
+    summary_path = Path(args.summary).resolve()
+    try:
+        summary = load_json(summary_path)
+        normalized = normalize_child_summary(state, summary_path, summary)
+        write_json_atomic(summary_path, normalized)
+        missing = missing_final_artifacts(state, summary_path)
+        if missing:
+            state = invalid_sidecar(state, reason="; ".join(missing))
+            write_json_atomic(state_path, state)
+            print(f"Wrote {state_path}")
+            return 1
+        dependency_status = str(normalized.get("dependency_status") or state.get("dependency_status") or "ready")
+        child_verdict = extract_child_verdict(normalized)
+        if dependency_status == "blocked":
+            state["stage"] = "blocked"
+            state["current_action"] = "Blocked summary finalized."
+        elif child_verdict == "not-applicable":
+            state["stage"] = "not-applicable"
+            state["current_action"] = "Main audit finished as not applicable."
+        else:
+            state["stage"] = "complete"
+            state["current_action"] = "Main audit completed successfully."
+        state["dependency_status"] = dependency_status
+        state["generated_at"] = utc_now()
+        write_json_atomic(state_path, state)
+        print(f"Wrote {state_path}")
+        return 0
+    except Exception as exc:
+        state = invalid_sidecar(state, reason=f"failed to finalize child artifacts: {exc}")
+        write_json_atomic(state_path, state)
+        print(f"Wrote {state_path}")
+        return 1
 
 
 def main() -> int:

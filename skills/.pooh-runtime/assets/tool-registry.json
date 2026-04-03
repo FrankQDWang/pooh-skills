@@ -39,10 +39,10 @@
       "binary_names": [
         "tach"
       ],
-      "version_args": [
+      "check_args": [
         "--version"
       ],
-      "version_match": "0.34.0"
+      "check_match": "0.34.0"
     },
     "ruff": {
       "ecosystem": "python",
@@ -50,10 +50,10 @@
       "binary_names": [
         "ruff"
       ],
-      "version_args": [
+      "check_args": [
         "--version"
       ],
-      "version_match": "0.15.8"
+      "check_match": "0.15.8"
     },
     "bandit": {
       "ecosystem": "python",
@@ -61,10 +61,10 @@
       "binary_names": [
         "bandit"
       ],
-      "version_args": [
+      "check_args": [
         "--version"
       ],
-      "version_match": "1.8.6"
+      "check_match": "1.8.6"
     },
     "check-jsonschema": {
       "ecosystem": "python",
@@ -72,10 +72,10 @@
       "binary_names": [
         "check-jsonschema"
       ],
-      "version_args": [
+      "check_args": [
         "--version"
       ],
-      "version_match": "0.34.1"
+      "check_match": "0.34.1"
     },
     "semgrep": {
       "ecosystem": "python",
@@ -83,10 +83,10 @@
       "binary_names": [
         "semgrep"
       ],
-      "version_args": [
+      "check_args": [
         "--version"
       ],
-      "version_match": "1.156.0"
+      "check_match": "1.156.0"
     },
     "typescript-eslint-stack": {
       "ecosystem": "node",
@@ -94,10 +94,10 @@
       "binary_names": [
         "eslint"
       ],
-      "version_args": [
+      "check_args": [
         "--version"
       ],
-      "version_match": "9.39.4"
+      "check_match": "9.39.4"
     },
     "biome": {
       "ecosystem": "node",
@@ -105,10 +105,10 @@
       "binary_names": [
         "biome"
       ],
-      "version_args": [
+      "check_args": [
         "--version"
       ],
-      "version_match": "2.2.7"
+      "check_match": "2.2.7"
     },
     "redocly-cli": {
       "ecosystem": "node",
@@ -116,10 +116,10 @@
       "binary_names": [
         "redocly"
       ],
-      "version_args": [
+      "check_args": [
         "--version"
       ],
-      "version_match": "2.11.1"
+      "check_match": "2.11.1"
     },
     "spectral-cli": {
       "ecosystem": "node",
@@ -127,10 +127,10 @@
       "binary_names": [
         "spectral"
       ],
-      "version_args": [
+      "check_args": [
         "--version"
       ],
-      "version_match": "6.15.0"
+      "check_match": "6.15.0"
     },
     "ajv-cli": {
       "ecosystem": "node",
@@ -138,10 +138,10 @@
       "binary_names": [
         "ajv"
       ],
-      "version_args": [
-        "--version"
+      "check_args": [
+        "help"
       ],
-      "version_match": "5.0.0"
+      "check_match": "Validate data file(s) against schema"
     },
     "playwright": {
       "ecosystem": "node",
@@ -149,10 +149,10 @@
       "binary_names": [
         "playwright"
       ],
-      "version_args": [
+      "check_args": [
         "--version"
       ],
-      "version_match": "1.56.1"
+      "check_match": "1.56.1"
     },
     "vitest": {
       "ecosystem": "node",
@@ -160,10 +160,10 @@
       "binary_names": [
         "vitest"
       ],
-      "version_args": [
+      "check_args": [
         "--version"
       ],
-      "version_match": "4.0.7"
+      "check_match": "4.0.7"
     },
     "tsc": {
       "ecosystem": "node",
@@ -171,10 +171,10 @@
       "binary_names": [
         "tsc"
       ],
-      "version_args": [
+      "check_args": [
         "--version"
       ],
-      "version_match": "5.9.3"
+      "check_match": "5.9.3"
     },
     "basedpyright": {
       "ecosystem": "node",
@@ -182,10 +182,10 @@
       "binary_names": [
         "basedpyright"
       ],
-      "version_args": [
+      "check_args": [
         "--version"
       ],
-      "version_match": "1.38.4"
+      "check_match": "1.38.4"
     },
     "dependency-cruiser": {
       "ecosystem": "node",
@@ -193,10 +193,10 @@
       "binary_names": [
         "depcruise"
       ],
-      "version_args": [
+      "check_args": [
         "--version"
       ],
-      "version_match": "17.3.10"
+      "check_match": "17.3.10"
     },
     "knip": {
       "ecosystem": "node",
@@ -204,10 +204,10 @@
       "binary_names": [
         "knip"
       ],
-      "version_args": [
+      "check_args": [
         "--version"
       ],
-      "version_match": "6.1.0"
+      "check_match": "6.1.0"
     },
     "ast-grep": {
       "ecosystem": "node",
@@ -215,10 +215,10 @@
       "binary_names": [
         "ast-grep"
       ],
-      "version_args": [
+      "check_args": [
         "--version"
       ],
-      "version_match": "0.42.0"
+      "check_match": "0.42.0"
     },
     "lychee": {
       "ecosystem": "docs",
@@ -226,10 +226,10 @@
       "binary_names": [
         "lychee"
       ],
-      "version_args": [
+      "check_args": [
         "--version"
       ],
-      "version_match": "0.23.0",
+      "check_match": "0.23.0",
       "download": {
         "owner": "lycheeverse",
         "repo": "lychee",
@@ -249,10 +249,10 @@
       "binary_names": [
         "vale"
       ],
-      "version_args": [
+      "check_args": [
         "--version"
       ],
-      "version_match": "3.14.1",
+      "check_match": "3.14.1",
       "download": {
         "owner": "errata-ai",
         "repo": "vale",

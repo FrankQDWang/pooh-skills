@@ -9,7 +9,7 @@ This skill is the only public entrypoint in the `pooh-skills` plugin.
 
 It is the coordinator, not the specialist.
 
-Its job is to launch the focused audit skills as parallel subagents, collect their current-run artifacts, and turn them into one executive diagnosis instead of seventeen unrelated reports.
+Its job is to launch the focused audit skills as batched subagents, collect their current-run artifacts, and turn them into one executive diagnosis instead of seventeen unrelated reports.
 
 ## When to use this
 
@@ -43,28 +43,33 @@ Write blocked repo-health artifacts when orchestrator preflight itself is blocke
 This skill coordinates these seventeen child audits.
 
 They are private plugin resources, not public user-facing trigger names.
-For every child run, read the worker instructions from `../../internal-skills/<skill-id>/SKILL.md` relative to this skill directory.
+For every child run, resolve the worker instructions from the current environment:
+
+- in the pooh-skills source tree, read `../<skill-id>/SKILL.md` relative to this skill directory
+- in the installed plugin bundle, read `../../internal-skills/<skill-id>/SKILL.md`
+
+Always use the path that actually exists in the current environment.
 Do not ask the user to invoke those worker skills directly.
 
 The expected workers are. Each path below is relative to the target repo root's `.repo-harness`:
 
-- `dependency-audit` from `../../internal-skills/dependency-audit/SKILL.md` → `.repo-harness/skills/dependency-audit/summary.json`
-- `signature-contract-hardgate` from `../../internal-skills/signature-contract-hardgate/SKILL.md` → `.repo-harness/skills/signature-contract-hardgate/summary.json`
-- `pythonic-ddd-drift-audit` from `../../internal-skills/pythonic-ddd-drift-audit/SKILL.md` → `.repo-harness/skills/pythonic-ddd-drift-audit/summary.json`
-- `module-shape-hardgate` from `../../internal-skills/module-shape-hardgate/SKILL.md` → `.repo-harness/skills/module-shape-hardgate/summary.json`
-- `openapi-jsonschema-governance-audit` from `../../internal-skills/openapi-jsonschema-governance-audit/SKILL.md` → `.repo-harness/skills/openapi-jsonschema-governance-audit/summary.json`
-- `distributed-side-effect-hardgate` from `../../internal-skills/distributed-side-effect-hardgate/SKILL.md` → `.repo-harness/skills/distributed-side-effect-hardgate/summary.json`
-- `pydantic-ai-temporal-hardgate` from `../../internal-skills/pydantic-ai-temporal-hardgate/SKILL.md` → `.repo-harness/skills/pydantic-ai-temporal-hardgate/summary.json`
-- `error-governance-hardgate` from `../../internal-skills/error-governance-hardgate/SKILL.md` → `.repo-harness/skills/error-governance-hardgate/summary.json`
-- `overdefensive-silent-failure-hardgate` from `../../internal-skills/overdefensive-silent-failure-hardgate/SKILL.md` → `.repo-harness/skills/overdefensive-silent-failure-hardgate/summary.json`
-- `ts-frontend-regression-audit` from `../../internal-skills/ts-frontend-regression-audit/SKILL.md` → `.repo-harness/skills/ts-frontend-regression-audit/summary.json`
-- `python-lint-format-audit` from `../../internal-skills/python-lint-format-audit/SKILL.md` → `.repo-harness/skills/python-lint-format-audit/summary.json`
-- `ts-lint-format-audit` from `../../internal-skills/ts-lint-format-audit/SKILL.md` → `.repo-harness/skills/ts-lint-format-audit/summary.json`
-- `python-ts-security-posture-audit` from `../../internal-skills/python-ts-security-posture-audit/SKILL.md` → `.repo-harness/skills/python-ts-security-posture-audit/summary.json`
-- `secrets-and-hardcode-audit` from `../../internal-skills/secrets-and-hardcode-audit/SKILL.md` → `.repo-harness/skills/secrets-and-hardcode-audit/summary.json`
-- `test-quality-audit` from `../../internal-skills/test-quality-audit/SKILL.md` → `.repo-harness/skills/test-quality-audit/summary.json`
-- `llm-api-freshness-guard` from `../../internal-skills/llm-api-freshness-guard/SKILL.md` → `.repo-harness/skills/llm-api-freshness-guard/summary.json`
-- `controlled-cleanup-hardgate` from `../../internal-skills/controlled-cleanup-hardgate/SKILL.md` → `.repo-harness/skills/controlled-cleanup-hardgate/summary.json`
+- `dependency-audit` from the resolved worker `SKILL.md` → `.repo-harness/skills/dependency-audit/summary.json`
+- `signature-contract-hardgate` from the resolved worker `SKILL.md` → `.repo-harness/skills/signature-contract-hardgate/summary.json`
+- `pythonic-ddd-drift-audit` from the resolved worker `SKILL.md` → `.repo-harness/skills/pythonic-ddd-drift-audit/summary.json`
+- `module-shape-hardgate` from the resolved worker `SKILL.md` → `.repo-harness/skills/module-shape-hardgate/summary.json`
+- `openapi-jsonschema-governance-audit` from the resolved worker `SKILL.md` → `.repo-harness/skills/openapi-jsonschema-governance-audit/summary.json`
+- `distributed-side-effect-hardgate` from the resolved worker `SKILL.md` → `.repo-harness/skills/distributed-side-effect-hardgate/summary.json`
+- `pydantic-ai-temporal-hardgate` from the resolved worker `SKILL.md` → `.repo-harness/skills/pydantic-ai-temporal-hardgate/summary.json`
+- `error-governance-hardgate` from the resolved worker `SKILL.md` → `.repo-harness/skills/error-governance-hardgate/summary.json`
+- `overdefensive-silent-failure-hardgate` from the resolved worker `SKILL.md` → `.repo-harness/skills/overdefensive-silent-failure-hardgate/summary.json`
+- `ts-frontend-regression-audit` from the resolved worker `SKILL.md` → `.repo-harness/skills/ts-frontend-regression-audit/summary.json`
+- `python-lint-format-audit` from the resolved worker `SKILL.md` → `.repo-harness/skills/python-lint-format-audit/summary.json`
+- `ts-lint-format-audit` from the resolved worker `SKILL.md` → `.repo-harness/skills/ts-lint-format-audit/summary.json`
+- `python-ts-security-posture-audit` from the resolved worker `SKILL.md` → `.repo-harness/skills/python-ts-security-posture-audit/summary.json`
+- `secrets-and-hardcode-audit` from the resolved worker `SKILL.md` → `.repo-harness/skills/secrets-and-hardcode-audit/summary.json`
+- `test-quality-audit` from the resolved worker `SKILL.md` → `.repo-harness/skills/test-quality-audit/summary.json`
+- `llm-api-freshness-guard` from the resolved worker `SKILL.md` → `.repo-harness/skills/llm-api-freshness-guard/summary.json`
+- `controlled-cleanup-hardgate` from the resolved worker `SKILL.md` → `.repo-harness/skills/controlled-cleanup-hardgate/summary.json`
 
 It is okay if a child domain concludes `not-applicable`.
 It is not okay to hide missing or invalid coverage.
@@ -98,7 +103,7 @@ Read only what is needed.
 - Generate one current-run `run_id` during reset and pass it to every child.
 - Maintain the target repo's `.repo-harness/repo-health-control-plane.json` as the live terminal control-plane state for the current run.
 - Treat `.repo-harness/skills/<skill-id>/runtime.json` under the target repo root as the live sidecar for each child skill's `preflight / bootstrapping / running / blocked / complete` state.
-- Launch all seventeen child domains before waiting for results.
+- Launch child domains in ordered subagent batches of at most six concurrent workers.
 - Keep child prompts narrow: one domain, one output contract, no cross-domain judgment.
 - Preserve the child skill's judgment; do not sand off sharp findings during aggregation.
 - Keep coverage gaps visible.
@@ -119,14 +124,19 @@ Do not override those values.
 Each child subagent prompt must include:
 
 - repo root
+- exact harness root
 - exact internal worker `SKILL.md` path it must read before doing anything else
+- exact wrapper invocation when the worker exposes `scripts/run_all.sh`
 - exact summary path it must write
 - its human report path and agent brief path when applicable
 - the rule that it owns only its domain and must not make cross-domain conclusions
 - the rule that best-effort artifacts are still required on uncertainty, using states like `triage`, `unverified`, `scan-blocked`, or `not-applicable`
 - the rule that dependency bootstrap failures are not ordinary uncertainty: they must emit blocked artifacts with machine-readable dependency failures
+- the rule that `runtime.json`, `summary.json`, `report.md`, and `agent-brief.md` are all mandatory current-run artifacts
+- the rule that it must not bypass the wrapper and write a raw summary directly when `scripts/run_all.sh` exists
 
-Child subagents may call their own deterministic scripts or local wrappers if their private worker skill defines them.
+If the worker skill defines `scripts/run_all.sh`, the child subagent must call that wrapper and let it own bootstrap, summary injection, validation, and finalization.
+Only skills without a wrapper may invoke their lower-level scanner directly.
 The orchestrator itself must not shell out to child wrappers.
 
 ## Terminal control plane contract
@@ -210,9 +220,18 @@ If this shared bootstrap returns blocked failures:
 
 ### 3) Spawn child audits
 
-Launch the seventeen child subagents in parallel.
+Launch the seventeen child subagents in ordered batches of at most six concurrent workers.
 
-Immediately mark the overall stage as `spawning`, then mark each child worker as `running`, and redraw the control plane.
+Required batching contract:
+
+- keep the existing catalog order unless the user explicitly asks for a different order
+- use batches of `6 + 6 + 5` for the current 17-domain fleet
+- for each batch, spawn the whole batch first and only then wait for results from that batch
+- do not try to spawn the next batch until the current batch has reached final worker states
+- do not shell out to child wrappers from the orchestrator itself; child subagents still own wrapper execution
+
+Immediately mark the overall stage as `spawning`, then mark only the current batch's child workers as `running`, and redraw the control plane.
+Workers that belong to later batches should stay in `waiting` until their batch starts.
 
 ### 4) Track progress live
 
@@ -239,7 +258,7 @@ For each child, surface only these runtime states:
 - `missing`
 - `not-applicable`
 
-If one child fails, keep waiting for the others.
+If one child fails, keep waiting for the rest of its batch and then continue with later batches.
 Do not abort the overall run.
 Blocked child skills still count as current-run coverage because they produced official blocked artifacts.
 
@@ -249,6 +268,12 @@ On every child completion, timeout poll, or state change:
 2. update the overall stage / progress ratio
 3. redraw the terminal control plane
 
+When a new batch begins:
+
+1. keep previously completed workers in their final states
+2. move only the newly spawned batch from `waiting` to active runtime states
+3. keep not-yet-spawned workers in `waiting` without inventing queue-only runtime states
+
 Use the current run's real information only:
 
 - do not invent queue states
@@ -257,14 +282,14 @@ Use the current run's real information only:
 
 ### 5) Collect and validate child artifacts
 
-After the subagents finish, check the seventeen expected summary paths.
+After the subagents finish, check the seventeen expected child artifact sets.
 
 For each domain, classify the result as:
 
-- `present` - summary exists and parses
+- `present` - summary exists, parses, and the child report plus agent brief also exist
 - `blocked` - summary exists, parses, and its `dependency_status` is `blocked`
 - `not-applicable` - summary exists and its verdict is `not-applicable`
-- `invalid` - file exists but is missing or malformed for aggregation
+- `invalid` - summary exists but is malformed for aggregation, wrong-run, or missing `report.md` / `agent-brief.md`
 - `missing` - expected summary was not produced
 
 Then emit a progress update labeled `collecting`.

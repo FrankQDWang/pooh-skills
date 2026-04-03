@@ -43,11 +43,13 @@ Repo-level rollup artifacts stay at the target repo's `.repo-harness` root:
 - The orchestrator deletes and recreates `.repo-harness` before spawning child audits.
 - The orchestrator bootstraps the shared `.pooh-runtime` toolchain before spawning child audits.
 - The orchestrator generates one `run_id` during reset and treats it as the current-run identity.
+- The orchestrator may execute child audits in ordered subagent batches, but each child must still belong to the same current run.
 - Every child runtime sidecar and child summary must carry the current `run_id`.
 - The orchestrator maintains `.repo-harness/repo-health-control-plane.json` as the live terminal view for the current run.
 - The orchestrator may aggregate only child summaries whose `run_id` matches the current run.
 - The richer synthesis layer may read child human reports and agent briefs, but it must still treat the machine summary as the source of truth for state.
-- Child skills may use their own local scripts or wrappers internally, but that is not the orchestrator contract.
+- If a child skill exposes `scripts/run_all.sh`, the subagent must call that wrapper and let it own bootstrap, summary injection, validation, and finalization.
+- Only skills without a wrapper may invoke their lower-level scanner directly.
 - Shared tool versions come only from `.pooh-runtime/python-toolchain/uv.lock` and `.pooh-runtime/node-toolchain/pnpm-lock.yaml`.
 - Python audit CLIs come only from the shared `uv` `audit` dependency group; TS/Node audit CLIs come only from shared `pnpm` `devDependencies`.
 - `lychee` and `Vale` remain docs-only hard-dependency exceptions managed by the shared runtime, not by per-skill package manifests.
@@ -56,10 +58,10 @@ Repo-level rollup artifacts stay at the target repo's `.repo-harness` root:
 
 Use these statuses during collection and rollup:
 
-- `present` - summary exists, parses, and matches the current run
+- `present` - summary exists, parses, matches the current run, and the corresponding `report.md` plus `agent-brief.md` also exist
 - `blocked` - summary exists, parses, and its dependency bootstrap was blocked
 - `not-applicable` - summary exists and clearly declares `not-applicable`
-- `invalid` - summary path exists but cannot be parsed or does not belong to the current run
+- `invalid` - summary path exists but cannot be parsed, does not belong to the current run, or is missing `report.md` / `agent-brief.md`
 - `missing` - no summary was produced at the expected path
 
 The orchestrator should never pretend old artifacts count as current coverage.

@@ -122,10 +122,27 @@ def assert_positive_ui_case() -> None:
         raise RuntimeError(f"positive-ui: expected ui responsibility tag in {tags}")
 
 
+def assert_foreign_runtime_noise_case() -> None:
+    summary = run_case(
+        "foreign-runtime-noise",
+        {
+            "src/service.py": "def greet(name: str) -> str:\n    return f'hi {name}'\n",
+            ".council-runtime/home/.local/share/uv/fixture/site-packages/noise/bad.py": "def broken(:\n    pass\n",
+        },
+    )
+    if summary["overall_verdict"] == "scan-blocked":
+        raise RuntimeError("foreign-runtime-noise: foreign runtime parse blockers must not block the official verdict")
+    if summary["coverage"]["files_scanned"] != 1:
+        raise RuntimeError(f"foreign-runtime-noise: expected exactly one first-party file, got {summary['coverage']['files_scanned']}")
+    if any(f["path"].startswith(".council-runtime/") for f in summary["findings"]):
+        raise RuntimeError("foreign-runtime-noise: foreign runtime path leaked into findings")
+
+
 def main() -> int:
     assert_syntax_error_case()
     assert_ui_false_positive_case()
     assert_positive_ui_case()
+    assert_foreign_runtime_noise_case()
     print("Module-shape fixture regressions passed.")
     return 0
 

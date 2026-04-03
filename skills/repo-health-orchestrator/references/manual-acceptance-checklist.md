@@ -9,7 +9,7 @@ Prove one real orchestrator run can:
 - generate a fresh `run_id`
 - reset `.repo-harness`
 - bootstrap the shared toolchain once
-- spawn all 17 child subagents in parallel
+- execute all 17 child audits through subagents using ordered batches of at most 6 concurrent workers
 - redraw the live terminal control plane as workers move through `waiting / preflight / bootstrapping / running / complete / blocked / invalid / missing / not-applicable`
 - finalize with one root machine summary, one evidence file, one human report, and one agent brief
 
@@ -21,11 +21,12 @@ Prove one real orchestrator run can:
 4. Confirm `.repo-harness/repo-health-shared-bootstrap.json` appears before child summaries.
 5. Confirm every managed skill gets its own child directory under `.repo-harness/skills/<skill-id>/`.
 6. During the run, confirm the terminal redraw shows all 17 worker cards and does not collapse into snapshot logging.
-7. Confirm each worker card eventually lands in one final state: `complete`, `blocked`, `invalid`, `missing`, or `not-applicable`.
-8. Confirm every child directory contains `runtime.json`, `summary.json`, `report.md`, and `agent-brief.md`.
-9. Confirm `repo-health-summary.json`, `repo-health-evidence.json`, `repo-health-report.md`, and `repo-health-agent-brief.md` exist at the target repo's `.repo-harness` root.
-10. Confirm `repo-health-summary.json` `run_id` matches every child `summary.json` and `runtime.json`.
-11. Confirm the final control-plane frame shows `overall_health`, `coverage_status`, `Missing`, `Invalid`, and the action queue.
+7. Confirm workers start in ordered batches instead of all 17 spawning at once, and no batch exceeds 6 concurrent child subagents.
+8. Confirm each worker card eventually lands in one final state: `complete`, `blocked`, `invalid`, `missing`, or `not-applicable`.
+9. Confirm every child directory contains `runtime.json`, `summary.json`, `report.md`, and `agent-brief.md`.
+10. Confirm `repo-health-summary.json`, `repo-health-evidence.json`, `repo-health-report.md`, and `repo-health-agent-brief.md` exist at the target repo's `.repo-harness` root.
+11. Confirm `repo-health-summary.json` `run_id` matches every child `summary.json` and `runtime.json`.
+12. Confirm the final control-plane frame shows `overall_health`, `coverage_status`, `Missing`, `Invalid`, and the action queue.
 
 ## Expected pass condition
 

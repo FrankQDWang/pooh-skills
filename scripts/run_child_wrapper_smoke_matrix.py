@@ -23,6 +23,7 @@ from repo_health_catalog import DOMAIN_SPECS  # noqa: E402
 RUN_ID = "child-wrapper-smoke-run"
 VALID_DEPENDENCY_STATUSES = {"ready", "auto-installed", "blocked"}
 VALID_ROLLUP_BUCKETS = {"blocked", "red", "yellow", "green", "not-applicable"}
+VALID_FINAL_STAGES = {"complete", "blocked", "not-applicable"}
 
 
 def create_fixture_repo(root: Path) -> None:
@@ -93,6 +94,8 @@ def assert_sidecar(path: Path, skill_name: str, domain: str, repo_root: Path) ->
         raise RuntimeError(f"{skill_name}: runtime generated_at missing")
     if payload.get("dependency_status") not in VALID_DEPENDENCY_STATUSES:
         raise RuntimeError(f"{skill_name}: runtime dependency_status invalid")
+    if payload.get("stage") not in VALID_FINAL_STAGES:
+        raise RuntimeError(f"{skill_name}: runtime stage did not finalize cleanly")
     if not isinstance(payload.get("bootstrap_actions"), list):
         raise RuntimeError(f"{skill_name}: runtime bootstrap_actions missing")
     if not isinstance(payload.get("dependency_failures"), list):

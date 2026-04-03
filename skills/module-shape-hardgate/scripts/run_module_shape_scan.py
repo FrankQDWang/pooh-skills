@@ -11,31 +11,16 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable, List, Optional, Sequence
+from typing import List, Optional, Sequence
+
+RUNTIME_BIN_DIR = Path(__file__).resolve().parents[2] / ".pooh-runtime" / "bin"
+if str(RUNTIME_BIN_DIR) not in sys.path:
+    sys.path.insert(0, str(RUNTIME_BIN_DIR))
+
+from standard_audit_utils import describe_surface_source, first_party_text_files  # noqa: E402
+from standard_audit_utils import foreign_runtime_text_files, format_surface_note, surface_source  # noqa: E402
 
 
-EXCLUDED_DIRS = {
-    ".git",
-    ".hg",
-    ".svn",
-    ".repo-harness",
-    ".pooh-runtime",
-    ".mypy_cache",
-    ".pytest_cache",
-    ".ruff_cache",
-    ".tox",
-    ".venv",
-    "venv",
-    "__pycache__",
-    "node_modules",
-    "dist",
-    "build",
-    "coverage",
-    "out",
-    "target",
-    ".next",
-    ".turbo",
-}
 SUPPORTED_SUFFIXES = {".py": "python", ".ts": "typescript", ".tsx": "typescript"}
 GENERATED_MARKERS = {
     "generated",
@@ -232,24 +217,12 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
-def is_excluded_path(path: Path) -> bool:
-    for part in path.parts:
-        if part in EXCLUDED_DIRS:
-            return True
-    return False
-
-
 def iter_source_files(repo_root: Path) -> list[Path]:
-    files: list[Path] = []
-    for path in repo_root.rglob("*"):
-        if not path.is_file():
-            continue
-        if is_excluded_path(path.relative_to(repo_root)):
-            continue
-        if path.suffix not in SUPPORTED_SUFFIXES:
-            continue
-        files.append(path)
-    return sorted(files)
+    return sorted(
+        path
+        for path in first_party_text_files(repo_root, suffixes=set(SUPPORTED_SUFFIXES))
+        if path.suffix in SUPPORTED_SUFFIXES
+    )
 
 
 def strip_ts_comments(line: str, in_block: bool) -> tuple[str, bool]:
@@ -1019,6 +992,11 @@ def render_human_report(summary: dict) -> str:
     lines.append(f"- Overall verdict: `{summary['overall_verdict']}`")
     lines.append(f"- One-line diagnosis: `{summary['summary_line']}`")
     lines.append(f"- Files scanned: `{summary['coverage']['files_scanned']}`")
+    repo_notes = summary.get("repo_profile", {}).get("notes", [])
+    if repo_notes:
+        lines.append(f"- Surface source: `{repo_notes[0]}`")
+    if len(repo_notes) >= 2:
+        lines.append(f"- Scan surface: `{repo_notes[1]}`")
     if scan_blocked:
         lines.append(f"- Parse blockers: `{len(scan_blockers)}`")
     lines.append("")
@@ -1190,6 +1168,11 @@ def render_agent_brief(summary: dict) -> str:
     lines.append("## Context")
     lines.append(f"- overall_verdict: `{summary['overall_verdict']}`")
     lines.append(f"- repo_root: `{summary['repo_root']}`")
+    repo_notes = summary.get("repo_profile", {}).get("notes", [])
+    if repo_notes:
+        lines.append(f"- surface_source: `{repo_notes[0]}`")
+    if len(repo_notes) >= 2:
+        lines.append(f"- scan_surface: `{repo_notes[1]}`")
     lines.append("")
     lines.append("## Ordered actions")
     actions = summary.get("immediate_actions", []) + summary.get("next_actions", []) + summary.get("later_actions", [])
@@ -1251,6 +1234,17 @@ def validation_checks_for(finding: dict) -> list[str]:
 
 def build_summary(repo_root: Path, out_dir: Path) -> dict:
     files = iter_source_files(repo_root)
+    surface_kind, _ = surface_source(repo_root)
+    surface_note = format_surface_note(
+        first_party_count=len(files),
+        foreign_runtime_excluded=sum(
+            1
+            for path in foreign_runtime_text_files(repo_root, suffixes=set(SUPPORTED_SUFFIXES))
+            if path.suffix in SUPPORTED_SUFFIXES
+        ),
+        source=surface_kind,
+    )
+    surface_source_note = describe_surface_source(repo_root)
     languages = sorted({SUPPORTED_SUFFIXES[p.suffix] for p in files})
     texts: dict[str, str] = {}
     metrics_by_path: dict[str, FileMetrics] = {}
@@ -1279,7 +1273,7 @@ def build_summary(repo_root: Path, out_dir: Path) -> dict:
         "python_files": coverage["python_files"],
         "typescript_files": coverage["typescript_files"],
         "exempt_files": coverage["exempt_files"],
-        "notes": [],
+        "notes": [surface_source_note, surface_note],
     }
     verdict = overall_verdict(findings, metrics_by_path, languages)
     severity_counts = Counter(f["severity"] for f in findings if f["category"] != "scan-blocker")

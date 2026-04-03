@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import ast
 import json
-import os
 import sys
 from collections import Counter
 from dataclasses import asdict, dataclass
@@ -18,12 +17,10 @@ RUNTIME_BIN_DIR = Path(__file__).resolve().parents[2] / ".pooh-runtime" / "bin"
 if str(RUNTIME_BIN_DIR) not in sys.path:
     sys.path.insert(0, str(RUNTIME_BIN_DIR))
 
+from standard_audit_utils import describe_surface_source, first_party_text_files  # noqa: E402
+from standard_audit_utils import foreign_runtime_anchors, foreign_runtime_text_files  # noqa: E402
+from standard_audit_utils import format_surface_note, surface_source  # noqa: E402
 from tool_runner import ToolRun, run_locked_tool  # noqa: E402
-
-SKIP_DIRS = {
-    ".git", ".hg", ".svn", ".venv", "venv", "node_modules", "dist", "build",
-    "__pycache__", ".mypy_cache", ".pytest_cache", ".ruff_cache", ".repo-harness",
-}
 
 FORBIDDEN_DOMAIN_MODULES = {
     "fastapi", "flask", "django", "sqlalchemy", "requests", "httpx", "aiohttp",
@@ -54,11 +51,11 @@ class Finding:
 
 
 def iter_py_files(root: Path) -> Iterable[Path]:
-    for current_root, dirs, files in os.walk(root):
-        dirs[:] = [d for d in dirs if d not in SKIP_DIRS and d != "skills"]
-        for name in files:
-            if name.endswith(".py"):
-                yield Path(current_root) / name
+    yield from (
+        path
+        for path in first_party_text_files(root, suffixes={".py"})
+        if path.suffix == ".py"
+    )
 
 
 def path_parts_lower(path: Path) -> list[str]:
@@ -169,16 +166,21 @@ def severity_counts(findings: list[Finding]) -> dict[str, int]:
     return {k: int(counter.get(k, 0)) for k in ("critical", "high", "medium", "low")}
 
 
-def build_tool_runs(repo: Path, python_files: int) -> tuple[list[ToolRun], dict[str, Any]]:
-    if python_files == 0:
+def build_tool_runs(repo: Path, python_files: int, files: list[Path]) -> tuple[list[ToolRun], dict[str, Any]]:
+    if python_files == 0 or not files:
         return [], {}
 
     tool_runs: list[ToolRun] = []
     payloads: dict[str, Any] = {}
+    target_args = [str(path.relative_to(repo)) for path in files]
+    exclude_args: list[str] = []
+    excluded = foreign_runtime_anchors(repo, suffixes={".py"})
+    if excluded:
+        exclude_args = ["-e", ",".join(excluded)]
     for tool, args in (
-        ("tach", ["check", "--output", "json"]),
-        ("ruff", ["check", "--output-format", "json", str(repo)]),
-        ("basedpyright", ["--outputjson", "-p", str(repo)]),
+        ("tach", ["check", "--output", "json", *exclude_args]),
+        ("ruff", ["check", "--output-format", "json", *target_args]),
+        ("basedpyright", ["--outputjson", "-p", str(repo), *target_args]),
     ):
         run, payload = run_locked_tool(tool, args, repo, allow_exit_codes={0, 1})
         tool_runs.append(run)
@@ -266,6 +268,8 @@ def render_human_report(summary: dict[str, Any]) -> str:
         f"- overall_verdict: `{summary.get('overall_verdict')}`",
         f"- summary_line: {summary.get('summary_line')}",
         f"- dependency_status: `{summary.get('dependency_status')}`",
+        f"- surface_source: `{summary.get('surface_source_note', '')}`",
+        f"- scan_surface: `{summary.get('surface_note', '')}`",
         "",
         "## 2. Locked tool runs",
         "",
@@ -317,6 +321,8 @@ def render_agent_brief(summary: dict[str, Any]) -> str:
         f"- overall_verdict: `{summary.get('overall_verdict')}`",
         f"- dependency_status: `{summary.get('dependency_status')}`",
         f"- summary_line: {summary.get('summary_line')}",
+        f"- surface_source: `{summary.get('surface_source_note', '')}`",
+        f"- scan_surface: `{summary.get('surface_note', '')}`",
         "",
         "## Ordered actions",
         "1. Remove boundary leaks and framework imports from domain surfaces first.",
@@ -350,6 +356,18 @@ def scan(repo: Path) -> dict[str, Any]:
     cqrs_name_count = 0
     read_model_clues = 0
     entrypoint_clues = 0
+    python_paths = list(iter_py_files(repo))
+    surface_kind, _ = surface_source(repo)
+    surface_note = format_surface_note(
+        first_party_count=len(python_paths),
+        foreign_runtime_excluded=sum(
+            1
+            for path in foreign_runtime_text_files(repo, suffixes={".py"})
+            if path.suffix == ".py"
+        ),
+        source=surface_kind,
+    )
+    surface_source_note = describe_surface_source(repo)
 
     def add(f: Finding) -> None:
         key = (f.category, f.path, f.line, f.title)
@@ -357,7 +375,7 @@ def scan(repo: Path) -> dict[str, Any]:
             findings.append(f)
             seen.add(key)
 
-    for path in iter_py_files(repo):
+    for path in python_paths:
         python_files += 1
         rel = path.relative_to(repo)
         if is_domain_file(rel):
@@ -520,7 +538,7 @@ def scan(repo: Path) -> dict[str, Any]:
             merge_gate="warn-only",
         ))
 
-    tool_runs, payloads = build_tool_runs(repo, python_files)
+    tool_runs, payloads = build_tool_runs(repo, python_files, python_paths)
     add_tool_findings(findings, tool_runs, payloads)
     verdict, summary_line = infer_verdict(findings, python_files, tool_runs)
     return {
@@ -530,6 +548,8 @@ def scan(repo: Path) -> dict[str, Any]:
         "repo_root": str(repo),
         "overall_verdict": verdict,
         "summary_line": summary_line,
+        "surface_source_note": surface_source_note,
+        "surface_note": surface_note,
         "tool_runs": [item.to_dict() for item in tool_runs],
         "coverage": {
             "files_scanned": python_files,

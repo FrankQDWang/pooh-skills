@@ -268,6 +268,39 @@ def _filter_surface_files(
     return sorted(files)
 
 
+def _rel_path_matches(
+    rel_path: Path,
+    *,
+    suffixes: set[str] | None = None,
+    names: set[str] | None = None,
+) -> bool:
+    if names is not None and rel_path.name not in names:
+        return False
+    if suffixes is None:
+        return True
+    return rel_path.suffix.lower() in suffixes or rel_path.name in {
+        "package.json",
+        "pnpm-lock.yaml",
+        "pyproject.toml",
+        "uv.lock",
+        ".npmrc",
+    }
+
+
+def _filter_surface_rel_paths(
+    rel_paths: Iterable[str],
+    *,
+    suffixes: set[str] | None = None,
+    names: set[str] | None = None,
+) -> list[str]:
+    matched: list[str] = []
+    for rel_value in rel_paths:
+        rel_path = Path(rel_value)
+        if _rel_path_matches(rel_path, suffixes=suffixes, names=names):
+            matched.append(rel_value)
+    return sorted(matched)
+
+
 def first_party_files(repo: Path) -> list[Path]:
     surface = repo_surface(repo)
     return _filter_surface_files(repo, surface.first_party_files)
@@ -289,6 +322,16 @@ def first_party_text_files(
     return _filter_surface_files(repo, surface.first_party_files, suffixes=wanted, names=names)
 
 
+def first_party_rel_paths(
+    repo: Path,
+    *,
+    suffixes: set[str] | None = None,
+    names: set[str] | None = None,
+) -> list[str]:
+    surface = repo_surface(repo)
+    return _filter_surface_rel_paths(surface.first_party_files, suffixes=suffixes, names=names)
+
+
 def foreign_runtime_text_files(
     repo: Path,
     *,
@@ -298,6 +341,44 @@ def foreign_runtime_text_files(
     wanted = suffixes or TEXT_EXTS
     surface = repo_surface(repo)
     return _filter_surface_files(repo, surface.foreign_runtime_files, suffixes=wanted, names=names)
+
+
+def foreign_runtime_anchor(rel_path: Path) -> Path | None:
+    parts = tuple(rel_path.parts)
+    if not parts:
+        return None
+    if parts[0] in FOREIGN_RUNTIME_ROOTS:
+        return Path(parts[0])
+    for index, part in enumerate(parts):
+        if part in FOREIGN_RUNTIME_PARTS:
+            return Path(*parts[: index + 1])
+    for sequence in FOREIGN_RUNTIME_SEQUENCES:
+        if not path_has_sequence(parts, sequence):
+            continue
+        for index in range(0, len(parts) - len(sequence) + 1):
+            if parts[index : index + len(sequence)] == sequence:
+                return Path(*parts[: index + len(sequence)])
+    return None
+
+
+def foreign_runtime_anchors(
+    repo: Path,
+    *,
+    suffixes: set[str] | None = None,
+    names: set[str] | None = None,
+) -> list[str]:
+    surface = repo_surface(repo)
+    anchors: set[str] = set()
+    for rel_value in surface.foreign_runtime_files:
+        rel_path = Path(rel_value)
+        if not _rel_path_matches(rel_path, suffixes=suffixes, names=names):
+            continue
+        anchor = foreign_runtime_anchor(rel_path)
+        if anchor is None:
+            anchors.add(rel_value)
+        else:
+            anchors.add(anchor.as_posix())
+    return sorted(anchors)
 
 
 def is_actionable_secret_file(rel_path: Path) -> bool:
