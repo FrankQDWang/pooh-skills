@@ -23,13 +23,14 @@ source "$SCRIPT_DIR/../../.pooh-runtime/bin/runtime_wrapper.sh"
 REPO_ROOT="${1:-.}"
 HARNESS_DIR="${2:-$REPO_ROOT/.repo-harness}"
 OUT_DIR="$HARNESS_DIR/skills/llm-api-freshness-guard"
-EVIDENCE_PATH="$OUT_DIR/surface-evidence.json"
+EXTRA_DIR="$OUT_DIR/extra"
+EVIDENCE_PATH="$EXTRA_DIR/surface-evidence.json"
 SUMMARY_PATH="$OUT_DIR/summary.json"
 REPORT_PATH="$OUT_DIR/report.md"
 AGENT_BRIEF_PATH="$OUT_DIR/agent-brief.md"
 MANIFEST_PATH="$SCRIPT_DIR/../assets/runtime-dependencies.json"
 
-mkdir -p "$OUT_DIR"
+mkdir -p "$OUT_DIR" "$EXTRA_DIR"
 
 pooh_runtime_prepare \
   "llm-api-freshness-guard" \

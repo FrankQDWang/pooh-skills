@@ -1,6 +1,6 @@
 interface:
   display_name: "Repo Health Orchestrator"
   short_description: "协调多 skill 审计并汇总统一仓库健康报告"
-  default_prompt: "Use $repo-health-orchestrator to launch the full 15-domain repo audit child subagents, gather their current-run summaries, and produce one unified repo health report."
+  default_prompt: "Use $repo-health-orchestrator to launch the full 17-domain repo audit child subagents, gather their current-run summaries, and produce one unified repo health report."
 policy:
   allow_implicit_invocation: false

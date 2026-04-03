@@ -9,9 +9,15 @@ from pathlib import Path
 from typing import Sequence
 
 REQUIRED_TOP_LEVEL = {
+    "schema_version",
+    "skill",
+    "run_id",
     "repo_root",
     "generated_at",
+    "overall_verdict",
+    "rollup_bucket",
     "repo_profile",
+    "severity_counts",
     "counts",
     "findings",
     "dependency_status",
@@ -45,6 +51,14 @@ VALID_CATEGORIES = {
 VALID_SEVERITIES = {"low", "medium", "high", "critical"}
 VALID_CONFIDENCE = {"low", "medium", "high"}
 VALID_DEPENDENCY_STATUS = {"ready", "auto-installed", "blocked"}
+VALID_ROLLUP_BUCKETS = {"blocked", "red", "yellow", "green", "not-applicable"}
+VALID_OVERALL_VERDICTS = {
+    "not-ready",
+    "partially-ready",
+    "ready-for-controlled-deletion",
+    "not-applicable",
+    "scan-blocked",
+}
 
 
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
@@ -77,6 +91,12 @@ def main(argv: Sequence[str]) -> int:
     dependency_status = payload.get("dependency_status")
     if dependency_status not in VALID_DEPENDENCY_STATUS:
         return fail(f"invalid dependency_status: {dependency_status}")
+    overall_verdict = payload.get("overall_verdict")
+    if overall_verdict not in VALID_OVERALL_VERDICTS:
+        return fail(f"invalid overall_verdict: {overall_verdict}")
+    rollup_bucket = payload.get("rollup_bucket")
+    if rollup_bucket not in VALID_ROLLUP_BUCKETS:
+        return fail(f"invalid rollup_bucket: {rollup_bucket}")
 
     bootstrap_actions = payload.get("bootstrap_actions")
     if not isinstance(bootstrap_actions, list):
@@ -119,6 +139,12 @@ def main(argv: Sequence[str]) -> int:
     counts = payload.get("counts")
     if not isinstance(counts, dict) or "total" not in counts or "by_category" not in counts:
         return fail("counts must contain total and by_category")
+    severity_counts = payload.get("severity_counts")
+    if not isinstance(severity_counts, dict):
+        return fail("severity_counts must be an object")
+    for key in ("critical", "high", "medium", "low"):
+        if not isinstance(severity_counts.get(key), int):
+            return fail(f"severity_counts.{key} must be an integer")
 
     return 0
 

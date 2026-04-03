@@ -21,6 +21,8 @@ PLUGIN_NAME = "pooh-skills"
 PLUGIN_RELATIVE_PATH = Path("plugins") / PLUGIN_NAME
 MARKETPLACE_RELATIVE_PATH = Path(".agents") / "plugins" / "marketplace.json"
 LEGACY_SKILLS_RELATIVE_PATH = Path(".codex") / "skills"
+CODEX_CONFIG_RELATIVE_PATH = Path(".codex") / "config.toml"
+CODEX_PLUGIN_CACHE_RELATIVE_PATH = Path(".codex") / "plugins" / "cache"
 CANONICAL_ENTRY = {
     "name": PLUGIN_NAME,
     "source": {
@@ -41,9 +43,12 @@ class OperationResult:
     home_root: str
     plugin_path: str
     marketplace_path: str
+    codex_config_path: str
     install_mode: str | None
     cleaned_legacy_skills: list[str]
     removed_marketplace_entry: bool
+    enabled_plugin_ref: str | None
+    cleared_plugin_caches: list[str]
 
 
 def parse_args() -> argparse.Namespace:
@@ -152,6 +157,13 @@ def load_marketplace(marketplace_path: Path, home_root: Path) -> dict:
     return payload
 
 
+def codex_plugin_ref(marketplace: dict) -> str:
+    marketplace_name = str(marketplace.get("name") or "").strip()
+    if not marketplace_name:
+        raise RuntimeError("Marketplace must have a non-empty `name` before enabling the Codex plugin.")
+    return f"{PLUGIN_NAME}@{marketplace_name}"
+
+
 def remove_path(path: Path) -> None:
     if not path.exists() and not path.is_symlink():
         return
@@ -159,6 +171,63 @@ def remove_path(path: Path) -> None:
         path.unlink()
         return
     shutil.rmtree(path)
+
+
+def rewrite_codex_plugin_config(config_path: Path, plugin_ref: str | None) -> None:
+    existing_text = config_path.read_text(encoding="utf-8") if config_path.exists() else ""
+    section_pattern = re.compile(r'(?m)^\[(?P<section>[^\]]+)\]\s*$')
+    matches = list(section_pattern.finditer(existing_text))
+
+    pieces: list[str] = []
+    cursor = 0
+    for index, match in enumerate(matches):
+        start = match.start()
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(existing_text)
+        if start > cursor:
+            pieces.append(existing_text[cursor:start])
+        section_name = match.group("section")
+        block = existing_text[start:end]
+        if section_name.startswith('plugins."pooh-skills@'):
+            cursor = end
+            continue
+        pieces.append(block)
+        cursor = end
+
+    if cursor < len(existing_text):
+        pieces.append(existing_text[cursor:])
+
+    new_text = "".join(pieces).rstrip()
+    if new_text:
+        new_text += "\n\n"
+    if plugin_ref:
+        new_text += f'[plugins."{plugin_ref}"]\n'
+        new_text += "enabled = true\n"
+    elif new_text:
+        new_text += "\n"
+
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(new_text, encoding="utf-8")
+
+
+def clear_plugin_caches(home_root: Path) -> list[str]:
+    cache_root = home_root / CODEX_PLUGIN_CACHE_RELATIVE_PATH
+    removed: list[str] = []
+    if not cache_root.is_dir():
+        return removed
+
+    for child in sorted(cache_root.iterdir()):
+        if child.name == "pooh-skills-local":
+            remove_path(child)
+            removed.append(str(child))
+            continue
+        plugin_child = child / PLUGIN_NAME
+        if plugin_child.exists() or plugin_child.is_symlink():
+            remove_path(plugin_child)
+            removed.append(str(plugin_child))
+            if child.is_dir() and not any(child.iterdir()):
+                child.rmdir()
+                removed.append(str(child))
+    return removed
 
 
 def install_plugin_path(repo_plugin_root: Path, home_plugin_root: Path, mode: str) -> None:
@@ -241,11 +310,15 @@ def install(args: argparse.Namespace) -> OperationResult:
     repo_plugin_root = verify_repo_plugin(repo_root)
     home_plugin_root = home_root / PLUGIN_RELATIVE_PATH
     marketplace_path = home_root / MARKETPLACE_RELATIVE_PATH
+    codex_config_path = home_root / CODEX_CONFIG_RELATIVE_PATH
 
     install_plugin_path(repo_plugin_root, home_plugin_root, args.mode)
     marketplace = load_marketplace(marketplace_path, home_root)
     upsert_marketplace_entry(marketplace)
     atomic_write_json(marketplace_path, marketplace)
+    plugin_ref = codex_plugin_ref(marketplace)
+    rewrite_codex_plugin_config(codex_config_path, plugin_ref)
+    cleared_plugin_caches = clear_plugin_caches(home_root)
 
     removed_legacy_skills: list[str] = []
     if not args.skip_legacy_cleanup:
@@ -256,9 +329,12 @@ def install(args: argparse.Namespace) -> OperationResult:
         home_root=str(home_root),
         plugin_path=str(home_plugin_root),
         marketplace_path=str(marketplace_path),
+        codex_config_path=str(codex_config_path),
         install_mode=args.mode,
         cleaned_legacy_skills=removed_legacy_skills,
         removed_marketplace_entry=False,
+        enabled_plugin_ref=plugin_ref,
+        cleared_plugin_caches=cleared_plugin_caches,
     )
 
 
@@ -267,6 +343,7 @@ def uninstall(args: argparse.Namespace) -> OperationResult:
     repo_root = Path(args.repo).resolve()
     home_plugin_root = home_root / PLUGIN_RELATIVE_PATH
     marketplace_path = home_root / MARKETPLACE_RELATIVE_PATH
+    codex_config_path = home_root / CODEX_CONFIG_RELATIVE_PATH
 
     remove_path(home_plugin_root)
 
@@ -275,6 +352,9 @@ def uninstall(args: argparse.Namespace) -> OperationResult:
         marketplace = load_marketplace(marketplace_path, home_root)
         removed_entry = remove_marketplace_entry(marketplace)
         atomic_write_json(marketplace_path, marketplace)
+
+    rewrite_codex_plugin_config(codex_config_path, None)
+    cleared_plugin_caches = clear_plugin_caches(home_root)
 
     removed_legacy_skills: list[str] = []
     if args.purge_legacy_skills:
@@ -285,9 +365,12 @@ def uninstall(args: argparse.Namespace) -> OperationResult:
         home_root=str(home_root),
         plugin_path=str(home_plugin_root),
         marketplace_path=str(marketplace_path),
+        codex_config_path=str(codex_config_path),
         install_mode=None,
         cleaned_legacy_skills=removed_legacy_skills,
         removed_marketplace_entry=removed_entry,
+        enabled_plugin_ref=None,
+        cleared_plugin_caches=cleared_plugin_caches,
     )
 
 

@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0",
+  "skill": "pythonic-ddd-drift-audit",
+  "overall_verdicts": [
+    "not-applicable",
+    "watch",
+    "drifting",
+    "ceremonial",
+    "contained",
+    "disciplined"
+  ],
+  "rollup_map": {
+    "not-applicable": "not-applicable",
+    "watch": "yellow",
+    "drifting": "red",
+    "ceremonial": "yellow",
+    "contained": "yellow",
+    "disciplined": "green"
+  }
+}

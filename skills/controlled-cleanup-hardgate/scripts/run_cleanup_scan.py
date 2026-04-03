@@ -616,23 +616,34 @@ def infer_verdict(findings: list[Finding]) -> tuple[str, str]:
     sev = severity_counts(findings)
     if sev["critical"] > 0 or sev["high"] >= 2:
         return (
-            "cleanup-first",
-            "The repository still contains high-signal cleanup blockers or stale references that should be resolved before calling removal work safe.",
+            "not-ready",
+            "The repository still contains high-signal cleanup blockers or stale references that should be resolved before calling removal work ready.",
         )
     if sev["high"] == 1 or sev["medium"] > 0:
         return (
-            "watch",
+            "partially-ready",
             "The repository shows cleanup debt and validation gaps, but not enough evidence for a top-level removal blocker.",
         )
     if findings:
         return (
-            "sound",
+            "ready-for-controlled-deletion",
             "The repository shows only low-signal cleanup noise after locked validation.",
         )
     return (
-        "sound",
+        "ready-for-controlled-deletion",
         "No cleanup blockers or stale-surface signals were detected by the locked audit stack.",
     )
+
+
+def human_verdict_label(overall_verdict: str) -> str:
+    labels = {
+        "not-ready": "not ready",
+        "partially-ready": "partially ready",
+        "ready-for-controlled-deletion": "ready for controlled deletion",
+        "not-applicable": "not applicable",
+        "scan-blocked": "scan blocked",
+    }
+    return labels.get(overall_verdict, overall_verdict.replace("-", " "))
 
 
 def render_human_report(summary: dict[str, object]) -> str:
@@ -641,11 +652,13 @@ def render_human_report(summary: dict[str, object]) -> str:
     severity = summary.get("severity_counts", {})
     repo_profile = summary.get("repo_profile", {})
     counts = summary.get("counts", {})
+    overall_verdict = str(summary.get("overall_verdict") or "")
     lines = [
         "# Controlled Cleanup Report",
         "",
         "## 1. Executive summary",
-        f"- overall_verdict: `{summary.get('overall_verdict')}`",
+        f"- verdict: `{human_verdict_label(overall_verdict)}`",
+        f"- machine_overall_verdict: `{overall_verdict}`",
         f"- summary_line: {summary.get('summary_line')}",
         f"- languages: {', '.join(repo_profile.get('languages', [])) or 'none'}",
         f"- manifests: {', '.join(repo_profile.get('manifests', [])) or 'none'}",

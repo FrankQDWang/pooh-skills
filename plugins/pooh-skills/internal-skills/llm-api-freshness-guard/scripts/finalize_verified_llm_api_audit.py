@@ -34,7 +34,7 @@ def write_text(path: Path, payload: str) -> None:
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Finalize a verified LLM API freshness audit.")
-    parser.add_argument("--evidence-json", required=True, help="Path to .repo-harness/llm-api-surface-evidence.json")
+    parser.add_argument("--evidence-json", required=True, help="Path to .repo-harness/skills/llm-api-freshness-guard/extra/surface-evidence.json")
     parser.add_argument("--summary-in", required=True, help="Path to the agent-authored summary draft")
     parser.add_argument("--summary-out", required=True, help="Where to write the normalized summary")
     parser.add_argument("--report-out", required=True, help="Where to write the rendered report")
@@ -86,6 +86,7 @@ def normalize_summary(summary: dict[str, Any], evidence_bundle: dict[str, Any]) 
     normalized.setdefault("version", str(evidence_bundle.get("version") or "2.0.0"))
     normalized.setdefault("generated_at", str(evidence_bundle.get("generated_at") or ""))
     normalized.setdefault("audit_mode", "verified")
+    normalized.setdefault("overall_verdict", str(normalized.get("audit_mode") or "verified"))
     normalized.setdefault("target_scope", str(evidence_bundle.get("target_scope") or "repo"))
     normalized.setdefault("repo_profile", dict(evidence_bundle.get("repo_profile") or {}))
     normalized.setdefault("surface_resolution", list(evidence_bundle.get("surface_candidates") or []))

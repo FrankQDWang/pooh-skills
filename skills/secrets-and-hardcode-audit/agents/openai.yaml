@@ -1,0 +1,6 @@
+interface:
+  display_name: "Secrets and Hardcode Audit"
+  short_description: "检查工作树 secrets、git 历史泄露、硬编码凭证和 ignore discipline"
+  default_prompt: "Use $secrets-and-hardcode-audit to audit a repository for working-tree secret exposure, git-history secret leakage, hardcoded credential material, and ignore discipline. Keep the scope narrow. Do not print full secret values. Separate active working-tree exposure from history-only exposure and from ignore-discipline gaps. Produce the standard namespaced summary, report, and agent brief."
+policy:
+  allow_implicit_invocation: true

@@ -1,0 +1,6 @@
+interface:
+  display_name: "Test Quality Audit"
+  short_description: "审计测试治理质量、CI gate、占位断言、skip/retry、mock 纪律和 failure-path 证据"
+  default_prompt: "Use $test-quality-audit to audit a repository for high-signal test governance problems. Focus on CI test gates, placeholder assertions, skip or xfail or retry sprawl, internal-logic over-mocking, and missing failure-path evidence. Do not score coverage percentages. Do not swallow frontend browser-regression or Temporal verification specialist concerns. Produce the standard namespaced summary, report, and agent brief."
+policy:
+  allow_implicit_invocation: true

@@ -46,13 +46,14 @@ done
 REPO_ROOT="${POSITIONAL[0]:-.}"
 HARNESS_DIR="${POSITIONAL[1]:-$REPO_ROOT/.repo-harness}"
 OUT_DIR="$HARNESS_DIR/skills/controlled-cleanup-hardgate"
+EXTRA_DIR="$OUT_DIR/extra"
 SUMMARY_PATH="$OUT_DIR/summary.json"
-LINKCHECK_PATH="$OUT_DIR/linkcheck.json"
+LINKCHECK_PATH="$EXTRA_DIR/linkcheck.json"
 REPORT_PATH="$OUT_DIR/report.md"
 AGENT_BRIEF_PATH="$OUT_DIR/agent-brief.md"
 MANIFEST_PATH="$SCRIPT_DIR/../assets/runtime-dependencies.json"
 
-mkdir -p "$OUT_DIR"
+mkdir -p "$OUT_DIR" "$EXTRA_DIR"
 
 pooh_runtime_prepare \
   "controlled-cleanup-hardgate" \

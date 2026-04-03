@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0",
+  "skill": "dependency-audit",
+  "overall_verdicts": [
+    "scan-blocked",
+    "baseline-needed",
+    "cleanup-first",
+    "boundary-hardening",
+    "incremental-governance",
+    "well-governed"
+  ],
+  "rollup_map": {
+    "scan-blocked": "blocked",
+    "baseline-needed": "yellow",
+    "cleanup-first": "yellow",
+    "boundary-hardening": "yellow",
+    "incremental-governance": "yellow",
+    "well-governed": "green"
+  }
+}

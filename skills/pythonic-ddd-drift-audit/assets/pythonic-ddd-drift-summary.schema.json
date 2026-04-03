@@ -14,7 +14,9 @@
     "findings",
     "dependency_status",
     "bootstrap_actions",
-    "dependency_failures"
+    "dependency_failures",
+    "run_id",
+    "rollup_bucket"
   ],
   "properties": {
     "schema_version": {
@@ -30,7 +32,15 @@
       "type": "string"
     },
     "overall_verdict": {
-      "type": "string"
+      "type": "string",
+      "enum": [
+        "not-applicable",
+        "watch",
+        "drifting",
+        "ceremonial",
+        "contained",
+        "disciplined"
+      ]
     },
     "summary_line": {
       "type": "string"
@@ -64,16 +74,20 @@
       ],
       "properties": {
         "critical": {
-          "type": "integer"
+          "type": "integer",
+          "minimum": 0
         },
         "high": {
-          "type": "integer"
+          "type": "integer",
+          "minimum": 0
         },
         "medium": {
-          "type": "integer"
+          "type": "integer",
+          "minimum": 0
         },
         "low": {
-          "type": "integer"
+          "type": "integer",
+          "minimum": 0
         }
       }
     },
@@ -158,6 +172,19 @@
       "items": {
         "$ref": "#/$defs/dependencyFailure"
       }
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "rollup_bucket": {
+      "type": "string",
+      "enum": [
+        "blocked",
+        "red",
+        "yellow",
+        "green",
+        "not-applicable"
+      ]
     }
   },
   "$defs": {

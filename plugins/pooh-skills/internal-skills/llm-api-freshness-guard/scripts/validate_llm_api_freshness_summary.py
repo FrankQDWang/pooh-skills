@@ -29,6 +29,7 @@ ALLOWED_FAMILIES = {
 ALLOWED_CONFIDENCE = {"high", "medium", "low"}
 ALLOWED_SEVERITIES = {"critical", "high", "medium", "low"}
 ALLOWED_DEPENDENCY_STATUS = {"ready", "auto-installed", "blocked"}
+ALLOWED_ROLLUP_BUCKETS = {"blocked", "red", "yellow", "green", "not-applicable"}
 ALLOWED_FINDING_KINDS = {
     "stale-surface",
     "deprecated-surface",
@@ -41,10 +42,14 @@ ALLOWED_FINDING_KINDS = {
 ALLOWED_VERIFICATION_STATUS = {"verified", "triage-only", "not-run", "blocked", "ambiguous"}
 ALLOWED_DOC_STATUSES = {"verified", "ambiguous", "failed", "skipped"}
 REQUIRED_TOP = {
+    "run_id",
     "skill",
+    "domain",
     "version",
     "generated_at",
     "audit_mode",
+    "overall_verdict",
+    "rollup_bucket",
     "target_scope",
     "repo_profile",
     "surface_resolution",
@@ -55,6 +60,9 @@ REQUIRED_TOP = {
     "dependency_status",
     "bootstrap_actions",
     "dependency_failures",
+    "summary_path",
+    "report_path",
+    "agent_brief_path",
 }
 REQUIRED_REPO_PROFILE = {
     "repo_root",
@@ -310,6 +318,10 @@ def validate_summary(data: dict[str, Any]) -> list[str]:
     audit_mode = data.get("audit_mode")
     if audit_mode not in ALLOWED_AUDIT_MODES:
         add_error(errors, f"summary.audit_mode: invalid value {audit_mode!r}")
+    if data.get("overall_verdict") != audit_mode:
+        add_error(errors, "summary.overall_verdict must equal summary.audit_mode")
+    if data.get("rollup_bucket") not in ALLOWED_ROLLUP_BUCKETS:
+        add_error(errors, f"summary.rollup_bucket: invalid value {data.get('rollup_bucket')!r}")
     target_scope = data.get("target_scope")
     if target_scope not in ALLOWED_TARGET_SCOPE:
         add_error(errors, f"summary.target_scope: invalid value {target_scope!r}")

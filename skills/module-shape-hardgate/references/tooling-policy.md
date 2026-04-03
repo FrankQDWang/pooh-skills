@@ -4,7 +4,7 @@
 
 The canonical baseline for this skill is the deterministic Python scanner in `scripts/run_module_shape_scan.py`.
 
-Reason: this repository's skill contract prefers stable, portable detection-and-report behavior over a fragile pile of optional external CLIs.
+Reason: this repository's skill contract prefers stable, repo-local detection-and-report behavior over a fragile pile of optional external CLIs.
 
 ## Optional augmentation tools
 

@@ -18,7 +18,13 @@
     "scan_limitations",
     "dependency_status",
     "bootstrap_actions",
-    "dependency_failures"
+    "dependency_failures",
+    "schema_version",
+    "run_id",
+    "repo_root",
+    "overall_verdict",
+    "rollup_bucket",
+    "severity_counts"
   ],
   "properties": {
     "skill": {
@@ -96,6 +102,61 @@
       "type": "array",
       "items": {
         "$ref": "#/$defs/dependencyFailure"
+      }
+    },
+    "schema_version": {
+      "type": "string"
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "repo_root": {
+      "type": "string"
+    },
+    "overall_verdict": {
+      "type": "string",
+      "enum": [
+        "verified",
+        "triage",
+        "blocked",
+        "not-applicable"
+      ]
+    },
+    "rollup_bucket": {
+      "type": "string",
+      "enum": [
+        "blocked",
+        "red",
+        "yellow",
+        "green",
+        "not-applicable"
+      ]
+    },
+    "severity_counts": {
+      "type": "object",
+      "required": [
+        "critical",
+        "high",
+        "medium",
+        "low"
+      ],
+      "properties": {
+        "critical": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "high": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "medium": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "low": {
+          "type": "integer",
+          "minimum": 0
+        }
       }
     }
   },

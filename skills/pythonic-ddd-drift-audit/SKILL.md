@@ -103,10 +103,10 @@ If the repo is not meaningfully Pythonic or does not expose architecture boundar
 From the skill directory:
 
 ```bash
-mkdir -p .repo-harness
-python3 scripts/run_py_drift_scan.py   --repo /path/to/repo   --out .repo-harness/pythonic-ddd-drift-summary.json
+mkdir -p .repo-harness/skills/pythonic-ddd-drift-audit
+python3 scripts/run_py_drift_scan.py   --repo /path/to/repo   --out .repo-harness/skills/pythonic-ddd-drift-audit/summary.json
 
-python3 scripts/validate_py_drift_summary.py   --summary .repo-harness/pythonic-ddd-drift-summary.json
+python3 scripts/validate_py_drift_summary.py   --summary .repo-harness/skills/pythonic-ddd-drift-audit/summary.json
 ```
 
 Or use:
@@ -241,11 +241,11 @@ Each finding should include at least:
 
 ## Output contract
 
-When file output is possible, always create:
+When file output is possible, always create these artifacts under the target repo root:
 
-- `.repo-harness/pythonic-ddd-drift-human-report.md`
-- `.repo-harness/pythonic-ddd-drift-agent-brief.md`
-- `.repo-harness/pythonic-ddd-drift-summary.json`
+- `.repo-harness/skills/pythonic-ddd-drift-audit/report.md`
+- `.repo-harness/skills/pythonic-ddd-drift-audit/agent-brief.md`
+- `.repo-harness/skills/pythonic-ddd-drift-audit/summary.json`
 
 ## Safety rules
 

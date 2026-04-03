@@ -116,6 +116,20 @@ DOMAIN_SPECS: tuple[DomainSpec, ...] = (
         cluster="engineering-quality-and-security",
     ),
     DomainSpec(
+        domain="secrets-and-hardcode",
+        skill_name="secrets-and-hardcode-audit",
+        title="Audit-Secrets-Hardcode",
+        accent="rose",
+        cluster="engineering-quality-and-security",
+    ),
+    DomainSpec(
+        domain="test-quality",
+        skill_name="test-quality-audit",
+        title="Audit-Test-Quality",
+        accent="mint",
+        cluster="engineering-quality-and-security",
+    ),
+    DomainSpec(
         domain="llm-api-freshness",
         skill_name="llm-api-freshness-guard",
         title="Audit-LLM-Freshness",
@@ -145,7 +159,7 @@ CLUSTER_SPECS: tuple[ClusterSpec, ...] = (
     ClusterSpec(
         cluster="engineering-quality-and-security",
         title="Engineering Quality and Security",
-        domains=("python-lint-format", "ts-lint-format", "security-posture"),
+        domains=("python-lint-format", "ts-lint-format", "security-posture", "secrets-and-hardcode", "test-quality"),
     ),
     ClusterSpec(
         cluster="surface-freshness-and-cleanup",

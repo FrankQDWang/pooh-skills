@@ -1,0 +1,278 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Test Quality Audit Summary",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "skill",
+    "status",
+    "verdict",
+    "repo_scope",
+    "summary",
+    "summary_line",
+    "coverage",
+    "categories",
+    "findings",
+    "top_actions",
+    "run_id",
+    "generated_at",
+    "repo_root",
+    "overall_verdict",
+    "rollup_bucket",
+    "dependency_status",
+    "dependency_failures",
+    "bootstrap_actions",
+    "severity_counts"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "skill": {
+      "type": "string",
+      "const": "test-quality-audit"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["complete", "blocked", "not-applicable"]
+    },
+    "verdict": {
+      "type": "string",
+      "enum": ["scan-blocked", "watch", "clean", "not-applicable"]
+    },
+    "repo_scope": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "string"
+    },
+    "summary_line": {
+      "type": "string"
+    },
+    "package_managers": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_files_detected",
+        "test_files_scanned",
+        "ci_configs_scanned",
+        "ci_gate_hits",
+        "placeholder_hits",
+        "skip_retry_hits",
+        "internal_mock_hits",
+        "failure_path_hits"
+      ],
+      "properties": {
+        "source_files_detected": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "test_files_scanned": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "ci_configs_scanned": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "ci_gate_hits": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "placeholder_hits": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "skip_retry_hits": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "internal_mock_hits": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failure_path_hits": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "categories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "state", "confidence", "evidence"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": [
+              "ci-test-gate",
+              "placeholder-test-quality",
+              "skip-retry-governance",
+              "mock-discipline",
+              "failure-path-evidence"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": ["clean", "watch", "blocked", "not-applicable"]
+          },
+          "confidence": {
+            "type": "string",
+            "enum": ["high", "medium", "low"]
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "category",
+          "severity",
+          "confidence",
+          "title",
+          "path",
+          "line",
+          "evidence_summary",
+          "recommended_change_shape"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "missing-ci-gate",
+              "placeholder-test",
+              "skip-retry-sprawl",
+              "internal-mock-drift",
+              "missing-failure-path-evidence",
+              "scan-blocker"
+            ]
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["critical", "high", "medium", "low"]
+          },
+          "confidence": {
+            "type": "string",
+            "enum": ["high", "medium", "low"]
+          },
+          "title": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "line": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "evidence_summary": {
+            "type": "string"
+          },
+          "recommended_change_shape": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "top_actions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "domain": {
+      "type": "string"
+    },
+    "generated_at": {
+      "type": "string"
+    },
+    "repo_root": {
+      "type": "string"
+    },
+    "overall_verdict": {
+      "type": "string",
+      "enum": ["scan-blocked", "watch", "clean", "not-applicable"]
+    },
+    "rollup_bucket": {
+      "type": "string",
+      "enum": ["blocked", "red", "yellow", "green", "not-applicable"]
+    },
+    "dependency_status": {
+      "type": "string",
+      "enum": ["ready", "auto-installed", "blocked"]
+    },
+    "dependency_failures": {
+      "type": "array"
+    },
+    "bootstrap_actions": {
+      "type": "array"
+    },
+    "severity_counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["critical", "high", "medium", "low"],
+      "properties": {
+        "critical": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "high": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "medium": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "low": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "summary_path": {
+      "type": "string"
+    },
+    "report_path": {
+      "type": "string"
+    },
+    "agent_brief_path": {
+      "type": "string"
+    }
+  }
+}

@@ -30,7 +30,7 @@ Your job is to **detect, explain, prioritize, and recommend**.
 
 - When producing the human report, start from [`assets/human-report-template.md`](assets/human-report-template.md).
 - When producing the agent remediation brief, start from [`assets/agent-brief-template.md`](assets/agent-brief-template.md).
-- When producing `.repo-harness/repo-audit-summary.json`, it must conform to [`assets/repo-audit-summary.schema.json`](assets/repo-audit-summary.schema.json).
+- When producing `.repo-harness/skills/dependency-audit/summary.json` under the target repo root, it must conform to [`assets/repo-audit-summary.schema.json`](assets/repo-audit-summary.schema.json).
 - For shared output rules, read [`references/shared-output-contract.md`](references/shared-output-contract.md).
 - For shared reporting tone and reader expectations, read [`references/shared-reporting-style.md`](references/shared-reporting-style.md).
 - For shared runtime truth and blocked-artifact behavior, read [`references/shared-runtime-artifact-contract.md`](references/shared-runtime-artifact-contract.md).
@@ -269,11 +269,11 @@ Prefer recommendation shapes like:
 ## Output contract
 
 Follow [`references/shared-output-contract.md`](references/shared-output-contract.md).
-For this skill, the concrete artifact names are:
+For this skill, the concrete artifact names under the target repo root are:
 
-- `.repo-harness/repo-audit-report.md`
-- `.repo-harness/repo-audit-agent-brief.md`
-- `.repo-harness/repo-audit-summary.json`
+- `.repo-harness/skills/dependency-audit/report.md`
+- `.repo-harness/skills/dependency-audit/agent-brief.md`
+- `.repo-harness/skills/dependency-audit/summary.json`
 
 The summary artifact must conform to [`assets/repo-audit-summary.schema.json`](assets/repo-audit-summary.schema.json).
 

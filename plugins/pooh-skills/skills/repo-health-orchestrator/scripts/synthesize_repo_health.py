@@ -10,8 +10,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from aggregate_repo_health import RED_VERDICTS
-from aggregate_repo_health import YELLOW_VERDICTS
 from aggregate_repo_health import recommended_domain_action
 from repo_health_catalog import CLUSTER_SPECS
 from repo_health_catalog import DOMAIN_SPECS
@@ -80,22 +78,19 @@ def run_risk_bucket(run: dict[str, Any]) -> tuple[int, str]:
     status = str(run.get("status") or "")
     dependency_status = str(run.get("dependency_status") or "ready")
     verdict = str(run.get("child_verdict") or "").lower()
-    severity_counts = run.get("severity_counts") or {}
-    critical = int(severity_counts.get("critical", 0) or 0)
-    high = int(severity_counts.get("high", 0) or 0)
-    medium = int(severity_counts.get("medium", 0) or 0)
+    rollup_bucket = str(run.get("rollup_bucket") or "")
 
-    if dependency_status == "blocked" or status == "blocked":
+    if dependency_status == "blocked":
         return 0, "dependency-blocked"
     if status in {"missing", "invalid"}:
         return 4, "coverage-gap"
-    if status == "not-applicable":
+    if status == "not-applicable" or rollup_bucket == "not-applicable":
         return 9, "not-applicable"
-    if critical > 0 or high > 0 or verdict in RED_VERDICTS:
+    if rollup_bucket in {"blocked", "red"}:
         return 1, "high-risk"
     if verdict == "triage":
         return 3, "trust-gap"
-    if medium > 0 or verdict in YELLOW_VERDICTS:
+    if rollup_bucket == "yellow":
         return 2, "watch"
     return 8, "stable"
 

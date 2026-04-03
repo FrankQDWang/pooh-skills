@@ -9,7 +9,7 @@ This skill is the only public entrypoint in the `pooh-skills` plugin.
 
 It is the coordinator, not the specialist.
 
-Its job is to launch the focused audit skills as parallel subagents, collect their current-run artifacts, and turn them into one executive diagnosis instead of fifteen unrelated reports.
+Its job is to launch the focused audit skills as parallel subagents, collect their current-run artifacts, and turn them into one executive diagnosis instead of seventeen unrelated reports.
 
 ## When to use this
 
@@ -18,7 +18,7 @@ Use this skill when the user wants:
 - one combined repo health report
 - a governance rollup across several audit skills
 - an AI-coding state-of-the-repo snapshot
-- a prioritized action queue across structure, contracts, Pythonic drift, module shape, schema governance, durable agents, distributed consistency, error governance, silent failure, frontend regression, Python lint, TS lint, security posture, LLM API freshness, and cleanup
+- a prioritized action queue across structure, contracts, Pythonic drift, module shape, schema governance, durable agents, distributed consistency, error governance, silent failure, frontend regression, Python lint, TS lint, security posture, secrets and hardcoded credentials, test quality, LLM API freshness, and cleanup
 - a repeatable whole-repo run that ends in one machine summary, one evidence file, one human report, and one agent brief
 
 ## Do not use this
@@ -40,13 +40,13 @@ Write blocked repo-health artifacts when orchestrator preflight itself is blocke
 
 ## Expected child domains
 
-This skill coordinates these fifteen child audits.
+This skill coordinates these seventeen child audits.
 
 They are private plugin resources, not public user-facing trigger names.
 For every child run, read the worker instructions from `../../internal-skills/<skill-id>/SKILL.md` relative to this skill directory.
 Do not ask the user to invoke those worker skills directly.
 
-The expected workers are:
+The expected workers are. Each path below is relative to the target repo root's `.repo-harness`:
 
 - `dependency-audit` from `../../internal-skills/dependency-audit/SKILL.md` → `.repo-harness/skills/dependency-audit/summary.json`
 - `signature-contract-hardgate` from `../../internal-skills/signature-contract-hardgate/SKILL.md` → `.repo-harness/skills/signature-contract-hardgate/summary.json`
@@ -61,6 +61,8 @@ The expected workers are:
 - `python-lint-format-audit` from `../../internal-skills/python-lint-format-audit/SKILL.md` → `.repo-harness/skills/python-lint-format-audit/summary.json`
 - `ts-lint-format-audit` from `../../internal-skills/ts-lint-format-audit/SKILL.md` → `.repo-harness/skills/ts-lint-format-audit/summary.json`
 - `python-ts-security-posture-audit` from `../../internal-skills/python-ts-security-posture-audit/SKILL.md` → `.repo-harness/skills/python-ts-security-posture-audit/summary.json`
+- `secrets-and-hardcode-audit` from `../../internal-skills/secrets-and-hardcode-audit/SKILL.md` → `.repo-harness/skills/secrets-and-hardcode-audit/summary.json`
+- `test-quality-audit` from `../../internal-skills/test-quality-audit/SKILL.md` → `.repo-harness/skills/test-quality-audit/summary.json`
 - `llm-api-freshness-guard` from `../../internal-skills/llm-api-freshness-guard/SKILL.md` → `.repo-harness/skills/llm-api-freshness-guard/summary.json`
 - `controlled-cleanup-hardgate` from `../../internal-skills/controlled-cleanup-hardgate/SKILL.md` → `.repo-harness/skills/controlled-cleanup-hardgate/summary.json`
 
@@ -91,12 +93,12 @@ Read only what is needed.
 
 ## Operating stance
 
-- Start from an empty `.repo-harness` every run.
-- Treat `.repo-harness` as output-only.
+- Start from an empty target-repo `.repo-harness` every run.
+- Treat the target repo's `.repo-harness` as output-only.
 - Generate one current-run `run_id` during reset and pass it to every child.
-- Maintain `.repo-harness/repo-health-control-plane.json` as the live terminal control-plane state for the current run.
-- Treat `.repo-harness/skills/<skill-id>/runtime.json` as the live sidecar for each child skill's `preflight / bootstrapping / running / blocked / complete` state.
-- Launch all fifteen child domains before waiting for results.
+- Maintain the target repo's `.repo-harness/repo-health-control-plane.json` as the live terminal control-plane state for the current run.
+- Treat `.repo-harness/skills/<skill-id>/runtime.json` under the target repo root as the live sidecar for each child skill's `preflight / bootstrapping / running / blocked / complete` state.
+- Launch all seventeen child domains before waiting for results.
 - Keep child prompts narrow: one domain, one output contract, no cross-domain judgment.
 - Preserve the child skill's judgment; do not sand off sharp findings during aggregation.
 - Keep coverage gaps visible.
@@ -208,7 +210,7 @@ If this shared bootstrap returns blocked failures:
 
 ### 3) Spawn child audits
 
-Launch the fifteen child subagents in parallel.
+Launch the seventeen child subagents in parallel.
 
 Immediately mark the overall stage as `spawning`, then mark each child worker as `running`, and redraw the control plane.
 
@@ -220,7 +222,7 @@ Required progress stages:
 
 - `reset-harness`
 - `spawning`
-- `running X/15`
+- `running X/17`
 - `collecting`
 - `aggregating`
 - `done`
@@ -255,7 +257,7 @@ Use the current run's real information only:
 
 ### 5) Collect and validate child artifacts
 
-After the subagents finish, check the fifteen expected summary paths.
+After the subagents finish, check the seventeen expected summary paths.
 
 For each domain, classify the result as:
 

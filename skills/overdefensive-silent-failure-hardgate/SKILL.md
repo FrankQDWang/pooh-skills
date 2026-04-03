@@ -37,9 +37,9 @@ Deterministic baseline input:
 
 Required outputs:
 
-- `.repo-harness/overdefensive-silent-failure-summary.json`
-- `.repo-harness/overdefensive-silent-failure-report.md`
-- `.repo-harness/overdefensive-silent-failure-agent-brief.md`
+- `.repo-harness/skills/overdefensive-silent-failure-hardgate/summary.json`
+- `.repo-harness/skills/overdefensive-silent-failure-hardgate/report.md`
+- `.repo-harness/skills/overdefensive-silent-failure-hardgate/agent-brief.md`
 
 Final checks:
 
@@ -88,15 +88,15 @@ Or run the pieces directly:
 ```bash
 python3 scripts/run_overdefensive_scan.py \
   --repo /path/to/repo \
-  --out .repo-harness/overdefensive-silent-failure-summary.json
+  --out .repo-harness/skills/overdefensive-silent-failure-hardgate/summary.json
 
 python3 scripts/validate_overdefensive_summary.py \
-  --summary .repo-harness/overdefensive-silent-failure-summary.json
+  --summary .repo-harness/skills/overdefensive-silent-failure-hardgate/summary.json
 
 python3 scripts/render_reports.py \
-  --summary .repo-harness/overdefensive-silent-failure-summary.json \
-  --report .repo-harness/overdefensive-silent-failure-report.md \
-  --brief .repo-harness/overdefensive-silent-failure-agent-brief.md
+  --summary .repo-harness/skills/overdefensive-silent-failure-hardgate/summary.json \
+  --report .repo-harness/skills/overdefensive-silent-failure-hardgate/report.md \
+  --brief .repo-harness/skills/overdefensive-silent-failure-hardgate/agent-brief.md
 ```
 
 ## Finding taxonomy

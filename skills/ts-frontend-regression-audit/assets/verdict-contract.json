@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0",
+  "skill": "ts-frontend-regression-audit",
+  "overall_verdicts": [
+    "scan-blocked",
+    "partial",
+    "enforced",
+    "hardened",
+    "not-applicable"
+  ],
+  "rollup_map": {
+    "scan-blocked": "blocked",
+    "partial": "yellow",
+    "enforced": "green",
+    "hardened": "green",
+    "not-applicable": "not-applicable"
+  }
+}

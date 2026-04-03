@@ -47,7 +47,7 @@ description: "Audits Python repos that use Pydantic AI with Temporal for determi
 
 - 生成人类报告时，从 [`assets/human-report-template.md`](assets/human-report-template.md) 开始。
 - 生成 agent remediation brief 时，从 [`assets/agent-brief-template.md`](assets/agent-brief-template.md) 开始。
-- 生成 `.repo-harness/pydantic-temporal-summary.json` 时，必须遵守 [`assets/pydantic-temporal-summary.schema.json`](assets/pydantic-temporal-summary.schema.json)。
+- 生成目标仓库根目录下的 `.repo-harness/skills/pydantic-ai-temporal-hardgate/summary.json` 时，必须遵守 [`assets/pydantic-temporal-summary.schema.json`](assets/pydantic-temporal-summary.schema.json)。
 - 共享输出契约读取 [`references/shared-output-contract.md`](references/shared-output-contract.md)。
 - 共享报告语气与双读者要求读取 [`references/shared-reporting-style.md`](references/shared-reporting-style.md)。
 - 共享 runtime truth 与 blocked artifact 语义读取 [`references/shared-runtime-artifact-contract.md`](references/shared-runtime-artifact-contract.md)。
@@ -248,9 +248,9 @@ bash scripts/run_all.sh /path/to/repo
 
 这个 skill 的具体文件名固定为：
 
-- `.repo-harness/pydantic-temporal-human-report.md`
-- `.repo-harness/pydantic-temporal-agent-brief.md`
-- `.repo-harness/pydantic-temporal-summary.json`
+- `.repo-harness/skills/pydantic-ai-temporal-hardgate/report.md`
+- `.repo-harness/skills/pydantic-ai-temporal-hardgate/agent-brief.md`
+- `.repo-harness/skills/pydantic-ai-temporal-hardgate/summary.json`
 
 summary 必须符合 [`assets/pydantic-temporal-summary.schema.json`](assets/pydantic-temporal-summary.schema.json)。
 

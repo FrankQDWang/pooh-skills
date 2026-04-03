@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0",
+  "skill": "error-governance-hardgate",
+  "overall_verdicts": [
+    "healthy",
+    "watch",
+    "blocked",
+    "partial",
+    "not-applicable"
+  ],
+  "rollup_map": {
+    "healthy": "green",
+    "watch": "yellow",
+    "blocked": "red",
+    "partial": "yellow",
+    "not-applicable": "not-applicable"
+  }
+}

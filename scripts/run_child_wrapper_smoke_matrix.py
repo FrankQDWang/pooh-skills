@@ -22,6 +22,7 @@ from repo_health_catalog import DOMAIN_SPECS  # noqa: E402
 
 RUN_ID = "child-wrapper-smoke-run"
 VALID_DEPENDENCY_STATUSES = {"ready", "auto-installed", "blocked"}
+VALID_ROLLUP_BUCKETS = {"blocked", "red", "yellow", "green", "not-applicable"}
 
 
 def create_fixture_repo(root: Path) -> None:
@@ -107,6 +108,10 @@ def assert_summary(path: Path, skill_name: str, domain: str, repo_root: Path, re
         raise RuntimeError(f"{skill_name}: summary generated_at missing")
     if payload.get("dependency_status") not in VALID_DEPENDENCY_STATUSES:
         raise RuntimeError(f"{skill_name}: summary dependency_status invalid")
+    if payload.get("rollup_bucket") not in VALID_ROLLUP_BUCKETS:
+        raise RuntimeError(f"{skill_name}: summary rollup_bucket invalid")
+    if not isinstance(payload.get("overall_verdict"), str) or not payload.get("overall_verdict"):
+        raise RuntimeError(f"{skill_name}: summary overall_verdict missing")
     if not isinstance(payload.get("bootstrap_actions"), list):
         raise RuntimeError(f"{skill_name}: summary bootstrap_actions missing")
     if not isinstance(payload.get("dependency_failures"), list):

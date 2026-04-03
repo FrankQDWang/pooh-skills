@@ -35,6 +35,27 @@ RUNTIME_MANIFEST_ALLOWED_KEYS = {
     "runtime_features",
     "tools",
 }
+VERDICT_CONTRACT_ALLOWED_KEYS = {
+    "schema_version",
+    "skill",
+    "overall_verdicts",
+    "rollup_map",
+}
+CHILD_SUMMARY_REQUIRED_KEYS = {
+    "schema_version",
+    "skill",
+    "run_id",
+    "generated_at",
+    "repo_root",
+    "overall_verdict",
+    "rollup_bucket",
+    "dependency_status",
+    "dependency_failures",
+    "bootstrap_actions",
+    "severity_counts",
+    "findings",
+}
+VALID_ROLLUP_BUCKETS = {"blocked", "red", "yellow", "green", "not-applicable"}
 LIVE_DOC_SKILLS = {
     "llm-api-freshness-guard",
     "pydantic-ai-temporal-hardgate",
@@ -245,7 +266,7 @@ def check_live_doc_contract(skill_name: str, skill_dir: Path, errors: list[Check
     if run_all_path.exists():
         run_all_text = read_text(run_all_path)
         if skill_name == "llm-api-freshness-guard":
-            if "surface-evidence.json" not in run_all_text or "triage" not in run_all_text:
+            if 'EXTRA_DIR="$OUT_DIR/extra"' not in run_all_text or "surface-evidence.json" not in run_all_text or "triage" not in run_all_text:
                 errors.append(CheckError(skill_name, str(run_all_path), "llm-api-freshness-guard run_all.sh must clearly operate in triage mode and emit the local evidence bundle."))
         elif "--doc-evidence-json" not in run_all_text:
             errors.append(CheckError(skill_name, str(run_all_path), "run_all.sh must accept --doc-evidence-json for live-doc-sensitive skills."))
@@ -281,6 +302,68 @@ def check_runtime_manifest(skill_name: str, skill_dir: Path, errors: list[CheckE
             errors.append(CheckError(skill_name, str(manifest_path), f"runtime-dependencies.json `{key}` must be a list."))
         elif any(not isinstance(item, str) for item in value):
             errors.append(CheckError(skill_name, str(manifest_path), f"runtime-dependencies.json `{key}` must contain only strings."))
+
+
+def check_summary_contract(skill_name: str, skill_dir: Path, errors: list[CheckError]) -> None:
+    schema_candidates = sorted((skill_dir / "assets").glob("*summary.schema.json"))
+    if not schema_candidates:
+        errors.append(CheckError(skill_name, str(skill_dir / "assets"), "Missing child summary schema JSON."))
+        return
+    schema_path = schema_candidates[0]
+    try:
+        schema = json.loads(read_text(schema_path))
+    except json.JSONDecodeError as exc:
+        errors.append(CheckError(skill_name, str(schema_path), f"Summary schema must be valid JSON: {exc}."))
+        return
+
+    required = schema.get("required")
+    if not isinstance(required, list):
+        errors.append(CheckError(skill_name, str(schema_path), "Summary schema must declare a top-level `required` list."))
+    else:
+        missing = sorted(CHILD_SUMMARY_REQUIRED_KEYS - set(required))
+        if missing:
+            errors.append(CheckError(skill_name, str(schema_path), f"Summary schema missing required contract keys: {', '.join(missing)}."))
+
+    verdict_contract_path = skill_dir / "assets" / "verdict-contract.json"
+    if not verdict_contract_path.exists():
+        errors.append(CheckError(skill_name, str(verdict_contract_path), "Missing assets/verdict-contract.json."))
+        return
+    try:
+        contract = json.loads(read_text(verdict_contract_path))
+    except json.JSONDecodeError as exc:
+        errors.append(CheckError(skill_name, str(verdict_contract_path), f"verdict-contract.json must be valid JSON: {exc}."))
+        return
+
+    extra_keys = sorted(set(contract) - VERDICT_CONTRACT_ALLOWED_KEYS)
+    if extra_keys:
+        errors.append(CheckError(skill_name, str(verdict_contract_path), f"verdict-contract.json has unsupported keys: {', '.join(extra_keys)}."))
+    if contract.get("schema_version") != "1.0":
+        errors.append(CheckError(skill_name, str(verdict_contract_path), "verdict-contract.json must declare schema_version `1.0`."))
+    if contract.get("skill") != skill_name:
+        errors.append(CheckError(skill_name, str(verdict_contract_path), f"verdict-contract.json `skill` must equal `{skill_name}`."))
+
+    verdicts = contract.get("overall_verdicts")
+    rollup_map = contract.get("rollup_map")
+    if not isinstance(verdicts, list) or not verdicts or any(not isinstance(item, str) or not item for item in verdicts):
+        errors.append(CheckError(skill_name, str(verdict_contract_path), "verdict-contract.json `overall_verdicts` must be a non-empty string list."))
+        return
+    if not isinstance(rollup_map, dict):
+        errors.append(CheckError(skill_name, str(verdict_contract_path), "verdict-contract.json `rollup_map` must be an object."))
+        return
+
+    missing_map = sorted(set(verdicts) - set(rollup_map))
+    extra_map = sorted(set(rollup_map) - set(verdicts))
+    if missing_map:
+        errors.append(CheckError(skill_name, str(verdict_contract_path), f"rollup_map is missing verdicts: {', '.join(missing_map)}."))
+    if extra_map:
+        errors.append(CheckError(skill_name, str(verdict_contract_path), f"rollup_map contains unexpected verdicts: {', '.join(extra_map)}."))
+    invalid_buckets = sorted(
+        verdict
+        for verdict, bucket in rollup_map.items()
+        if bucket not in VALID_ROLLUP_BUCKETS
+    )
+    if invalid_buckets:
+        errors.append(CheckError(skill_name, str(verdict_contract_path), f"rollup_map uses invalid buckets for: {', '.join(invalid_buckets)}."))
 
 
 def check_canonical_shared_refs(skill_name: str, skill_dir: Path, skill_md: str, errors: list[CheckError]) -> None:
@@ -334,6 +417,8 @@ def check_skill(skill_dir: Path, mode: str) -> list[CheckError]:
         check_packaging_noise(skill_name, skill_dir, errors)
         if frontmatter.get("description", "").startswith("Audits "):
             check_canonical_shared_refs(skill_name, skill_dir, skill_md, errors)
+            if skill_name != "repo-health-orchestrator":
+                check_summary_contract(skill_name, skill_dir, errors)
         if skill_name in LIVE_DOC_SKILLS:
             check_live_doc_contract(skill_name, skill_dir, errors)
     return errors

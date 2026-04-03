@@ -85,10 +85,10 @@ If the repo has no meaningful message, webhook, worker, queue, relay, or cross-p
 From the skill directory, targeting the repository root:
 
 ```bash
-mkdir -p .repo-harness
-python3 scripts/run_side_effect_scan.py   --repo /path/to/repo   --out .repo-harness/distributed-side-effect-summary.json
+mkdir -p .repo-harness/skills/distributed-side-effect-hardgate
+python3 scripts/run_side_effect_scan.py   --repo /path/to/repo   --out .repo-harness/skills/distributed-side-effect-hardgate/summary.json
 
-python3 scripts/validate_side_effect_summary.py   --summary .repo-harness/distributed-side-effect-summary.json
+python3 scripts/validate_side_effect_summary.py   --summary .repo-harness/skills/distributed-side-effect-hardgate/summary.json
 ```
 
 If the user wants a wrapper command instead:
@@ -229,11 +229,11 @@ Each finding should include at least:
 
 ## Output contract
 
-When file output is possible, always create:
+When file output is possible, always create these artifacts under the target repo root:
 
-- `.repo-harness/distributed-side-effect-human-report.md`
-- `.repo-harness/distributed-side-effect-agent-brief.md`
-- `.repo-harness/distributed-side-effect-summary.json`
+- `.repo-harness/skills/distributed-side-effect-hardgate/report.md`
+- `.repo-harness/skills/distributed-side-effect-hardgate/agent-brief.md`
+- `.repo-harness/skills/distributed-side-effect-hardgate/summary.json`
 
 If files cannot be written, return the same structure inline.
 

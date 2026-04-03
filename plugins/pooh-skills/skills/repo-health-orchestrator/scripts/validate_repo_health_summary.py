@@ -28,6 +28,8 @@ REQUIRED_RUN = {
     "domain",
     "skill_name",
     "status",
+    "child_verdict",
+    "rollup_bucket",
     "summary_path",
     "report_path",
     "agent_brief_path",
@@ -46,6 +48,7 @@ REQUIRED_DEPENDENCY_FAILURE = {
     "blocked_by_network",
 }
 VALID_DEPENDENCY_STATUS = {"ready", "auto-installed", "blocked"}
+VALID_ROLLUP_BUCKETS = {"blocked", "red", "yellow", "green", "not-applicable"}
 
 
 def main() -> int:
@@ -123,6 +126,14 @@ def main() -> int:
         run_dependency_status = run.get("dependency_status")
         if run_dependency_status not in VALID_DEPENDENCY_STATUS:
             print(f"skill_runs[{idx}] has unsupported dependency_status: {run_dependency_status!r}", file=sys.stderr)
+            return 2
+        rollup_bucket = run.get("rollup_bucket")
+        status = run.get("status")
+        if status in {"present", "blocked", "not-applicable"} and rollup_bucket not in VALID_ROLLUP_BUCKETS:
+            print(f"skill_runs[{idx}] has unsupported rollup_bucket: {rollup_bucket!r}", file=sys.stderr)
+            return 2
+        if status in {"missing", "invalid"} and rollup_bucket not in {"", None}:
+            print(f"skill_runs[{idx}] should not carry rollup_bucket when status={status!r}", file=sys.stderr)
             return 2
 
     print(f"Validated {path}")

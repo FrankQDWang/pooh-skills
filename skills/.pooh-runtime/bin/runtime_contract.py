@@ -21,6 +21,7 @@ import urllib.request
 import uuid
 from collections import Counter
 from datetime import datetime, timezone
+from functools import lru_cache
 from pathlib import Path
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 from typing import Any
@@ -28,6 +29,7 @@ from typing import Any
 sys.dont_write_bytecode = True
 
 SCHEMA_VERSION = "2.0"
+VERDICT_CONTRACT_SCHEMA_VERSION = "1.0"
 BOOTSTRAP_BLOCKED_EXIT = 10
 RUNTIME_ROOT = Path(__file__).resolve().parents[1]
 REGISTRY_PATH = RUNTIME_ROOT / "assets" / "tool-registry.json"
@@ -102,8 +104,12 @@ SKILL_DOMAIN_MAP = {
     "openapi-jsonschema-governance-audit": "schema-governance",
     "ts-frontend-regression-audit": "frontend-regression",
     "python-ts-security-posture-audit": "security-posture",
+    "secrets-and-hardcode-audit": "secrets-and-hardcode",
+    "test-quality-audit": "test-quality",
     "repo-health-orchestrator": "repo-health-orchestrator",
 }
+VALID_ROLLUP_BUCKETS = {"blocked", "red", "yellow", "green", "not-applicable"}
+VALID_DEPENDENCY_STATUS = {"ready", "auto-installed", "blocked"}
 
 
 def utc_now() -> str:
@@ -238,6 +244,112 @@ def resolve_run_id() -> str:
 
 def resolve_domain(skill_id: str) -> str:
     return SKILL_DOMAIN_MAP.get(skill_id, skill_id)
+
+
+def skill_assets_dir(skill_id: str) -> Path:
+    return RUNTIME_ROOT.parent / skill_id / "assets"
+
+
+@lru_cache(maxsize=None)
+def load_verdict_contract(skill_id: str) -> dict[str, Any]:
+    path = skill_assets_dir(skill_id) / "verdict-contract.json"
+    if not path.exists():
+        raise ValueError(f"Missing verdict contract for {skill_id}: {path}")
+    payload = load_json(path)
+    if payload.get("schema_version") != VERDICT_CONTRACT_SCHEMA_VERSION:
+        raise ValueError(f"{path} must declare schema_version={VERDICT_CONTRACT_SCHEMA_VERSION}")
+    if payload.get("skill") != skill_id:
+        raise ValueError(f"{path} skill must equal {skill_id}")
+    verdicts = payload.get("overall_verdicts")
+    rollup_map = payload.get("rollup_map")
+    if not isinstance(verdicts, list) or not verdicts or any(not isinstance(item, str) or not item for item in verdicts):
+        raise ValueError(f"{path} overall_verdicts must be a non-empty string list")
+    if not isinstance(rollup_map, dict) or not rollup_map:
+        raise ValueError(f"{path} rollup_map must be a non-empty object")
+    missing = sorted(set(verdicts) - set(rollup_map))
+    extra = sorted(set(rollup_map) - set(verdicts))
+    if missing:
+        raise ValueError(f"{path} rollup_map is missing verdicts: {missing}")
+    if extra:
+        raise ValueError(f"{path} rollup_map has unexpected verdicts: {extra}")
+    invalid_buckets = sorted(
+        verdict
+        for verdict, bucket in rollup_map.items()
+        if bucket not in VALID_ROLLUP_BUCKETS
+    )
+    if invalid_buckets:
+        raise ValueError(f"{path} rollup_map uses invalid buckets for verdicts: {invalid_buckets}")
+    return payload
+
+
+def normalize_severity_counts(summary: dict[str, Any]) -> dict[str, int]:
+    findings = summary.get("findings")
+    if not isinstance(findings, list):
+        findings = summary.get("issues")
+    if not isinstance(findings, list):
+        findings = []
+    summary["findings"] = [item for item in findings if isinstance(item, dict)]
+
+    counts = summary.get("severity_counts")
+    if isinstance(counts, dict):
+        normalized: dict[str, int] = {}
+        for key in ("critical", "high", "medium", "low"):
+            value = counts.get(key, 0)
+            try:
+                normalized[key] = int(value or 0)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"severity_counts.{key} must be an integer") from exc
+        return normalized
+
+    counter = Counter(str((item.get("severity") or "low")).lower() for item in summary["findings"])
+    return {
+        "critical": int(counter.get("critical", 0)),
+        "high": int(counter.get("high", 0)),
+        "medium": int(counter.get("medium", 0)),
+        "low": int(counter.get("low", 0)),
+    }
+
+
+def resolve_rollup_bucket(skill_id: str, overall_verdict: str, dependency_status: str) -> str:
+    if dependency_status == "blocked":
+        return "blocked"
+    contract = load_verdict_contract(skill_id)
+    bucket = contract["rollup_map"].get(overall_verdict)
+    if bucket is None:
+        raise ValueError(f"Unknown overall_verdict for {skill_id}: {overall_verdict}")
+    return str(bucket)
+
+
+def normalize_child_summary(state: dict[str, Any], summary_path: Path, summary: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(summary)
+    skill_id = str(state.get("skill") or normalized.get("skill") or "")
+    if not skill_id:
+        raise ValueError(f"Summary at {summary_path} is missing skill")
+
+    overall_verdict = normalized.get("overall_verdict")
+    if not isinstance(overall_verdict, str) or not overall_verdict.strip():
+        raise ValueError(f"Summary at {summary_path} must declare a non-empty overall_verdict")
+
+    dependency_status = str(state.get("dependency_status") or normalized.get("dependency_status") or "ready")
+    if dependency_status not in VALID_DEPENDENCY_STATUS:
+        raise ValueError(f"Summary at {summary_path} has invalid dependency_status {dependency_status!r}")
+
+    normalized["run_id"] = str(state.get("run_id") or resolve_run_id())
+    normalized["schema_version"] = str(normalized.get("schema_version") or "1.0.0")
+    normalized["skill"] = skill_id
+    normalized["domain"] = str(state.get("domain") or normalized.get("domain") or resolve_domain(skill_id))
+    normalized["repo_root"] = str(state.get("repo_root") or normalized.get("repo_root") or "")
+    normalized["generated_at"] = str(normalized.get("generated_at") or utc_now())
+    normalized["overall_verdict"] = overall_verdict.strip()
+    normalized["dependency_status"] = dependency_status
+    normalized["bootstrap_actions"] = list(state.get("bootstrap_actions") or normalized.get("bootstrap_actions") or [])
+    normalized["dependency_failures"] = list(state.get("dependency_failures") or normalized.get("dependency_failures") or [])
+    normalized["severity_counts"] = normalize_severity_counts(normalized)
+    normalized["rollup_bucket"] = resolve_rollup_bucket(skill_id, normalized["overall_verdict"], dependency_status)
+    normalized["summary_path"] = str(summary_path.resolve())
+    normalized["report_path"] = str(state.get("report_path") or normalized.get("report_path") or "")
+    normalized["agent_brief_path"] = str(state.get("agent_brief_path") or normalized.get("agent_brief_path") or "")
+    return normalized
 
 
 def default_sidecar(skill_id: str, repo: Path, summary_path: Path, report_path: Path, agent_brief_path: Path) -> dict[str, Any]:
@@ -769,39 +881,7 @@ def inject_summary(args: argparse.Namespace) -> int:
     state = load_json(Path(args.state).resolve())
     summary_path = Path(args.summary).resolve()
     summary = load_json(summary_path)
-    summary["run_id"] = str(state.get("run_id") or resolve_run_id())
-    summary["skill"] = str(state.get("skill") or summary.get("skill") or "")
-    summary["domain"] = str(state.get("domain") or summary.get("domain") or resolve_domain(str(state.get("skill") or "")))
-    summary["repo_root"] = str(state.get("repo_root") or summary.get("repo_root") or "")
-    summary["generated_at"] = str(summary.get("generated_at") or utc_now())
-    summary["overall_verdict"] = str(
-        summary.get("overall_verdict")
-        or summary.get("overall_health")
-        or summary.get("audit_mode")
-        or summary.get("mode")
-        or summary.get("status")
-        or ""
-    )
-    findings = summary.get("findings")
-    if not isinstance(findings, list):
-        findings = summary.get("issues")
-    if not isinstance(findings, list):
-        findings = []
-    summary["findings"] = [item for item in findings if isinstance(item, dict)]
-    if not isinstance(summary.get("severity_counts"), dict):
-        counter = Counter(str((item.get("severity") or "low")).lower() for item in summary["findings"])
-        summary["severity_counts"] = {
-            "critical": int(counter.get("critical", 0)),
-            "high": int(counter.get("high", 0)),
-            "medium": int(counter.get("medium", 0)),
-            "low": int(counter.get("low", 0)),
-        }
-    summary["summary_path"] = str(summary_path)
-    summary["report_path"] = str(state.get("report_path") or summary.get("report_path") or "")
-    summary["agent_brief_path"] = str(state.get("agent_brief_path") or summary.get("agent_brief_path") or "")
-    summary["dependency_status"] = state.get("dependency_status") or "ready"
-    summary["bootstrap_actions"] = list(state.get("bootstrap_actions") or [])
-    summary["dependency_failures"] = list(state.get("dependency_failures") or [])
+    summary = normalize_child_summary(state, summary_path, summary)
     write_json_atomic(summary_path, summary)
     print(f"Wrote {summary_path}")
     return 0
@@ -1178,6 +1258,7 @@ def cleanup_blocked_summary(repo: Path, state: dict[str, Any], profile: dict[str
     return {
         "repo_root": str(repo.resolve()),
         "generated_at": utc_now(),
+        "overall_verdict": "scan-blocked",
         "repo_profile": {
             "languages": list(profile["languages"]),
             "manifests": list(profile["manifests"]),
@@ -1211,6 +1292,7 @@ def llm_blocked_summary(repo: Path, state: dict[str, Any], profile: dict[str, An
         "version": "2.0.0",
         "generated_at": utc_now(),
         "audit_mode": "blocked",
+        "overall_verdict": "blocked",
         "target_scope": "repo",
         "repo_profile": {
             "repo_root": str(repo.resolve()),
@@ -1335,6 +1417,24 @@ def build_blocked_summary(skill_id: str, repo: Path, state: dict[str, Any]) -> d
             summary_line="Shared toolchain bootstrap blocked the baseline security-posture audit before trustworthy evidence could be collected.",
             overall_verdict="scan-blocked",
         )
+    if skill_id == "secrets-and-hardcode-audit":
+        return simple_findings_blocked_summary(
+            skill_id,
+            repo,
+            state,
+            profile,
+            summary_line="Shared toolchain bootstrap blocked the secrets-and-hardcode audit before credential-exposure evidence could be collected.",
+            overall_verdict="scan-blocked",
+        )
+    if skill_id == "test-quality-audit":
+        return simple_findings_blocked_summary(
+            skill_id,
+            repo,
+            state,
+            profile,
+            summary_line="Shared toolchain bootstrap blocked the test-quality audit before CI gate and suite-governance evidence could be collected.",
+            overall_verdict="scan-blocked",
+        )
     if skill_id == "controlled-cleanup-hardgate":
         return cleanup_blocked_summary(repo, state, profile)
     if skill_id == "llm-api-freshness-guard":
@@ -1363,42 +1463,12 @@ def blocked_artifacts(args: argparse.Namespace) -> int:
     state_path = Path(args.state).resolve()
     state = load_json(state_path)
     summary = build_blocked_summary(args.skill_id, repo, state)
-    summary["run_id"] = str(state.get("run_id") or resolve_run_id())
-    summary["skill"] = str(state.get("skill") or args.skill_id)
-    summary["domain"] = str(state.get("domain") or resolve_domain(args.skill_id))
-    summary["repo_root"] = str(state.get("repo_root") or repo.resolve())
-    summary["generated_at"] = str(summary.get("generated_at") or utc_now())
-    summary["overall_verdict"] = str(
-        summary.get("overall_verdict")
-        or summary.get("overall_health")
-        or summary.get("audit_mode")
-        or summary.get("mode")
-        or summary.get("status")
-        or ""
-    )
-    findings = summary.get("findings")
-    if not isinstance(findings, list):
-        findings = summary.get("issues")
-    if not isinstance(findings, list):
-        findings = []
-    summary["findings"] = [item for item in findings if isinstance(item, dict)]
-    if not isinstance(summary.get("severity_counts"), dict):
-        counter = Counter(str((item.get("severity") or "low")).lower() for item in summary["findings"])
-        summary["severity_counts"] = {
-            "critical": int(counter.get("critical", 0)),
-            "high": int(counter.get("high", 0)),
-            "medium": int(counter.get("medium", 0)),
-            "low": int(counter.get("low", 0)),
-        }
-    summary["summary_path"] = str(Path(args.summary_path).resolve())
-    summary["report_path"] = str(Path(args.report_path).resolve())
-    summary["agent_brief_path"] = str(Path(args.agent_brief_path).resolve())
-    summary["dependency_status"] = "blocked"
-    summary["bootstrap_actions"] = list(state.get("bootstrap_actions") or [])
-    summary["dependency_failures"] = list(state.get("dependency_failures") or [])
     summary_path = Path(args.summary_path).resolve()
     report_path = Path(args.report_path).resolve()
     brief_path = Path(args.agent_brief_path).resolve()
+    summary = normalize_child_summary(state, summary_path, summary)
+    summary["report_path"] = str(report_path)
+    summary["agent_brief_path"] = str(brief_path)
 
     write_json_atomic(summary_path, summary)
     write_text(report_path, blocked_report_markdown(args.skill_id, repo, state))
@@ -1414,11 +1484,8 @@ def blocked_artifacts(args: argparse.Namespace) -> int:
 
 
 def extract_child_verdict(summary: dict[str, Any]) -> str:
-    for key in ("overall_verdict", "overall_health", "audit_mode", "mode", "status"):
-        value = summary.get(key)
-        if isinstance(value, str):
-            return value
-    return ""
+    value = summary.get("overall_verdict")
+    return str(value) if isinstance(value, str) else ""
 
 
 def finalize_sidecar(args: argparse.Namespace) -> int:

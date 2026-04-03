@@ -45,7 +45,7 @@ def assert_single_entry_bundle(plugin_root: Path) -> None:
     public_skills = sorted(path.parent.name for path in plugin_root.glob("skills/*/SKILL.md"))
     internal_skills = sorted(path.parent.name for path in plugin_root.glob("internal-skills/*/SKILL.md"))
     assert public_skills == ["repo-health-orchestrator"], f"public plugin skills drifted: {public_skills}"
-    assert len(internal_skills) == 15, f"internal worker count drifted: {internal_skills}"
+    assert len(internal_skills) == 17, f"internal worker count drifted: {internal_skills}"
     assert "repo-health-orchestrator" not in internal_skills
     assert (plugin_root / "internal-skills" / ".pooh-runtime").is_dir()
 
@@ -54,7 +54,9 @@ def run_existing_marketplace_scenario(temp_root: Path) -> None:
     home_root = temp_root / "existing-home"
     home_root.mkdir(parents=True, exist_ok=True)
     marketplace_path = home_root / ".agents" / "plugins" / "marketplace.json"
+    config_path = home_root / ".codex" / "config.toml"
     marketplace_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.parent.mkdir(parents=True, exist_ok=True)
     marketplace_path.write_text(
         json.dumps(
             {
@@ -74,6 +76,15 @@ def run_existing_marketplace_scenario(temp_root: Path) -> None:
         + "\n",
         encoding="utf-8",
     )
+    config_path.write_text(
+        '[plugins."github@openai-curated"]\n'
+        'enabled = true\n\n'
+        '[plugins."pooh-skills@pooh-skills-local"]\n'
+        'enabled = true\n',
+        encoding="utf-8",
+    )
+    (home_root / ".codex" / "plugins" / "cache" / "pooh-skills-local").mkdir(parents=True, exist_ok=True)
+    (home_root / ".codex" / "plugins" / "cache" / "existing-local" / "pooh-skills").mkdir(parents=True, exist_ok=True)
 
     seed_legacy_skill(home_root, "dependency-audit")
     seed_legacy_skill(home_root, "repo-health-orchestrator")
@@ -88,6 +99,12 @@ def run_existing_marketplace_scenario(temp_root: Path) -> None:
     assert marketplace["interface"]["displayName"] == "Existing Local Plugins"
     assert any(plugin.get("name") == "example-plugin" for plugin in marketplace["plugins"])
     assert_pooh_entry(marketplace)
+    config_text = config_path.read_text(encoding="utf-8")
+    assert '[plugins."github@openai-curated"]' in config_text
+    assert '[plugins."pooh-skills@existing-local"]' in config_text
+    assert 'pooh-skills@pooh-skills-local' not in config_text
+    assert not (home_root / ".codex" / "plugins" / "cache" / "pooh-skills-local").exists()
+    assert not (home_root / ".codex" / "plugins" / "cache" / "existing-local" / "pooh-skills").exists()
     assert not (home_root / ".codex" / "skills" / "dependency-audit").exists()
     assert not (home_root / ".codex" / "skills" / "repo-health-orchestrator").exists()
 
@@ -98,12 +115,16 @@ def run_existing_marketplace_scenario(temp_root: Path) -> None:
     marketplace_after_uninstall = read_json(marketplace_path)
     assert any(plugin.get("name") == "example-plugin" for plugin in marketplace_after_uninstall["plugins"])
     assert not any(plugin.get("name") == "pooh-skills" for plugin in marketplace_after_uninstall["plugins"])
+    config_after_uninstall = config_path.read_text(encoding="utf-8")
+    assert '[plugins."github@openai-curated"]' in config_after_uninstall
+    assert "pooh-skills@" not in config_after_uninstall
     assert not installed_plugin.exists()
 
 
 def run_fresh_home_scenario(temp_root: Path) -> None:
     home_root = temp_root / "fresh-home"
     home_root.mkdir(parents=True, exist_ok=True)
+    config_path = home_root / ".codex" / "config.toml"
 
     run("bash", str(INSTALL_SCRIPT), "--home", str(home_root))
 
@@ -116,10 +137,13 @@ def run_fresh_home_scenario(temp_root: Path) -> None:
     assert marketplace["name"].endswith("-local")
     assert marketplace["interface"]["displayName"].endswith("Local Plugins")
     assert_pooh_entry(marketplace)
+    config_text = config_path.read_text(encoding="utf-8")
+    assert 'pooh-skills@' in config_text
 
     run("bash", str(UNINSTALL_SCRIPT), "--home", str(home_root))
     marketplace_after_uninstall = read_json(marketplace_path)
     assert marketplace_after_uninstall["plugins"] == []
+    assert "pooh-skills@" not in config_path.read_text(encoding="utf-8")
     assert not installed_plugin.exists()
 
 

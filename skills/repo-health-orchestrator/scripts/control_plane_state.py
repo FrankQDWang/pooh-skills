@@ -12,7 +12,6 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any
 
-from aggregate_repo_health import RED_VERDICTS
 from repo_health_catalog import DOMAIN_BY_NAME
 from repo_health_catalog import EXPECTED
 from repo_health_catalog import summary_path as child_summary_path
@@ -337,10 +336,7 @@ def status_from_summary_run(run: dict[str, Any]) -> tuple[str, str, str]:
     status = str(run.get("status") or "missing")
     verdict = str(run.get("child_verdict") or "").strip()
     dependency_status = str(run.get("dependency_status") or "ready")
-    severity = run.get("severity_counts") or {}
-    critical = int(severity.get("critical", 0) or 0)
-    high = int(severity.get("high", 0) or 0)
-    verdict_key = verdict.lower()
+    rollup_bucket = str(run.get("rollup_bucket") or "")
 
     if status == "blocked" or dependency_status == "blocked":
         failures = run.get("dependency_failures") or []
@@ -351,7 +347,7 @@ def status_from_summary_run(run: dict[str, Any]) -> tuple[str, str, str]:
             detail = verdict or "dependency bootstrap blocked"
         return "blocked", STATUS_LABELS["blocked"], detail
     if status == "present":
-        if critical > 0 or high > 0 or verdict_key in RED_VERDICTS:
+        if rollup_bucket in {"blocked", "red"}:
             return "blocked", STATUS_LABELS["blocked"], verdict or "high-risk findings"
         return "complete", STATUS_LABELS["complete"], verdict or "artifact ready"
     if status == "not-applicable":

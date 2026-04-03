@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0",
+  "skill": "module-shape-hardgate",
+  "overall_verdicts": [
+    "scan-blocked",
+    "not-applicable",
+    "split-before-merge",
+    "sprawling",
+    "contained",
+    "disciplined"
+  ],
+  "rollup_map": {
+    "scan-blocked": "blocked",
+    "not-applicable": "not-applicable",
+    "split-before-merge": "red",
+    "sprawling": "red",
+    "contained": "yellow",
+    "disciplined": "green"
+  }
+}

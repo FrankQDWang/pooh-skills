@@ -24,6 +24,8 @@
 | python-lint-format | {{status}} | {{dependency_status}} | {{verdict}} | {{evidence_gaps}} |
 | ts-lint-format | {{status}} | {{dependency_status}} | {{verdict}} | {{evidence_gaps}} |
 | security-posture | {{status}} | {{dependency_status}} | {{verdict}} | {{evidence_gaps}} |
+| secrets-and-hardcode | {{status}} | {{dependency_status}} | {{verdict}} | {{evidence_gaps}} |
+| test-quality | {{status}} | {{dependency_status}} | {{verdict}} | {{evidence_gaps}} |
 | llm-api-freshness | {{status}} | {{dependency_status}} | {{verdict}} | {{evidence_gaps}} |
 | cleanup | {{status}} | {{dependency_status}} | {{verdict}} | {{evidence_gaps}} |
 

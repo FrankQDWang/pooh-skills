@@ -1,0 +1,16 @@
+{
+  "schema_version": "1.0",
+  "skill": "secrets-and-hardcode-audit",
+  "overall_verdicts": [
+    "scan-blocked",
+    "watch",
+    "clean",
+    "not-applicable"
+  ],
+  "rollup_map": {
+    "scan-blocked": "blocked",
+    "watch": "yellow",
+    "clean": "green",
+    "not-applicable": "not-applicable"
+  }
+}

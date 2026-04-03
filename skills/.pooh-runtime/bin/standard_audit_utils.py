@@ -75,6 +75,7 @@ ALLOWED_SEVERITY = {"critical", "high", "medium", "low"}
 ALLOWED_CONFIDENCE = {"high", "medium", "low"}
 ALLOWED_MERGE_GATES = {"block-now", "fix-before-release", "fix-next", "watch", "document-only"}
 ALLOWED_DEPENDENCY_STATUS = {"ready", "auto-installed", "blocked"}
+ALLOWED_ROLLUP_BUCKETS = {"blocked", "red", "yellow", "green", "not-applicable"}
 
 
 def utc_now() -> str:
@@ -473,9 +474,12 @@ def validate_standard_summary(
 
     required_top = {
         "schema_version",
+        "run_id",
         "skill",
+        "domain",
         "generated_at",
         "repo_root",
+        "rollup_bucket",
         "repo_scope",
         "package_managers",
         "status",
@@ -492,6 +496,9 @@ def validate_standard_summary(
         "dependency_status",
         "bootstrap_actions",
         "dependency_failures",
+        "summary_path",
+        "report_path",
+        "agent_brief_path",
     }
     missing = required_top - set(data)
     if missing:
@@ -500,6 +507,8 @@ def validate_standard_summary(
         return False, f"skill must be `{skill_name}`"
     if data.get("overall_verdict") not in ALLOWED_VERDICTS:
         return False, f"unexpected overall_verdict `{data.get('overall_verdict')}`"
+    if data.get("rollup_bucket") not in ALLOWED_ROLLUP_BUCKETS:
+        return False, f"unexpected rollup_bucket `{data.get('rollup_bucket')}`"
     if data.get("dependency_status") not in ALLOWED_DEPENDENCY_STATUS:
         return False, f"unexpected dependency_status `{data.get('dependency_status')}`"
 

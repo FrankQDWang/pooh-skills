@@ -1,13 +1,13 @@
 # Integration matrix
 
-The orchestrator expects one namespaced child artifact directory per managed audit skill:
+The orchestrator expects one namespaced child artifact directory per managed audit skill under the target repo root:
 
 - `.repo-harness/skills/<skill-id>/runtime.json`
 - `.repo-harness/skills/<skill-id>/summary.json`
 - `.repo-harness/skills/<skill-id>/report.md`
 - `.repo-harness/skills/<skill-id>/agent-brief.md`
 
-Repo-level rollup artifacts stay at the root of `.repo-harness`:
+Repo-level rollup artifacts stay at the target repo's `.repo-harness` root:
 
 - `repo-health-control-plane.json`
 - `repo-health-shared-bootstrap.json`
@@ -33,6 +33,8 @@ Repo-level rollup artifacts stay at the root of `.repo-harness`:
 | engineering-quality-and-security | python-lint-format | `python-lint-format-audit` | `.repo-harness/skills/python-lint-format-audit/` |
 | engineering-quality-and-security | ts-lint-format | `ts-lint-format-audit` | `.repo-harness/skills/ts-lint-format-audit/` |
 | engineering-quality-and-security | security-posture | `python-ts-security-posture-audit` | `.repo-harness/skills/python-ts-security-posture-audit/` |
+| engineering-quality-and-security | secrets-and-hardcode | `secrets-and-hardcode-audit` | `.repo-harness/skills/secrets-and-hardcode-audit/` |
+| engineering-quality-and-security | test-quality | `test-quality-audit` | `.repo-harness/skills/test-quality-audit/` |
 | surface-freshness-and-cleanup | llm-api-freshness | `llm-api-freshness-guard` | `.repo-harness/skills/llm-api-freshness-guard/` |
 | surface-freshness-and-cleanup | cleanup | `controlled-cleanup-hardgate` | `.repo-harness/skills/controlled-cleanup-hardgate/` |
 

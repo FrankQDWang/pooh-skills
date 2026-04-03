@@ -16,7 +16,9 @@
     "top_actions",
     "dependency_status",
     "bootstrap_actions",
-    "dependency_failures"
+    "dependency_failures",
+    "run_id",
+    "rollup_bucket"
   ],
   "properties": {
     "schema_version": {
@@ -131,8 +133,7 @@
           "type": "integer",
           "minimum": 0
         }
-      },
-      "additionalProperties": false
+      }
     },
     "gate_states": {
       "type": "array",
@@ -274,7 +275,12 @@
       }
     },
     "dependency_status": {
-      "type": "string"
+      "type": "string",
+      "enum": [
+        "ready",
+        "auto-installed",
+        "blocked"
+      ]
     },
     "bootstrap_actions": {
       "type": "array",
@@ -287,6 +293,19 @@
       "items": {
         "$ref": "#/$defs/dependencyFailure"
       }
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "rollup_bucket": {
+      "type": "string",
+      "enum": [
+        "blocked",
+        "red",
+        "yellow",
+        "green",
+        "not-applicable"
+      ]
     }
   },
   "additionalProperties": false,

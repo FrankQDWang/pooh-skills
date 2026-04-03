@@ -52,7 +52,7 @@ description: "Audits Python / TypeScript repos for strict 'signature as contract
 
 - 生成人类报告时，从 [`assets/human-report-template.md`](assets/human-report-template.md) 开始。
 - 生成 agent remediation brief 时，从 [`assets/agent-brief-template.md`](assets/agent-brief-template.md) 开始。
-- 生成 `.repo-harness/contract-hardgate-summary.json` 时，必须遵守 [`assets/contract-hardgate-summary.schema.json`](assets/contract-hardgate-summary.schema.json)。
+- 生成目标仓库根目录下的 `.repo-harness/skills/signature-contract-hardgate/summary.json` 时，必须遵守 [`assets/contract-hardgate-summary.schema.json`](assets/contract-hardgate-summary.schema.json)。
 - 共享输出契约读取 [`references/shared-output-contract.md`](references/shared-output-contract.md)。
 - 共享报告语气与双读者要求读取 [`references/shared-reporting-style.md`](references/shared-reporting-style.md)。
 - 共享 runtime truth 与 blocked artifact 语义读取 [`references/shared-runtime-artifact-contract.md`](references/shared-runtime-artifact-contract.md)。
@@ -166,9 +166,9 @@ description: "Audits Python / TypeScript repos for strict 'signature as contract
 
 这个 skill 的具体文件名固定为：
 
-- `.repo-harness/contract-hardgate-human-report.md`
-- `.repo-harness/contract-hardgate-agent-brief.md`
-- `.repo-harness/contract-hardgate-summary.json`
+- `.repo-harness/skills/signature-contract-hardgate/report.md`
+- `.repo-harness/skills/signature-contract-hardgate/agent-brief.md`
+- `.repo-harness/skills/signature-contract-hardgate/summary.json`
 
 summary JSON 必须符合 [`assets/contract-hardgate-summary.schema.json`](assets/contract-hardgate-summary.schema.json)。
 

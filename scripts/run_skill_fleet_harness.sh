@@ -19,6 +19,9 @@ python3 "$SCRIPT_DIR/check_repo_plugin.py" \
   --repo "$TARGET_REPO" \
   --json-out "$OUT_DIR/repo-plugin-check.json"
 python3 "$SCRIPT_DIR/run_module_shape_fixture_regressions.py"
+python3 "$SCRIPT_DIR/run_controlled_cleanup_fixture_regressions.py"
+python3 "$SCRIPT_DIR/run_secrets_and_hardcode_fixture_regressions.py"
+python3 "$SCRIPT_DIR/run_test_quality_fixture_regressions.py"
 python3 "$SCRIPT_DIR/run_new_audit_fixture_regressions.py"
 python3 "$SCRIPT_DIR/run_repo_health_fixture_regressions.py"
 python3 "$SCRIPT_DIR/run_child_wrapper_smoke_matrix.py"

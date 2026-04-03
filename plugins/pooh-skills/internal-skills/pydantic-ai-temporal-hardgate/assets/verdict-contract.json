@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0",
+  "skill": "pydantic-ai-temporal-hardgate",
+  "overall_verdicts": [
+    "not-applicable",
+    "scan-blocked",
+    "workflow-time-bomb",
+    "paper-guardrails",
+    "partially-contained",
+    "durable-harness"
+  ],
+  "rollup_map": {
+    "not-applicable": "not-applicable",
+    "scan-blocked": "blocked",
+    "workflow-time-bomb": "red",
+    "paper-guardrails": "yellow",
+    "partially-contained": "yellow",
+    "durable-harness": "green"
+  }
+}

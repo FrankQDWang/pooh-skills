@@ -29,48 +29,41 @@ fi
 
 mkdir -p "$OUT_DIR"
 
-if [[ -f "$RUNTIME_WRAPPER" ]]; then
-  # Preferred path inside pooh-skills.
-  # shellcheck source=/dev/null
-  source "$RUNTIME_WRAPPER"
-
-  pooh_runtime_prepare \
-    "module-shape-hardgate" \
-    "$SCRIPT_DIR" \
-    "$REPO_ROOT" \
-    "$OUT_DIR" \
-    "$SUMMARY_PATH" \
-    "$REPORT_PATH" \
-    "$AGENT_BRIEF_PATH" \
-    "$MANIFEST_PATH"
-
-  bootstrap_exit=0
-  pooh_runtime_bootstrap_or_block || bootstrap_exit=$?
-  if [[ "$bootstrap_exit" -eq 10 ]]; then
-    exit 1
-  elif [[ "$bootstrap_exit" -ne 0 ]]; then
-    exit "$bootstrap_exit"
-  fi
-
-  pooh_runtime_update "running" "" "Running module shape hardgate scan."
-  python3 "$SCRIPT_DIR/run_module_shape_scan.py" \
-    --repo "$REPO_ROOT" \
-    --out-dir "$OUT_DIR" \
-    --summary-out "$SUMMARY_PATH" \
-    --report-out "$REPORT_PATH" \
-    --agent-brief-out "$AGENT_BRIEF_PATH"
-  pooh_runtime_inject_summary
-  python3 "$SCRIPT_DIR/validate_module_shape_summary.py" --summary "$SUMMARY_PATH"
-  pooh_runtime_finalize
-else
-  # Standalone fallback so the downloadable skill still works before being copied into pooh-skills.
-  python3 "$SCRIPT_DIR/run_module_shape_scan.py" \
-    --repo "$REPO_ROOT" \
-    --out-dir "$OUT_DIR" \
-    --summary-out "$SUMMARY_PATH" \
-    --report-out "$REPORT_PATH" \
-    --agent-brief-out "$AGENT_BRIEF_PATH"
-  python3 "$SCRIPT_DIR/validate_module_shape_summary.py" --summary "$SUMMARY_PATH"
+if [[ ! -f "$RUNTIME_WRAPPER" ]]; then
+  printf 'error: missing shared runtime wrapper at %s\n' "$RUNTIME_WRAPPER" >&2
+  exit 2
 fi
+
+# shellcheck source=/dev/null
+source "$RUNTIME_WRAPPER"
+
+pooh_runtime_prepare \
+  "module-shape-hardgate" \
+  "$SCRIPT_DIR" \
+  "$REPO_ROOT" \
+  "$OUT_DIR" \
+  "$SUMMARY_PATH" \
+  "$REPORT_PATH" \
+  "$AGENT_BRIEF_PATH" \
+  "$MANIFEST_PATH"
+
+bootstrap_exit=0
+pooh_runtime_bootstrap_or_block || bootstrap_exit=$?
+if [[ "$bootstrap_exit" -eq 10 ]]; then
+  exit 1
+elif [[ "$bootstrap_exit" -ne 0 ]]; then
+  exit "$bootstrap_exit"
+fi
+
+pooh_runtime_update "running" "" "Running module shape hardgate scan."
+python3 "$SCRIPT_DIR/run_module_shape_scan.py" \
+  --repo "$REPO_ROOT" \
+  --out-dir "$OUT_DIR" \
+  --summary-out "$SUMMARY_PATH" \
+  --report-out "$REPORT_PATH" \
+  --agent-brief-out "$AGENT_BRIEF_PATH"
+pooh_runtime_inject_summary
+python3 "$SCRIPT_DIR/validate_module_shape_summary.py" --summary "$SUMMARY_PATH"
+pooh_runtime_finalize
 
 echo "Module shape hardgate baseline complete."

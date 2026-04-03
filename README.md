@@ -36,7 +36,7 @@ shared/
 - public plugin id: `pooh-skills`
 - public plugin display name: `Pooh Skills`
 - public plugin entrypoint: `$repo-health-orchestrator`
-- the 15 audit skills remain bundled for orchestrator use, but are no longer documented as the primary installation surface
+- the 17 audit skills remain bundled for orchestrator use, but are no longer documented as the primary installation surface
 
 Codex discovers this plugin through the user's home-local marketplace at `~/.agents/plugins/marketplace.json`, which is created by [`scripts/install_home_local_plugin.sh`](scripts/install_home_local_plugin.sh) and points to [`plugins/pooh-skills/.codex-plugin/plugin.json`](plugins/pooh-skills/.codex-plugin/plugin.json) via `~/plugins/pooh-skills`.
 
@@ -46,7 +46,7 @@ Root [`skills/`](skills/) remains the only source of truth.
 The plugin bundle is split into:
 
 - [`plugins/pooh-skills/skills/`](plugins/pooh-skills/skills/) for the one public orchestrator entrypoint
-- [`plugins/pooh-skills/internal-skills/`](plugins/pooh-skills/internal-skills/) for the 15 private worker audits and shared runtime
+- [`plugins/pooh-skills/internal-skills/`](plugins/pooh-skills/internal-skills/) for the 17 private worker audits and shared runtime
 
 Both generated directories must stay byte-for-byte synchronized with the root source tree.
 
@@ -76,7 +76,7 @@ That public installer does four things in one run:
 1. syncs the public and private plugin bundles from the root `skills/` source tree
 2. validates the plugin manifest, bundle sync, and public plugin docs
 3. installs `~/plugins/pooh-skills`
-4. updates `~/.agents/plugins/marketplace.json` and removes legacy `~/.codex/skills/<skill-id>` copies for this fleet
+4. updates `~/.agents/plugins/marketplace.json`, enables the plugin in `~/.codex/config.toml`, clears stale Codex plugin caches, and removes legacy `~/.codex/skills/<skill-id>` copies for this fleet
 
 Useful variants:
 
@@ -111,14 +111,16 @@ After install or uninstall, restart Codex or reopen the workspace if the plugin 
 - `openapi-jsonschema-governance-audit`: 面向 Python / TypeScript 仓库的 OpenAPI / JSON Schema 治理审计，检查 canonical source、ruleset、lint/bundle/diff 链和 CI publication evidence。
 - `ts-frontend-regression-audit`: 面向 TypeScript 前端仓库的浏览器真实回归审计，检查 browser fidelity、boundary mock、a11y、visual evidence 和 CI 工件。
 - `python-ts-security-posture-audit`: 面向 Python / TypeScript 仓库的基础安全姿态审计，检查 uv / pnpm 锁文件纪律、依赖审计信号、Bandit 类静态扫描和 ignore governance。
-- `repo-health-orchestrator`: 面向整仓体检的汇总 skill，每次先清空 `.repo-harness`，先串行 bootstrap 共享锁定工具链，再并行启动 15 个 child audit subagents，维护一个终端实时 control plane，并在结束时先产出机器 rollup，再合成 cross-domain evidence、最终总报告和 agent brief。要求运行环境支持 Codex subagent，以及当前会话模型与推理强度继承语义。
+- `secrets-and-hardcode-audit`: 面向 Python / TypeScript 仓库的 secrets 与硬编码凭证审计，检查工作树 secret 暴露、git history 泄露、硬编码 credential material，以及 `.gitignore` / sensitive file ignore discipline。
+- `test-quality-audit`: 面向 Python / TypeScript 仓库的高信号测试治理审计，检查真实 CI test gate、placeholder 断言、skip/xfail/retry 漂移、内部逻辑过度 mock，以及 failure-path 证据缺口。
+- `repo-health-orchestrator`: 面向整仓体检的汇总 skill，每次先清空目标仓库根目录下的 `.repo-harness`，先串行 bootstrap 共享锁定工具链，再并行启动 17 个 child audit subagents，维护一个终端实时 control plane，并在结束时先产出机器 rollup，再合成 cross-domain evidence、最终总报告和 agent brief。要求运行环境支持 Codex subagent，以及当前会话模型与推理强度继承语义。
 
 ## Audit Fleet 约定
 
-- `repo-health-orchestrator` 是 Codex subagent-only：它会先清空并重建 repo-root `.repo-harness`，再启动 15 个 child audit subagents
+- `repo-health-orchestrator` 是 Codex subagent-only：它会先清空并重建目标仓库根目录下的 `.repo-harness`，再启动 17 个 child audit subagents
 - `pooh-skills` plugin 对用户只公开一个主入口：`$repo-health-orchestrator`
-- plugin 内部的 15 个 worker audit 只存在于 `plugins/pooh-skills/internal-skills/`；它们是 orchestrator 的私有运行资源，不应该作为单独入口暴露给用户
-- `.repo-harness` 是纯输出目录，只保存当前 run 的 summary / report / brief / linkcheck / control-plane state 等工件，不放默认输入
+- plugin 内部的 17 个 worker audit 只存在于 `plugins/pooh-skills/internal-skills/`；它们是 orchestrator 的私有运行资源，不应该作为单独入口暴露给用户
+- `.repo-harness` 是目标仓库根目录下的纯输出目录，只保存当前 run 的 summary / report / brief / evidence / control-plane state 等工件，不放默认输入
 - `repo-health-orchestrator` 采用双层汇总：`repo-health-summary.json` 负责机器真相，`repo-health-evidence.json` 负责 cross-domain synthesis，最终 `repo-health-report.md` 与 `repo-health-agent-brief.md` 基于 evidence 生成
 - 所有 child skills 统一遵守 fail-fast bootstrap 合约：先 `preflight`，再尝试自动安装缺失依赖；安装失败时停止主审计，但仍写标准 blocked 工件
 - installable tools 统一由共享 `.pooh-runtime` 锁定管理：Python CLI 只经 `uv` 的 `audit` 依赖组，TS/Node CLI 只经 `pnpm` 的 `devDependencies`；这些都属于宿主侧共享审计工具链，不是应用运行时依赖
@@ -127,7 +129,7 @@ After install or uninstall, restart Codex or reopen the workspace if the plugin 
 - child skill 自己的 `scripts/run_all.sh` 可以继续作为本地 deterministic helper 独立使用，但不再属于 orchestrator 的公开契约
 - 旧 skill 的 wrapper 现在会先走共享 `.pooh-runtime` 合约；缺依赖时不会再伪装成“保守 baseline 成功”
 - Python 边界工具的唯一标准是 `Tach`；仓库不引入 `import-linter`
-- `repo-health-orchestrator` 是唯一的 full-fleet 总控，统一覆盖 15 个 audit skills；orchestrator 自身不进入 worker 列表
+- `repo-health-orchestrator` 是唯一的 full-fleet 总控，统一覆盖 17 个 audit skills；orchestrator 自身不进入 worker 列表
 
 ## Skill Authoring Contract
 
@@ -161,6 +163,8 @@ python3 scripts/sync_shared_skill_refs.py --write
 python3 scripts/check_repo_plugin.py --repo . --json-out .repo-harness/repo-plugin-check.json
 python3 scripts/run_module_shape_fixture_regressions.py
 python3 scripts/run_new_audit_fixture_regressions.py
+python3 scripts/run_secrets_and_hardcode_fixture_regressions.py
+python3 scripts/run_test_quality_fixture_regressions.py
 python3 scripts/run_repo_health_fixture_regressions.py
 python3 scripts/run_child_wrapper_smoke_matrix.py
 python3 scripts/run_control_plane_renderer_regressions.py

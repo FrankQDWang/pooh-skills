@@ -53,10 +53,10 @@ This skill uses four explicit modes:
 
 Required machine artifacts:
 
-- `.repo-harness/llm-api-surface-evidence.json`
-- `.repo-harness/llm-api-freshness-summary.json`
-- `.repo-harness/llm-api-freshness-report.md`
-- `.repo-harness/llm-api-freshness-agent-brief.md`
+- `.repo-harness/skills/llm-api-freshness-guard/extra/surface-evidence.json`
+- `.repo-harness/skills/llm-api-freshness-guard/summary.json`
+- `.repo-harness/skills/llm-api-freshness-guard/report.md`
+- `.repo-harness/skills/llm-api-freshness-guard/agent-brief.md`
 
 Final checks:
 
@@ -135,10 +135,10 @@ bash scripts/run_all.sh /path/to/repo
 
 This produces:
 
-- `.repo-harness/llm-api-surface-evidence.json`
-- `.repo-harness/llm-api-freshness-summary.json`
-- `.repo-harness/llm-api-freshness-report.md`
-- `.repo-harness/llm-api-freshness-agent-brief.md`
+- `.repo-harness/skills/llm-api-freshness-guard/extra/surface-evidence.json`
+- `.repo-harness/skills/llm-api-freshness-guard/summary.json`
+- `.repo-harness/skills/llm-api-freshness-guard/report.md`
+- `.repo-harness/skills/llm-api-freshness-guard/agent-brief.md`
 
 That output is always `triage` or `not-applicable`, never `verified`.
 
@@ -178,11 +178,11 @@ After writing the verified summary draft, finalize with:
 
 ```bash
 python3 scripts/finalize_verified_llm_api_audit.py \
-  --evidence-json .repo-harness/llm-api-surface-evidence.json \
+  --evidence-json .repo-harness/skills/llm-api-freshness-guard/extra/surface-evidence.json \
   --summary-in /path/to/draft-summary.json \
-  --summary-out .repo-harness/llm-api-freshness-summary.json \
-  --report-out .repo-harness/llm-api-freshness-report.md \
-  --brief-out .repo-harness/llm-api-freshness-agent-brief.md
+  --summary-out .repo-harness/skills/llm-api-freshness-guard/summary.json \
+  --report-out .repo-harness/skills/llm-api-freshness-guard/report.md \
+  --brief-out .repo-harness/skills/llm-api-freshness-guard/agent-brief.md
 ```
 
 If Context7 evidence is stored separately, pass `--doc-evidence-json`.

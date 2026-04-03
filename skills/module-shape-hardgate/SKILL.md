@@ -111,9 +111,9 @@ If there is no meaningful Python / TypeScript source surface, output `overall_ve
 From the skill directory:
 
 ```bash
-mkdir -p .repo-harness
-python3 scripts/run_module_shape_scan.py --repo /path/to/repo --out-dir .repo-harness
-python3 scripts/validate_module_shape_summary.py --summary .repo-harness/module-shape-hardgate-summary.json
+mkdir -p .repo-harness/skills/module-shape-hardgate
+python3 scripts/run_module_shape_scan.py --repo /path/to/repo --out-dir .repo-harness/skills/module-shape-hardgate
+python3 scripts/validate_module_shape_summary.py --summary .repo-harness/skills/module-shape-hardgate/summary.json
 ```
 
 Or simply:
@@ -256,8 +256,8 @@ bash scripts/run_all.sh /path/to/repo
 
 This wrapper produces:
 
-- `module-shape-hardgate-summary.json`
-- `module-shape-hardgate-report.md`
-- `module-shape-hardgate-agent-brief.md`
+- `.repo-harness/skills/module-shape-hardgate/summary.json`
+- `.repo-harness/skills/module-shape-hardgate/report.md`
+- `.repo-harness/skills/module-shape-hardgate/agent-brief.md`
 
-When installed inside `pooh-skills`, the wrapper prefers the shared `.pooh-runtime` contract if present. Outside that repo, it falls back to direct deterministic execution so the skill remains portable.
+The wrapper requires the shared `.pooh-runtime` contract from this repository. If you intentionally need the low-level deterministic helper, run `scripts/run_module_shape_scan.py` directly inside `pooh-skills`; do not treat the wrapper itself as a portable fallback entrypoint.

@@ -10,7 +10,14 @@
     "findings",
     "dependency_status",
     "bootstrap_actions",
-    "dependency_failures"
+    "dependency_failures",
+    "schema_version",
+    "skill",
+    "run_id",
+    "generated_at",
+    "repo_root",
+    "rollup_bucket",
+    "severity_counts"
   ],
   "properties": {
     "repo_profile": {
@@ -83,21 +90,42 @@
           "notes"
         ],
         "properties": {
-          "subject": { "type": "string" },
-          "library": { "type": "string" },
-          "library_id": { "type": "string" },
-          "version_hint": { "type": "string" },
+          "subject": {
+            "type": "string"
+          },
+          "library": {
+            "type": "string"
+          },
+          "library_id": {
+            "type": "string"
+          },
+          "version_hint": {
+            "type": "string"
+          },
           "queries": {
             "type": "array",
-            "items": { "type": "string" }
+            "items": {
+              "type": "string"
+            }
           },
           "status": {
             "type": "string",
-            "enum": ["verified", "ambiguous", "failed", "skipped"]
+            "enum": [
+              "verified",
+              "ambiguous",
+              "failed",
+              "skipped"
+            ]
           },
-          "checked_at": { "type": "string" },
-          "source_ref": { "type": "string" },
-          "notes": { "type": "string" }
+          "checked_at": {
+            "type": "string"
+          },
+          "source_ref": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          }
         },
         "additionalProperties": false
       }
@@ -316,6 +344,58 @@
       "type": "array",
       "items": {
         "$ref": "#/$defs/dependencyFailure"
+      }
+    },
+    "schema_version": {
+      "type": "string"
+    },
+    "skill": {
+      "type": "string"
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "generated_at": {
+      "type": "string"
+    },
+    "repo_root": {
+      "type": "string"
+    },
+    "rollup_bucket": {
+      "type": "string",
+      "enum": [
+        "blocked",
+        "red",
+        "yellow",
+        "green",
+        "not-applicable"
+      ]
+    },
+    "severity_counts": {
+      "type": "object",
+      "required": [
+        "critical",
+        "high",
+        "medium",
+        "low"
+      ],
+      "properties": {
+        "critical": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "high": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "medium": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "low": {
+          "type": "integer",
+          "minimum": 0
+        }
       }
     }
   },

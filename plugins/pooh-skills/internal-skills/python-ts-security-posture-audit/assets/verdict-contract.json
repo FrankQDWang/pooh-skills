@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0",
+  "skill": "python-ts-security-posture-audit",
+  "overall_verdicts": [
+    "scan-blocked",
+    "partial",
+    "enforced",
+    "hardened",
+    "not-applicable"
+  ],
+  "rollup_map": {
+    "scan-blocked": "blocked",
+    "partial": "yellow",
+    "enforced": "green",
+    "hardened": "green",
+    "not-applicable": "not-applicable"
+  }
+}

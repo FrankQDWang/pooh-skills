@@ -1,0 +1,16 @@
+{
+  "schema_version": "1.0",
+  "skill": "signature-contract-hardgate",
+  "overall_verdicts": [
+    "contract-theater",
+    "soft-gates",
+    "real-gates",
+    "hard-harness"
+  ],
+  "rollup_map": {
+    "contract-theater": "red",
+    "soft-gates": "red",
+    "real-gates": "green",
+    "hard-harness": "green"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0",
+  "skill": "overdefensive-silent-failure-hardgate",
+  "overall_verdicts": [
+    "not-applicable",
+    "scan-blocked",
+    "silent-failure-risk",
+    "contract-softened",
+    "observable-degrade",
+    "fail-loud"
+  ],
+  "rollup_map": {
+    "not-applicable": "not-applicable",
+    "scan-blocked": "blocked",
+    "silent-failure-risk": "red",
+    "contract-softened": "yellow",
+    "observable-degrade": "yellow",
+    "fail-loud": "green"
+  }
+}

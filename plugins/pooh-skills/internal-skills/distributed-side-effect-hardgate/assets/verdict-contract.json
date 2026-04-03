@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0",
+  "skill": "distributed-side-effect-hardgate",
+  "overall_verdicts": [
+    "not-applicable",
+    "unsafe",
+    "fragile",
+    "watch",
+    "hardened",
+    "sound"
+  ],
+  "rollup_map": {
+    "not-applicable": "not-applicable",
+    "unsafe": "red",
+    "fragile": "yellow",
+    "watch": "yellow",
+    "hardened": "green",
+    "sound": "green"
+  }
+}

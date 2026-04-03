@@ -37,9 +37,9 @@ Deterministic baseline input:
 
 Required outputs:
 
-- `.repo-harness/error-governance-summary.json`
-- `.repo-harness/error-governance-report.md`
-- `.repo-harness/error-governance-agent-brief.md`
+- `.repo-harness/skills/error-governance-hardgate/summary.json`
+- `.repo-harness/skills/error-governance-hardgate/report.md`
+- `.repo-harness/skills/error-governance-hardgate/agent-brief.md`
 
 Final checks:
 
@@ -85,10 +85,10 @@ Or run the underlying pieces directly:
 ```bash
 python3 scripts/run_error_governance_scan.py \
   --repo /path/to/repo \
-  --out .repo-harness/error-governance-summary.json
+  --out .repo-harness/skills/error-governance-hardgate/summary.json
 
 python3 scripts/validate_error_governance_summary.py \
-  --summary .repo-harness/error-governance-summary.json
+  --summary .repo-harness/skills/error-governance-hardgate/summary.json
 ```
 
 The scanner is a conservative baseline. It should:

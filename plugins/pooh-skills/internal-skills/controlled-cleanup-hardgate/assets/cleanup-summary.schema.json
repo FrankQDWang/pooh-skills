@@ -10,7 +10,13 @@
     "findings",
     "dependency_status",
     "bootstrap_actions",
-    "dependency_failures"
+    "dependency_failures",
+    "schema_version",
+    "skill",
+    "run_id",
+    "overall_verdict",
+    "rollup_bucket",
+    "severity_counts"
   ],
   "properties": {
     "repo_root": {
@@ -184,6 +190,62 @@
       "type": "array",
       "items": {
         "$ref": "#/$defs/dependencyFailure"
+      }
+    },
+    "schema_version": {
+      "type": "string"
+    },
+    "skill": {
+      "type": "string"
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "overall_verdict": {
+      "type": "string",
+      "enum": [
+        "not-ready",
+        "partially-ready",
+        "ready-for-controlled-deletion",
+        "not-applicable",
+        "scan-blocked"
+      ]
+    },
+    "rollup_bucket": {
+      "type": "string",
+      "enum": [
+        "blocked",
+        "red",
+        "yellow",
+        "green",
+        "not-applicable"
+      ]
+    },
+    "severity_counts": {
+      "type": "object",
+      "required": [
+        "critical",
+        "high",
+        "medium",
+        "low"
+      ],
+      "properties": {
+        "critical": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "high": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "medium": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "low": {
+          "type": "integer",
+          "minimum": 0
+        }
       }
     }
   },

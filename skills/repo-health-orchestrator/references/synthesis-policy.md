@@ -30,6 +30,8 @@ Use exactly these four clusters:
   - `python-lint-format`
   - `ts-lint-format`
   - `security-posture`
+  - `secrets-and-hardcode`
+  - `test-quality`
 - `surface-freshness-and-cleanup`
   - `llm-api-freshness`
   - `cleanup`

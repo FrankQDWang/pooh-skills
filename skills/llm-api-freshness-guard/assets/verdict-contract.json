@@ -1,0 +1,16 @@
+{
+  "schema_version": "1.0",
+  "skill": "llm-api-freshness-guard",
+  "overall_verdicts": [
+    "verified",
+    "triage",
+    "blocked",
+    "not-applicable"
+  ],
+  "rollup_map": {
+    "verified": "green",
+    "triage": "yellow",
+    "blocked": "blocked",
+    "not-applicable": "not-applicable"
+  }
+}

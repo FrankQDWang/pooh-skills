@@ -15,48 +15,17 @@ from repo_health_catalog import agent_brief_path as child_agent_brief_path
 from repo_health_catalog import report_path as child_report_path
 from repo_health_catalog import summary_path as child_summary_path
 
-RED_VERDICTS = {
-    "unsafe",
-    "blocked",
-    "broken",
-    "contract-theater",
-    "soft-gates",
-    "drifting",
-    "dual-write-gambling",
-    "workflow-time-bomb",
-}
-YELLOW_VERDICTS = {
-    "fragile",
-    "watch",
-    "partial",
-    "partial-coverage",
-    "ceremonial",
-    "contained",
-    "baseline-needed",
-    "cleanup-first",
-    "boundary-hardening",
-    "incremental-governance",
-    "paper-guardrails",
-    "partially-contained",
-    "scan-blocked",
-    "triage",
-}
-POSITIVE_VERDICTS = {
-    "sound",
-    "hardened",
-    "healthy",
-    "disciplined",
-    "real-gates",
-    "hard-harness",
-    "durable-harness",
-    "well-governed",
-}
+ALLOWED_DEPENDENCY_STATUS = {"ready", "auto-installed", "blocked"}
+ALLOWED_ROLLUP_BUCKETS = {"blocked", "red", "yellow", "green", "not-applicable"}
+REQUIRED_SEVERITY_KEYS = ("critical", "high", "medium", "low")
 
 
 def recommended_domain_action(run: dict[str, Any], coverage_status: str = "complete") -> str | None:
     status = str(run.get("status") or "")
     domain = str(run.get("domain") or "")
-    if status == "blocked":
+    dependency_status = str(run.get("dependency_status") or "")
+    rollup_bucket = str(run.get("rollup_bucket") or "")
+    if dependency_status == "blocked":
         failures = run.get("dependency_failures") or []
         if failures:
             failure = failures[0]
@@ -69,13 +38,11 @@ def recommended_domain_action(run: dict[str, Any], coverage_status: str = "compl
         if coverage_status == "partial":
             return "Close the remaining missing or invalid audit domains before calling this rollup decision-complete."
         return None
-    if status != "present":
+    if status == "not-applicable":
         return None
 
-    sev = run.get("severity_counts") or {}
-    verdict = str(run.get("child_verdict") or "").lower()
-    is_high = int(sev.get("critical", 0)) > 0 or int(sev.get("high", 0)) > 0 or verdict in RED_VERDICTS
-    is_watch = int(sev.get("medium", 0)) > 0 or verdict in YELLOW_VERDICTS
+    is_high = rollup_bucket in {"blocked", "red"}
+    is_watch = rollup_bucket == "yellow"
 
     if is_high:
         if domain == "distributed-side-effects":
@@ -108,6 +75,10 @@ def recommended_domain_action(run: dict[str, Any], coverage_status: str = "compl
             return "Make Biome own the style layer and keep typed lint wired to real TS projects before more workspace drift spreads."
         if domain == "security-posture":
             return "Restore lockfile-backed baseline security gates before trusting dependency or static-scan posture."
+        if domain == "secrets-and-hardcode":
+            return "Remove exposed secret material, replace hardcoded credentials with runtime injection, and close ignore gaps before more leakage lands in git."
+        if domain == "test-quality":
+            return "Restore trustworthy CI test gates, remove placeholder tests, and prove failure paths before treating the suite as a real release signal."
     if is_watch:
         if domain == "pythonic-ddd-drift":
             return "Trim abstraction bloat where it adds shape without policy."
@@ -133,6 +104,10 @@ def recommended_domain_action(run: dict[str, Any], coverage_status: str = "compl
             return "Consolidate the TS style layer under Biome before suppression and workspace drift grow."
         if domain == "security-posture":
             return "Tighten lockfile and ignore governance before today's baseline security gaps turn opaque."
+        if domain == "secrets-and-hardcode":
+            return "Replace hardcoded secrets with injected runtime config and harden ignore discipline before the next leak becomes sticky history."
+        if domain == "test-quality":
+            return "Replace placeholder tests, reduce skip or retry drift, and add explicit failure-path coverage before green badges keep overstating trust."
     return None
 
 
@@ -145,60 +120,22 @@ def load_json(path: Path) -> tuple[dict[str, Any] | None, str | None]:
         return None, f"invalid: {exc}"
 
 
-def extract_verdict(data: dict[str, Any]) -> str | None:
-    for key in ("overall_health", "overall_verdict", "verdict", "status", "audit_mode", "mode"):
-        value = data.get(key)
-        if isinstance(value, str):
-            return value
-    return None
+def normalize_severity_counts(payload: Any) -> dict[str, int] | None:
+    if not isinstance(payload, dict):
+        return None
+    normalized: dict[str, int] = {}
+    for key in REQUIRED_SEVERITY_KEYS:
+        value = payload.get(key)
+        try:
+            normalized[key] = int(value)
+        except (TypeError, ValueError):
+            return None
+    return normalized
 
 
-def extract_dependency_status(data: dict[str, Any]) -> str:
-    status = data.get("dependency_status")
-    if isinstance(status, str):
-        return status
-    return "ready"
-
-
-def extract_dependency_failures(data: dict[str, Any]) -> list[dict[str, Any]]:
-    failures = data.get("dependency_failures")
-    if isinstance(failures, list):
-        return [item for item in failures if isinstance(item, dict)]
-    return []
-
-
-def extract_findings(data: dict[str, Any]) -> list[dict[str, Any]]:
-    findings = data.get("findings")
-    if isinstance(findings, list):
-        return [f for f in findings if isinstance(f, dict)]
-    issues = data.get("issues")
-    if isinstance(issues, list):
-        return [f for f in issues if isinstance(f, dict)]
-    return []
-
-
-def extract_severity_counts(data: dict[str, Any]) -> dict[str, int]:
-    sev = data.get("severity_counts")
-    if isinstance(sev, dict):
-        return {
-            "critical": int(sev.get("critical", 0) or 0),
-            "high": int(sev.get("high", 0) or 0),
-            "medium": int(sev.get("medium", 0) or 0),
-            "low": int(sev.get("low", 0) or 0),
-        }
-    findings = extract_findings(data)
-    counter = Counter((f.get("severity") or "low") for f in findings)
-    return {
-        "critical": int(counter.get("critical", 0)),
-        "high": int(counter.get("high", 0)),
-        "medium": int(counter.get("medium", 0)),
-        "low": int(counter.get("low", 0)),
-    }
-
-
-def extract_top_categories(data: dict[str, Any], limit: int = 3) -> list[str]:
+def extract_top_categories(findings: list[dict[str, Any]], limit: int = 3) -> list[str]:
     counter = Counter()
-    for finding in extract_findings(data):
+    for finding in findings:
         category = finding.get("category") or finding.get("gate") or finding.get("domain") or finding.get("kind")
         if isinstance(category, str):
             counter[category] += 1
@@ -224,34 +161,62 @@ def classify_run(
     actual_run_id = str(data.get("run_id") or "")
     if expected_run_id and actual_run_id != expected_run_id:
         return "invalid", f"run_id mismatch: expected {expected_run_id}, got {actual_run_id or '-'}"
-    if extract_dependency_status(data) == "blocked":
-        return "blocked", ""
-    verdict = extract_verdict(data)
-    if verdict == "not-applicable":
+    required_top = {
+        "run_id",
+        "skill",
+        "domain",
+        "repo_root",
+        "generated_at",
+        "overall_verdict",
+        "rollup_bucket",
+        "dependency_status",
+        "bootstrap_actions",
+        "dependency_failures",
+        "severity_counts",
+        "findings",
+        "summary_path",
+        "report_path",
+        "agent_brief_path",
+    }
+    missing = sorted(required_top - set(data))
+    if missing:
+        return "invalid", f"summary missing required keys: {missing}"
+    if not isinstance(data.get("overall_verdict"), str) or not data.get("overall_verdict"):
+        return "invalid", "overall_verdict must be a non-empty string"
+    rollup_bucket = str(data.get("rollup_bucket") or "")
+    if rollup_bucket not in ALLOWED_ROLLUP_BUCKETS:
+        return "invalid", f"invalid rollup_bucket: {rollup_bucket or '-'}"
+    dependency_status = str(data.get("dependency_status") or "")
+    if dependency_status not in ALLOWED_DEPENDENCY_STATUS:
+        return "invalid", f"invalid dependency_status: {dependency_status or '-'}"
+    if not isinstance(data.get("bootstrap_actions"), list):
+        return "invalid", "bootstrap_actions must be a list"
+    dependency_failures = data.get("dependency_failures")
+    if not isinstance(dependency_failures, list):
+        return "invalid", "dependency_failures must be a list"
+    if dependency_status == "blocked" and not dependency_failures:
+        return "invalid", "dependency_status=blocked requires at least one dependency_failure"
+    severity_counts = normalize_severity_counts(data.get("severity_counts"))
+    if severity_counts is None:
+        return "invalid", "severity_counts must contain integer critical/high/medium/low keys"
+    findings = data.get("findings")
+    if not isinstance(findings, list) or any(not isinstance(item, dict) for item in findings):
+        return "invalid", "findings must be a list of objects"
+    if rollup_bucket == "not-applicable":
         return "not-applicable", "child skill marked this domain not applicable"
+    if dependency_status == "blocked" or rollup_bucket == "blocked":
+        return "blocked", ""
     return "present", ""
 
 
 def normalize_health(skill_runs: list[dict[str, Any]]) -> tuple[str, str]:
     present = [run for run in skill_runs if run["status"] in {"present", "not-applicable", "blocked"}]
     missing = [run for run in skill_runs if run["status"] in {"missing", "invalid"}]
-    blocked = False
-    watch = False
-
-    for run in skill_runs:
-        if run["status"] == "blocked" or run.get("dependency_status") == "blocked":
-            blocked = True
-            continue
-        verdict = str(run.get("child_verdict") or "").lower()
-        sev = run.get("severity_counts") or {}
-        if int(sev.get("critical", 0)) > 0 or int(sev.get("high", 0)) > 0:
-            blocked = True
-        elif int(sev.get("medium", 0)) > 0:
-            watch = True
-        if verdict in RED_VERDICTS:
-            blocked = True
-        elif verdict in YELLOW_VERDICTS:
-            watch = True
+    blocked = any(
+        run["status"] == "blocked" or str(run.get("rollup_bucket") or "") == "red"
+        for run in skill_runs
+    )
+    watch = any(str(run.get("rollup_bucket") or "") == "yellow" for run in skill_runs)
 
     if not present:
         return "not-applicable", "No child summary was available to aggregate."
@@ -277,13 +242,14 @@ def write_markdown(report: dict[str, Any], out_path: Path) -> None:
         "",
         "## Coverage map",
         "",
-        "| Domain | Skill | Status | Dependency | Child verdict | Top categories | Notes |",
-        "|---|---|---|---|---|---|---|",
+        "| Domain | Skill | Status | Dependency | Rollup | Child verdict | Top categories | Notes |",
+        "|---|---|---|---|---|---|---|---|",
     ]
     for run in report["skill_runs"]:
         lines.append(
             f"| {run['domain']} | {run['skill_name']} | {run['status']} | "
             f"{run.get('dependency_status') or ''} | "
+            f"{run.get('rollup_bucket') or ''} | "
             f"{run.get('child_verdict') or ''} | "
             f"{', '.join(run.get('top_categories') or [])} | "
             f"{run.get('notes') or ''} |"
@@ -341,21 +307,29 @@ def main() -> int:
             expected_skill=skill_name,
             expected_run_id=args.run_id,
         )
-        child_verdict = extract_verdict(data) if data else None
-        dependency_status = extract_dependency_status(data or {})
-        dependency_failures = extract_dependency_failures(data or {})
-        sev = extract_severity_counts(data or {})
-        top_categories = extract_top_categories(data or {})
+        child_verdict = str((data or {}).get("overall_verdict") or "") if data else ""
+        dependency_status = str((data or {}).get("dependency_status") or "ready")
+        dependency_failures = [item for item in ((data or {}).get("dependency_failures") or []) if isinstance(item, dict)]
+        sev = normalize_severity_counts((data or {}).get("severity_counts")) or {"critical": 0, "high": 0, "medium": 0, "low": 0}
+        findings = [item for item in ((data or {}).get("findings") or []) if isinstance(item, dict)]
+        top_categories = extract_top_categories(findings)
+        rollup_bucket = str((data or {}).get("rollup_bucket") or "") if data else ""
         notes = classification_note
         if status == "missing":
             missing_skills.append(skill_name)
+            child_verdict = ""
+            rollup_bucket = ""
         elif status == "invalid":
             invalid_summaries.append(skill_name)
-        elif status == "blocked":
+            child_verdict = ""
+            rollup_bucket = ""
+        elif dependency_status == "blocked":
             first_failure = dependency_failures[0] if dependency_failures else {}
             failure_name = str(first_failure.get("name") or "dependency")
             failure_reason = str(first_failure.get("failure_reason") or "dependency bootstrap blocked the child skill")
             notes = f"{failure_name}: {failure_reason}"
+        elif rollup_bucket == "blocked":
+            notes = child_verdict or "child summary declared a blocked rollup bucket"
         elif domain == "llm-api-freshness" and child_verdict == "triage":
             notes = "this run only produced local surface triage; current docs were not verified"
         elif domain == "llm-api-freshness" and child_verdict == "verified":
@@ -372,6 +346,7 @@ def main() -> int:
             "dependency_status": dependency_status,
             "dependency_failures": dependency_failures,
             "child_verdict": child_verdict,
+            "rollup_bucket": rollup_bucket,
             "severity_counts": sev,
             "top_categories": top_categories,
             "notes": notes,

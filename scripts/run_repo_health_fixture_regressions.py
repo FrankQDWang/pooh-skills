@@ -49,7 +49,7 @@ class Case:
     )
 
 
-def base_summary(skill_name: str, domain: str, verdict: str) -> dict[str, Any]:
+def base_summary(skill_name: str, domain: str, verdict: str, rollup_bucket: str) -> dict[str, Any]:
     return {
         "run_id": RUN_ID,
         "skill": skill_name,
@@ -62,27 +62,36 @@ def base_summary(skill_name: str, domain: str, verdict: str) -> dict[str, Any]:
         "severity_counts": {"critical": 0, "high": 0, "medium": 0, "low": 0},
         "findings": [],
         "overall_verdict": verdict,
+        "rollup_bucket": rollup_bucket,
+        "summary_path": f"/fixture/.repo-harness/skills/{skill_name}/summary.json",
+        "report_path": f"/fixture/.repo-harness/skills/{skill_name}/report.md",
+        "agent_brief_path": f"/fixture/.repo-harness/skills/{skill_name}/agent-brief.md",
     }
 
 
 def positive_summary(skill_name: str, domain: str) -> dict[str, Any]:
-    verdict = "verified" if domain == "llm-api-freshness" else "healthy"
-    return base_summary(skill_name, domain, verdict)
+    if domain == "llm-api-freshness":
+        verdict = "verified"
+    elif domain in {"secrets-and-hardcode", "test-quality"}:
+        verdict = "clean"
+    else:
+        verdict = "healthy"
+    return base_summary(skill_name, domain, verdict, "green")
 
 
 def not_applicable_summary(skill_name: str, domain: str) -> dict[str, Any]:
-    return base_summary(skill_name, domain, "not-applicable")
+    return base_summary(skill_name, domain, "not-applicable", "not-applicable")
 
 
 def watch_summary(skill_name: str, domain: str, verdict: str = "watch") -> dict[str, Any]:
-    payload = base_summary(skill_name, domain, verdict)
+    payload = base_summary(skill_name, domain, verdict, "yellow")
     payload["severity_counts"] = {"critical": 0, "high": 0, "medium": 1, "low": 0}
     payload["findings"] = [{"severity": "medium", "category": "watch-signal"}]
     return payload
 
 
 def blocked_summary(skill_name: str, domain: str) -> dict[str, Any]:
-    payload = base_summary(skill_name, domain, "scan-blocked")
+    payload = base_summary(skill_name, domain, "scan-blocked", "blocked")
     payload["dependency_status"] = "blocked"
     payload["dependency_failures"] = [
         {
@@ -100,10 +109,7 @@ def blocked_summary(skill_name: str, domain: str) -> dict[str, Any]:
 
 
 def triage_freshness_summary() -> dict[str, Any]:
-    payload = base_summary("llm-api-freshness-guard", "llm-api-freshness", "triage")
-    payload.pop("overall_verdict", None)
-    payload["audit_mode"] = "triage"
-    return payload
+    return base_summary("llm-api-freshness-guard", "llm-api-freshness", "triage", "yellow")
 
 
 def case_payloads() -> dict[str, dict[str, Any]]:

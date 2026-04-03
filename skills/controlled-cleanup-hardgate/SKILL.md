@@ -79,17 +79,19 @@ Identify languages, manifests, docs systems, test layout, CI hints, and likely p
 From the skill directory, targeting the repository root:
 
 ```bash
-mkdir -p .repo-harness
+mkdir -p .repo-harness/skills/controlled-cleanup-hardgate/extra
 python3 scripts/run_cleanup_scan.py \
   --repo /path/to/repo \
-  --out .repo-harness/controlled-cleanup-summary.json
+  --out .repo-harness/skills/controlled-cleanup-hardgate/summary.json \
+  --report-out .repo-harness/skills/controlled-cleanup-hardgate/report.md \
+  --agent-brief-out .repo-harness/skills/controlled-cleanup-hardgate/agent-brief.md
 python3 scripts/validate_cleanup_summary.py \
-  --summary .repo-harness/controlled-cleanup-summary.json
+  --summary .repo-harness/skills/controlled-cleanup-hardgate/summary.json
 python3 scripts/check_removal_targets.py \
-  --summary .repo-harness/controlled-cleanup-summary.json
+  --summary .repo-harness/skills/controlled-cleanup-hardgate/summary.json
 python3 scripts/check_doc_links.py \
   --repo /path/to/repo \
-  --out .repo-harness/controlled-cleanup-linkcheck.json
+  --out .repo-harness/skills/controlled-cleanup-hardgate/extra/linkcheck.json
 ```
 
 If the user wants a single wrapper command instead, run:
@@ -122,7 +124,7 @@ Always produce:
 - a human report with executive summary, risk, evidence, and ordered action plan
 - an agent remediation brief with exact targets, verification commands, and deletion rules
 
-When useful, also write machine-readable outputs under `.repo-harness/`.
+When useful, also write machine-readable outputs under the target repo root's `.repo-harness/skills/controlled-cleanup-hardgate/`.
 
 ### 5) Keep the deliverable report-only
 
@@ -199,12 +201,12 @@ Use the template in `assets/agent-brief-template.md`.
 
 When writing machine-readable output, follow `assets/cleanup-summary.schema.json`.
 
-Preferred files:
+Preferred files under the target repo root:
 
-- `.repo-harness/controlled-cleanup-summary.json`
-- `.repo-harness/controlled-cleanup-linkcheck.json`
-- `.repo-harness/controlled-cleanup-report.md`
-- `.repo-harness/controlled-cleanup-agent-brief.md`
+- `.repo-harness/skills/controlled-cleanup-hardgate/summary.json`
+- `.repo-harness/skills/controlled-cleanup-hardgate/extra/linkcheck.json`
+- `.repo-harness/skills/controlled-cleanup-hardgate/report.md`
+- `.repo-harness/skills/controlled-cleanup-hardgate/agent-brief.md`
 
 ## Safety rules
 
